@@ -1,15 +1,15 @@
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_distr::ErrorDistribution;
 use primus_encoding::{BfvRnsCodec, BfvRnsCodecError, PlaintextEmbedding};
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, SecretKeyDistr,
+    CrtGlweEncryptionParameters, CrtGlweEncryptionParametersError, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
 use primus_modulus::BarrettModulus;
 use primus_rns::{RNSBase, RnsError};
 use primus_shape::PolyLength;
 use std::sync::Arc;
+
+pub(crate) const DEFAULT_DECODER_MODULUS: u64 = (1 << 61) - 1;
 
 /// Invalid BFV geometry, codec, sampling state or fresh private recovery bound.
 #[derive(Debug, thiserror::Error)]
@@ -40,34 +40,33 @@ pub struct BfvParameters {
 }
 
 impl BfvParameters {
-    /// Prepares Gaussian coefficient parameters with the default decoder modulus.
+    /// Prepares coefficient parameters with the default decoder modulus.
     ///
     /// Uses the prime `gamma = 2^61 - 1`, so the ordinary coefficient workflow
     /// does not require an auxiliary-modulus choice. This requires `t < gamma`
-    /// and the usual codec coprimality/recovery conditions. Use [`Self::try_new`]
-    /// or [`Self::try_with_error_distribution`] for an explicit auxiliary modulus
-    /// or error law. This convenience establishes no security level.
+    /// and the usual codec coprimality and recovery conditions. Use
+    /// [`Self::try_with_decoder_modulus`] to choose a different modulus.
     ///
     /// # Errors
-    /// Returns the same parameter, sampling and recovery errors as [`Self::try_new`].
+    /// Returns the same errors as [`Self::try_with_decoder_modulus`].
     pub fn try_coefficients(
         poly_length: PolyLength,
         plain_modulus: BarrettModulus<u64>,
         cipher_moduli: &[BarrettModulus<u64>],
         secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
+        error_distribution: ErrorDistribution,
     ) -> Result<Self, BfvParametersError> {
-        Self::try_new(
+        Self::try_with_decoder_modulus(
             poly_length,
             plain_modulus,
-            BarrettModulus::new((1 << 61) - 1),
+            BarrettModulus::new(DEFAULT_DECODER_MODULUS),
             cipher_moduli,
             secret_key_distr,
-            noise_standard_deviation,
+            error_distribution,
         )
     }
 
-    /// Prepares rank-one geometry, Gaussian error sampling and the BFV codec.
+    /// Prepares rank-one geometry, error sampling and the BFV codec with an explicit gamma.
     ///
     /// Checks the sufficient unsigned fresh private-key recovery bound, which
     /// also covers centered embedding. Public-key/evaluated noise requires its
@@ -76,32 +75,7 @@ impl BfvParameters {
     /// # Errors
     /// Rejects invalid layout, RNS/codec parameters, sampling laws or insufficient
     /// recovery margin, preserving the underlying source error.
-    pub fn try_new(
-        poly_length: PolyLength,
-        plain_modulus: BarrettModulus<u64>,
-        gamma_modulus: BarrettModulus<u64>,
-        cipher_moduli: &[BarrettModulus<u64>],
-        secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
-    ) -> Result<Self, BfvParametersError> {
-        Self::try_with_error_distribution(
-            poly_length,
-            plain_modulus,
-            gamma_modulus,
-            cipher_moduli,
-            secret_key_distr,
-            ErrorDistribution::Gaussian {
-                standard_deviation: noise_standard_deviation,
-            },
-        )
-    }
-
-    /// Prepares BFV parameters with an explicit Gaussian or exact CBD error law.
-    /// The same fresh private recovery condition as [`Self::try_new`] applies.
-    ///
-    /// # Errors
-    /// Returns the corresponding layout, basis, codec, sampler or recovery error.
-    pub fn try_with_error_distribution(
+    pub fn try_with_decoder_modulus(
         poly_length: PolyLength,
         plain_modulus: BarrettModulus<u64>,
         gamma_modulus: BarrettModulus<u64>,
@@ -127,19 +101,6 @@ impl BfvParameters {
             encryption_parameters: Arc::new(sampling),
             codec,
         })
-    }
-
-    /// Derives gadget layout and weights without carrying encryption samplers.
-    ///
-    /// # Errors
-    /// Rejects invalid decomposition or radix/size conditions of
-    /// [`CrtGlevParameters::try_new`].
-    pub fn try_gadget_parameters(
-        &self,
-        log_basis: DecompositionBaseLog,
-        level_count: Option<DecompositionLevelCount>,
-    ) -> Result<CrtGlevParameters<u64, BarrettModulus<u64>>, CrtGlevParametersError<u64>> {
-        CrtGlevParameters::try_new(self.size(), self.base_q().clone(), log_basis, level_count)
     }
 
     /// Returns prepared secret/error/uniform sampling state for explicit advanced use.

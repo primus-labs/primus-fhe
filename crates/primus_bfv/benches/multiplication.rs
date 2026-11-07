@@ -1,11 +1,13 @@
 //! One complete fresh leveled slot request; keys/setup/allocations stay outside timing.
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvKeySwitcher,
-    BfvModulusSwitch, BfvMultiplication, BfvMultiplicationBackend, BfvParameters,
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication, BfvMultiplicationBackend,
 };
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -43,7 +45,9 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         3,
@@ -87,9 +91,10 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
     let mut switch = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
     // Keep this explicit P for equivalent-workload historical comparisons.
     let mut multiplication = if backend == BfvMultiplicationBackend::Exact {
-        BfvMultiplication::try_with_auxiliary_moduli(
+        BfvMultiplication::try_with_backend_and_auxiliary_moduli(
             &context,
             &relin_key,
+            backend,
             &[
                 1_152_921_504_606_584_833,
                 1_152_921_504_598_720_513,

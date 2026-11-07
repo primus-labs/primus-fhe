@@ -1,9 +1,9 @@
 //! Ordinary prepared multiplication, in-place square and complete-length boundaries.
-use primus_bfv::{
-    BfvCiphertext, BfvClient, BfvContext, BfvModulusSwitch, BfvMultiplication, BfvMultiplier,
-    BfvParameters, BfvRelinearizer,
-};
+use primus_bfv::advanced::BfvMultiplier;
+use primus_bfv::evaluation::{BfvModulusSwitch, BfvMultiplication, BfvRelinearizer};
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -30,7 +30,9 @@ fn context(n: usize, p: u64, moduli: &[u64]) -> BfvContext {
                 .map(BarrettModulus::new)
                 .collect::<Vec<_>>(),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         moduli.len(),
@@ -158,7 +160,7 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
 
 #[test]
 fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
-    use primus_bfv::BfvMultiplicationBackend::{Exact, HpsPOverQ};
+    use primus_bfv::evaluation::BfvMultiplicationBackend::{Exact, HpsPOverQ};
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x23bf_0001);
     let mut client = BfvClient::generate(&context, &mut rng);
@@ -229,7 +231,7 @@ fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
 
 #[test]
 fn hps_explicit_basis_and_complete_lengths_are_checked_before_writes() {
-    use primus_bfv::{BfvMultiplicationBackend::HpsPOverQ, BfvMultiplyError};
+    use primus_bfv::evaluation::{BfvMultiplicationBackend::HpsPOverQ, BfvMultiplyError};
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x23bf_bad0);
     let client = BfvClient::generate(&context, &mut rng);

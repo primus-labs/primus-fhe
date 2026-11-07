@@ -45,7 +45,7 @@ fn coefficients(context: &BfvContext, values: &[u64]) -> Vec<u64> {
 fn key_coefficients(setup: &EvaluationSetup<'_>, values: &[u64]) -> Vec<u64> {
     values
         .chunks_exact(setup.native.n)
-        .zip(setup.native.key_moduli_values(setup.context))
+        .zip(setup.native.key_moduli_values())
         .flat_map(|(values, &q)| super::super::tests::inverse(values, q))
         .collect()
 }
@@ -71,7 +71,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
         1_125_899_904_322_049,
     ];
     let context = BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(n),
             BarrettModulus::new(257),
             BarrettModulus::new((1 << 61) - 1),
@@ -89,7 +89,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
         .collect();
     for level in [0, 1] {
         for hybrid in [false, true] {
-            let config: EvaluationKeyConfig = if hybrid {
+            let config: BfvEvaluationKeyConfig = if hybrid {
                 context
                     .hybrid_key_parameters(level, 2, &[1_099_511_626_049])
                     .unwrap()
@@ -105,7 +105,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
                 BfvCollectiveRelinearization::try_new(&context, level, config, &mut rng).unwrap();
             let len = plan.setup.native.key_poly_len();
 
-            let columns = plan.setup.native.column_count();
+            let columns = plan.setup.native.key_len() / (2 * len);
             let secrets: Vec<_> = clients
                 .iter()
                 .map(|c| {
@@ -159,7 +159,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
             }
             let key = round1.finalize_lookup(r2sum).unwrap();
             for column in 0..columns {
-                let actual_moduli = plan.setup.native.key_moduli_values(&context);
+                let actual_moduli = plan.setup.native.key_moduli_values();
                 let q_count = context.codec(level).moduli_count();
                 let weights: Vec<_> = actual_moduli
                     .iter()
@@ -181,7 +181,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
                 let c1 = key_coefficients(&plan.setup, &key_column[len..]);
                 let mut first_errors: Option<Vec<Vec<i64>>> = None;
                 for (limb, &weight) in weights.iter().enumerate() {
-                    let q = plan.setup.native.key_moduli_values(&context)[limb];
+                    let q = plan.setup.native.key_moduli_values()[limb];
                     let range = limb * n..(limb + 1) * n;
                     let mut sum_s = vec![0; n];
                     let mut sum_u = vec![0; n];

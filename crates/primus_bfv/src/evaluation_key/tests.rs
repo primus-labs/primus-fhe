@@ -1,9 +1,10 @@
 //! Independent DFT/CRT phases and integer signed-digit residuals for BFV keys.
 
-use super::NativeEvaluationKey;
+use super::material::NativeEvaluationKey;
 use crate::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvKeySwitcher, BfvParameters,
-    BfvQuadraticCiphertext, BfvRelinearizer,
+    BfvCiphertext, BfvClient, BfvContext, BfvParameters,
+    advanced::BfvQuadraticCiphertext,
+    evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvRelinearizer},
 };
 use dashu_int::IBig;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
@@ -23,7 +24,7 @@ const Q: [u64; 3] = [
 
 fn make_context(p: u64, moduli: &[u64], n: usize) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(n),
             BarrettModulus::new(p),
             BarrettModulus::new((1 << 61) - 1),
@@ -552,7 +553,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                 (&relin.key, &source_square, &source_big),
                 (&auto.key, &transformed, &source_big),
             ] {
-                let moduli = key.key_moduli_values(&context);
+                let moduli = key.key_moduli_values();
                 for (column, values) in key.columns.chunks_exact(2 * key.key_poly_len()).enumerate()
                 {
                     let mut first_errors = None;
@@ -636,12 +637,13 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
 
 #[test]
 fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous() {
-    use super::{BfvEvaluationKeyError, NativeHybridError};
+    use super::BfvEvaluationKeyError;
+    use primus_lattice::hybrid::NativeHybridError;
     use rand::Rng;
     let law = SecretKeyDistr::gaussian(60_000_000_000_000.0);
     let make = |moduli: &[u64]| {
         BfvContext::try_with_levels(
-            BfvParameters::try_with_error_distribution(
+            BfvParameters::try_with_decoder_modulus(
                 PolyLength::new(N),
                 BarrettModulus::new(2),
                 BarrettModulus::new((1 << 61) - 1),
@@ -698,7 +700,7 @@ fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous()
             .as_chunks::<N>()
             .0
             .iter()
-            .zip(key.key_moduli_values(target_context))
+            .zip(key.key_moduli_values())
         {
             assert_eq!(limb.as_slice(), dft(&expected, q));
         }

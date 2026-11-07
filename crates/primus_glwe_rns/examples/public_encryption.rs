@@ -5,8 +5,8 @@
 
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
@@ -33,7 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let coefficient_key =
         GlweSecretKey::generate(size.glwe_size(), sampling.secret_key_sampler(), &mut rng);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let public = DcrtGlwePublicKey::new(&key, &sampling, &base, &table, &mut rng);
+    let secret = key.try_bind_raw(&sampling, &base, &table)?;
+    let public = secret.public_key(&mut rng);
 
     // Raw mode encrypts the caller's encoded CRT phase directly, without t/gamma.
     let mut raw = public.try_bind_raw(&sampling, &base, &table)?;
@@ -44,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for value in [3u64, 5] {
         let message = CrtPolynomial::new(vec![value; size.rns_poly_len()]);
         raw.encrypt_encoded_crt_to(&message, &mut output, &mut rng);
-        key.phase_to(&output, &mut phase, &moduli);
+        secret.phase_to(&output, &mut phase);
         table.inverse_transform_slice(phase.as_mut());
         for (limb, &q) in values.iter().enumerate() {
             for &coefficient in &phase.as_ref()[limb * n.get()..][..n.get()] {

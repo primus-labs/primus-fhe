@@ -10,13 +10,15 @@ use std::error::Error;
 #[test]
 fn parameter_errors_keep_their_own_sources() {
     let construct = |moduli: &[BarrettModulus<u64>], gamma, sigma| {
-        BfvParameters::try_new(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(32),
             BarrettModulus::new(3),
             BarrettModulus::new(gamma),
             moduli,
             SecretKeyDistr::SparseTernary,
-            sigma,
+            ErrorDistribution::Gaussian {
+                standard_deviation: sigma,
+            },
         )
     };
     assert!(matches!(
@@ -56,7 +58,7 @@ fn parameter_errors_keep_their_own_sources() {
 
 #[test]
 fn explicit_cbd_law_is_preserved() {
-    let parameters = BfvParameters::try_with_error_distribution(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(32),
         BarrettModulus::new(3),
         BarrettModulus::new(101),
@@ -90,13 +92,15 @@ fn constructors_check_complete_private_noise_recovery() {
         (101, 1.25, 15, true),
         (101, 1.375, 16, false),
     ] {
-        let result = BfvParameters::try_new(
+        let result = BfvParameters::try_with_decoder_modulus(
             PolyLength::new(32),
             BarrettModulus::new(3),
             BarrettModulus::new(gamma),
             &moduli,
             SecretKeyDistr::UniformBinary,
-            sigma,
+            ErrorDistribution::Gaussian {
+                standard_deviation: sigma,
+            },
         );
         if valid {
             assert!(result.is_ok());

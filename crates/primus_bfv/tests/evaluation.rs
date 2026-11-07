@@ -1,8 +1,7 @@
 //! Linear/plaintext semantics checked with independent integer and direct-DFT oracles.
 
-use primus_bfv::{
-    BfvCiphertext, BfvClient, BfvContext, BfvEvaluator, BfvParameters, PlaintextEmbedding,
-};
+use primus_bfv::evaluation::BfvEvaluator;
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters, PlaintextEmbedding};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -20,7 +19,7 @@ const SECRET: [i64; N] = [
 ];
 
 fn context(t: u64) -> BfvContext {
-    let parameters = BfvParameters::try_with_error_distribution(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(t),
         BarrettModulus::new(2_199_023_190_017),

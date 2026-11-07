@@ -5,7 +5,8 @@ use primus_lattice::RnsGlweSize;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
 use zeroize::Zeroize;
 
-use crate::{BfvCiphertext, BfvContext, BfvParameters, BfvSecretKeyContext};
+use crate::secret_key::BfvSecretKeyContext;
+use crate::{BfvCiphertext, BfvContext, BfvParameters};
 
 /// Rejected native BFV public-key provenance or numerical geometry.
 #[derive(Debug, thiserror::Error)]
@@ -113,7 +114,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     /// # Errors
     /// Rejects a different local generating context or numerical key geometry.
     /// Actual secret identity and complete noise bounds remain caller contracts.
-    pub fn try_new(
+    pub(crate) fn try_new(
         key: &'a BfvPublicKey,
         context: &'a BfvContext,
     ) -> Result<Self, BfvPublicKeyError> {
@@ -308,11 +309,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
         let length = parameters.size().rns_poly_len();
-        assert_eq!(
-            output.as_ref().len(),
-            parameters.size().rns_glwe_len(),
-            "BFV ciphertext length mismatch"
-        );
+        let (mut c0, mut c1) = output.c0_c1_mut(length);
         let ephemeral = self.workspace.as_mut_slice();
         let sampling = parameters.encryption_parameters();
         primus_distr::sample_crt_sparse_ternary_values_to(
@@ -323,7 +320,6 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         );
         self.context.table().transform_slice(ephemeral);
         let ephemeral = DcrtPolynomial(&*ephemeral);
-        let (mut c0, mut c1) = output.c0_c1_mut(length);
         let (pk0, pk1) = self.key.ciphertext.c0_c1(length);
         sampling.sample_noise_to(c0.as_mut(), parameters.codec().moduli_values(), rng);
         inject(&mut CrtPolynomial(c0.as_mut()));

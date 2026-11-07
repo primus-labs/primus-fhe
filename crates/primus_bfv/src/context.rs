@@ -5,9 +5,9 @@ use primus_ntt::{NttError, U64DcrtTable};
 use primus_poly::Polynomial;
 use std::sync::Arc;
 
-use crate::{
-    BfvCiphertext, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor, BfvQuadraticCiphertext,
-};
+use crate::keys::{BfvPublicKey, BfvPublicKeyEncryptor, BfvPublicKeyError};
+use crate::quadratic::BfvQuadraticCiphertext;
+use crate::{BfvCiphertext, BfvParameters};
 
 /// Invalid transform parameters, prefix codec or requested number of levels.
 #[derive(Debug, thiserror::Error)]
@@ -62,8 +62,8 @@ impl BfvContext {
 
     /// Prepares the highest level and `level_count - 1` ordered prefix levels.
     ///
-    /// Lower codecs share `t` and the auxiliary decoder modulus with the highest
-    /// codec. They establish the codec's noiseless recovery bounds, not a fresh
+    /// Lower codecs share the highest codec's `t`/`gamma` basis precomputation.
+    /// They establish the codec's noiseless recovery bounds, not a fresh
     /// or evaluated ciphertext noise bound. Only requested levels are prepared.
     ///
     /// # Errors
@@ -119,12 +119,7 @@ impl BfvContext {
         let maximum = parameters.base_q().moduli_count();
         let mut lower_codecs = Vec::with_capacity(level_count - 1);
         for level in 1..level_count {
-            let base = parameters.base_q().prefix(maximum - level);
-            lower_codecs.push(BfvRnsCodec::try_new(
-                BarrettModulus::new(parameters.codec().t()),
-                base,
-                BarrettModulus::new(parameters.codec().gamma()),
-            )?);
+            lower_codecs.push(parameters.codec().try_prefix(maximum - level)?);
         }
         Ok(Self {
             identity: Arc::new(()),
@@ -287,7 +282,7 @@ impl BfvContext {
 
     /// Allocates an already-scaled degree-two ciphertext at a prepared level.
     ///
-    /// The storage is intended for [`crate::BfvMultiplier`] output; it is not an
+    /// The storage is intended for [`crate::advanced::BfvMultiplier`] output; it is not an
     /// unscaled integer tensor. Relinearize it before degree-one operations.
     ///
     /// # Panics
@@ -305,7 +300,7 @@ impl BfvContext {
     pub fn public_key_encryptor<'a>(
         &'a self,
         key: &'a BfvPublicKey,
-    ) -> Result<BfvPublicKeyEncryptor<'a>, crate::BfvPublicKeyError> {
+    ) -> Result<BfvPublicKeyEncryptor<'a>, BfvPublicKeyError> {
         BfvPublicKeyEncryptor::try_new(key, self)
     }
 }

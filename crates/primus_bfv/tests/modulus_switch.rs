@@ -1,7 +1,9 @@
 //! Exact component rounding and same-secret phase recovery across prefix levels.
 
 use dashu_int::UBig;
-use primus_bfv::{BfvCiphertext, BfvContext, BfvModulusSwitch, BfvParameters, BfvSecretKeyContext};
+use primus_bfv::advanced::BfvSecretKeyContext;
+use primus_bfv::evaluation::BfvModulusSwitch;
+use primus_bfv::{BfvCiphertext, BfvContext, BfvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -15,7 +17,7 @@ const N: usize = 32;
 const SMALL_Q: [u64; 3] = [65_537, 114_689, 147_457];
 
 fn context(moduli: &[u64]) -> BfvContext {
-    let parameters = BfvParameters::try_with_error_distribution(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(17),
         BarrettModulus::new(257),

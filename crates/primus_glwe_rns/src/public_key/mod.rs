@@ -15,7 +15,7 @@ use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
 use crate::parameter::{validate_glwe_size, validate_moduli};
-use crate::{CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, RnsDomainError};
+use crate::{CrtGlevParameters, CrtGlweEncryptionParameters, RnsDomainError};
 
 use encryption::PublicEncryptionResources;
 
@@ -50,37 +50,15 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
         self.key.byte_count()
     }
 
-    /// Generates a public key from codec-free sampling state and its ordered Q base.
-    /// The zero encryption needs neither a plaintext modulus nor BFV recovery data.
-    ///
-    /// # Panics
-    /// Panics if the parameters/table/key layouts or ordered moduli differ,
-    /// before consuming randomness.
-    ///
-    /// # Correctness
-    /// The secret key and table must use the same NTT representation.
-    pub fn new<Table, R, M>(
-        secret_key: &DcrtGlweSecretKey<T>,
-        parameters: &CrtGlweEncryptionParameters<T>,
-        base_q: &RNSBase<T, M>,
-        table: &DcrtTable<Table>,
-        rng: &mut R,
-    ) -> Self
-    where
-        Table: NttTable<ValueT = T>,
-        R: rand::Rng + rand::CryptoRng,
-        M: FieldContext<T>,
-    {
-        let encryptor = secret_key
-            .try_bind_raw(parameters, base_q, table)
-            .expect("public-key secret, sampling parameters, basis or table are incompatible");
-        let size = parameters.size();
-        let mut data = DcrtGlwe::zero(size.rns_glwe_len());
-        encryptor.encrypt_zeros_to(&mut data, rng);
+    pub(crate) fn from_zero_encryption(
+        key: DcrtGlwe<Vec<T>>,
+        size: RnsGlweSize,
+        moduli: &[T],
+    ) -> Self {
         Self {
-            key: data,
+            key,
             size,
-            moduli: base_q.moduli_values().to_vec(),
+            moduli: moduli.to_vec(),
         }
     }
 

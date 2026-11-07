@@ -10,7 +10,7 @@ use primus_rns::RNSBase;
 
 use super::DcrtGlweSecretKey;
 use crate::parameter::{validate_dcrt_table, validate_moduli};
-use crate::{CrtGlweEncryptionParameters, DcrtGlweCiphertext, RnsDomainError};
+use crate::{CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey, RnsDomainError};
 
 /// A secret key bound to codec-free sampling, an ordered RNS base and a table.
 ///
@@ -139,6 +139,20 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
+    /// Generates a public zero encryption using this checked secret binding.
+    /// Allocates the key payload and its ordered modulus metadata.
+    ///
+    /// # Correctness
+    /// The secret and table must use the same NTT representation, as required
+    /// by [`DcrtGlweSecretKey::try_bind_raw`].
+    #[must_use]
+    pub fn public_key<R: rand::Rng + rand::CryptoRng>(&self, rng: &mut R) -> DcrtGlwePublicKey<T> {
+        let size = self.parameters.size();
+        let mut key = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+        self.encrypt_zeros_to(&mut key, rng);
+        DcrtGlwePublicKey::from_zero_encryption(key, size, self.rns_base.moduli_values())
+    }
+
     /// Encrypts with a caller-supplied coefficient-body injection, without scratch.
     ///
     /// After sampling coefficient noise, calls `inject_body` exactly once on the

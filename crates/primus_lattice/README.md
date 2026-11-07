@@ -91,8 +91,10 @@ Scheme key generators accept it through `EvaluationKeyConfig::PreparedRadix`.
 
 With `rns`, `hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 provides fixed-u64 rank-one `[c0,c1]` plus-phase arithmetic for BFV/BGV keys.
-Parameters share immutable CRT bases and own only P NTT tables; actual Q NTT
-resources stay with the scheme. A prepared product shares that owner and reuses
+Parameters share immutable CRT bases. `NativeHybridAuxiliary` owns the ordered P
+basis and NTT tables for one ring. Several active Q levels can reuse it through
+`NativeHybridParameters::try_with_auxiliary`. The scheme owns the Q NTT tables.
+A prepared product shares the active-level parameters and reuses
 all mutable scratch. `HybridModDown::Centered` and `PlaintextPreserving(p)` keep
 their distinct corrections. This adds no ciphertext family or raw GLWE bridge.
 Scheme owners still generate/sanitize role keys and establish all error/security

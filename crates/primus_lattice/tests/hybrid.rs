@@ -1,6 +1,8 @@
 //! Independent integer oracle for native plus Hybrid products and both reductions.
 use dashu_int::IBig;
-use primus_lattice::hybrid::{HybridModDown, NativeHybridParameters, NativeHybridProduct};
+use primus_lattice::hybrid::{
+    HybridModDown, NativeHybridAuxiliary, NativeHybridParameters, NativeHybridProduct,
+};
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttTable, U64DcrtTable};
 use primus_rns::RNSBase;
@@ -104,6 +106,8 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             2,
         ),
     ] {
+        let auxiliary =
+            Arc::new(NativeHybridAuxiliary::try_new(PolyLength::new(N), &p_values).unwrap());
         for count in 1..=q_values.len() {
             let q_moduli = &q_values[..count];
             let q = product(q_moduli);
@@ -119,15 +123,15 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             )
             .unwrap();
             let parameters = Arc::new(
-                NativeHybridParameters::try_new(
-                    PolyLength::new(N),
+                NativeHybridParameters::try_with_auxiliary(
                     &make_base(q_moduli),
                     q_values.len(),
-                    &p_values,
+                    Arc::clone(&auxiliary),
                     dnum,
                 )
                 .unwrap(),
             );
+            assert!(Arc::ptr_eq(parameters.auxiliary(), &auxiliary));
             let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_values).copied().collect();
             let a = input_coefficients(&q);
             let mut a_ntt = residues(&a, q_moduli);

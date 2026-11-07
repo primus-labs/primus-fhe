@@ -15,6 +15,9 @@
 ## 普通入口与适用范围
 
 ```rust,ignore
+use primus_bfv::planning::{BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledRequest};
+use primus_bfv::{ErrorDistribution, SecretKeyDistr};
+
 let context = BfvLeveledRequest {
     poly_length: PolyLength::new(16384),
     plaintext_modulus: 65537,
@@ -59,24 +62,24 @@ residual/centered wrap、phase quotients、tensor/component round、key采样与
 Q/key-P域、secret/error laws和hard supports；状态为`NotEvaluated`，不是128位安全证书。
 计算P只参与正确性，不算作公开evaluation key的暴露模数。
 
-原`BfvLeveledProfile`保留两个有实际回归消费者的固定N/Q geometry；使用它们时，
-旧参数与算法不变。`plan.profile()`对匹配几何返回`Some(profile)`，自选几何返回`None`。
-以下是旧CBD1/CBD21、t257/65537配置的已认证结果，不是新搜索入口对全部law的保证：
+固定的两组 N/Q 由[回归测试](../../crates/primus_bfv/tests/leveled_parameters.rs)显式构造，
+[基准](../../crates/primus_bfv/benches/working_basis.rs)使用其中的 N16384Q240。
+下表记录这两组 Q、CBD1/CBD21 和指定 t 的正确性准入深度。新生成的 Q 或不同的采样律需要重新计算预算。
 
-| profile | t257最大已认证深度 | t65537最大已认证深度 |
+| 固定 N/Q | t=257 最大准入深度 | t=65537 最大准入深度 |
 | --- | ---: | ---: |
 | N16384Q240 | 4 | 3 |
 | N32768Q360 | 7 | 5 |
 
-Radix16和Hybrid alpha1均得到上表；38个可行请求与26个超深拒绝，共64个profile/t/
-backend/depth请求，与独立forward search一致。工厂实际准备并按working level共享
-不可变Hybrid参数；`step.key_config()`仅克隆配置/Arc，不重建NTT。计算P与key P角色
+Radix16 和 Hybrid alpha1 均得到上表。按两组 N/Q、两种 t、两种后端和深度 1 至 8
+核对 64 个请求，其中 38 个通过，26 个因预算不足被拒绝。计划按工作层级共享已准备的
+不可变 Hybrid 参数，`step.key_config()` 仅克隆配置中的 Arc。计算P与key P角色
 分开；即使某些prime数值相同，也不把计算P算入密钥暴露模数。
 
 `step.relinearization_key`检查client的实际context指针。`step.prepare`检查key的本地
 context及实际level/backend，但不能证明不透明key的真实secret、采样来源或ordinary/collective身份。
 正确使用仍要求本context按照预算所列law诚实生成ordinary client和ordinary keys；
-旧profile数值表使用CBD1/CBD21，custom配置使用其报告的实际law。不能把
+上表使用 CBD1/CBD21，自选配置使用其报告的实际采样律。不能把
 同geometry的collective key、不同secret或超出支撑的导入key借来使用此预算。
 
 该计划只覆盖给定binary族。插入rotation、switch、add、permanent drop或其它运算必须重算相应
@@ -85,6 +88,7 @@ context及实际level/backend，但不能证明不透明key的真实secret、采
 
 ## 高级算术与所有权
 
+`primus_bfv::evaluation` 提供工作基算术和求值键应用。
 `BfvLeveledMultiplication::try_with_auxiliary_moduli(context, external_level,
 working_relin_key, P)`显式选择两种实际level与计算P；`try_new`自动准备working HPS的
 资源P。自动P只负责其epsilon资源预算，不能代替完整电路证书。实际key必须在较小

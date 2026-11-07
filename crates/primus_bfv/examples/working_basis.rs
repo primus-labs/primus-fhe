@@ -1,5 +1,6 @@
 //! Checked ordinary BFV square chain, with temporary internal modulus reduction.
-use primus_bfv::{BfvClient, BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledRequest};
+use primus_bfv::BfvClient;
+use primus_bfv::planning::{BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledRequest};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_poly::Polynomial;

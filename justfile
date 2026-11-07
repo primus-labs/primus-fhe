@@ -48,7 +48,7 @@ simd package="*":
   cargo +nightly nextest run -p '{{package}}' --lib --tests --all-features
 
 # TFHE examples, libraries and small numerical regressions, including both FFT engines.
-tfhe: (lint "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft") (test "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft")
+tfhe: (lint "primus_tfhe*" "rustfft,tfhe-fft") (test "primus_tfhe*" "rustfft,tfhe-fft")
 
 tfhe-simd: (simd "primus_tfhe*")
 

@@ -2,7 +2,7 @@
 use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_reduce::{Reduce, ReduceMul};
 
-use crate::{BfvContext, BfvEvaluationKeyError, BfvModulusSwitch};
+use crate::{BfvContext, evaluation::BfvModulusSwitch, keys::BfvEvaluationKeyError};
 
 /// Internal arithmetic resources, independent of multiplication/key-switch policy.
 /// Restoring maps y modulo Q_l to D*y modulo Q, D=Q/Q_l. It is not ordinary
@@ -97,21 +97,23 @@ impl<'a> WorkingBasis<'a> {
         self.working_len
     }
 
+    // The caller validates both complete [c0,c1] lengths, or owns the
+    // destination scratch at the working level.
+    pub(crate) fn shrink_ciphertext_to(&mut self, input: &[u64], output: &mut [u64]) {
+        for (input, output) in input
+            .chunks_exact(self.external_len)
+            .zip(output.chunks_exact_mut(self.working_len))
+        {
+            self.shrink_polynomial_to(input, output);
+        }
+    }
+
     // Odd nearest divisions compose exactly. For odd a,b and integer x,
     // floor((floor((x+(a-1)/2)/a)+(b-1)/2)/b)
     // = floor((x+(a*b-1)/2)/(a*b)). Canonical wraps differ by Q_l multiples,
     // so this also proves exact simultaneous rounding in the retained ring.
+    // Input and output are complete polynomials in their respective bases.
     pub(crate) fn shrink_polynomial_to(&mut self, input: &[u64], output: &mut [u64]) {
-        assert_eq!(
-            input.len(),
-            self.external_len,
-            "BFV external polynomial length"
-        );
-        assert_eq!(
-            output.len(),
-            self.working_len,
-            "BFV working polynomial length"
-        );
         let count = self.reductions.len();
         if count == 0 {
             output.copy_from_slice(input);
@@ -143,22 +145,9 @@ impl<'a> WorkingBasis<'a> {
         }
     }
 
-    pub(crate) fn restore_polynomials_to(
-        &self,
-        input: &[u64],
-        output: &mut [u64],
-        components: usize,
-    ) {
-        assert_eq!(
-            input.len(),
-            components * self.working_len,
-            "BFV working components length"
-        );
-        assert_eq!(
-            output.len(),
-            components * self.external_len,
-            "BFV external components length"
-        );
+    // The caller supplies a complete working ciphertext and a validated
+    // external [c0,c1] destination.
+    pub(crate) fn restore_ciphertext_to(&self, input: &[u64], output: &mut [u64]) {
         if self.reductions.is_empty() {
             output.copy_from_slice(input);
             return;

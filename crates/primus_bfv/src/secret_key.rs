@@ -4,7 +4,8 @@ use primus_glwe_rns::{DcrtGlweSecretKey, RnsDomainError};
 use primus_modulus::BarrettModulus;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial, PolynomialOwned};
 
-use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters};
+use crate::workspace::BfvDecryptWorkspace;
+use crate::{BfvCiphertext, BfvContext, BfvParameters};
 
 /// A secret key bound to rank-one BFV parameters and their ordered NTT table.
 ///

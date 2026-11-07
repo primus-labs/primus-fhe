@@ -1,10 +1,22 @@
 //! Public role-key storage. Actual secrets are never serialized.
-use super::*;
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
+use std::sync::Arc;
+
+use crate::BfvContext;
+
+use super::{
+    BfvEvaluationKeyConfig,
+    backend::NativeEvaluationBasis,
+    material::{
+        BfvAutomorphismKey, BfvKeySwitchingKey, BfvRelinearizationKey, NativeEvaluationKey,
+    },
+};
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_glwe_rns::persistence::{
     PublicObjectError as Error, PublicObjectLimits as Limits, decode_public_words, ntt_fingerprint,
 };
 use primus_glwe_rns::rlwe_parameters::validate_ntt_primes;
+use primus_lattice::hybrid::NativeHybridParameters;
+use primus_ntt::NttAutomorphismPermutation;
 
 fn encode(
     context: &BfvContext,
@@ -119,7 +131,7 @@ fn decode(
             if metadata.basis().level_count().get() != expected {
                 return Err(Error::Malformed("radix columns"));
             }
-            EvaluationKeyConfig::PreparedRadix(metadata)
+            BfvEvaluationKeyConfig::PreparedRadix(metadata)
         }
         Configuration::Hybrid {
             full,
@@ -140,7 +152,7 @@ fn decode(
             if ntt_fingerprint(metadata.table_p()) != digest {
                 return Err(Error::Binding);
             }
-            EvaluationKeyConfig::Hybrid(metadata)
+            BfvEvaluationKeyConfig::Hybrid(metadata)
         }
     };
     let mut key =

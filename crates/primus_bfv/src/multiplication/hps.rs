@@ -1,14 +1,16 @@
 use core::cmp::Ordering;
 
-use primus_data::{Data, DataMut};
-use primus_modulus::BarrettModulus;
 use primus_ntt::{NttTable, U64DcrtTable};
 use primus_reduce::{ReduceAdd, ReduceMul};
-use primus_rns::{HpsRns, HpsRnsWorkspace, RNSBase};
+use primus_rns::{HpsRns, HpsRnsWorkspace};
 
-use crate::{BfvCiphertext, BfvContext, BfvMultiplyError, BfvQuadraticCiphertext};
+use crate::BfvContext;
 
-use super::{cmp_words, gcd, is_prime, mul_scalar_to};
+use super::{
+    BfvMultiplyError,
+    auxiliary::{prepare_auxiliary_base, search_auxiliary_moduli},
+    words::{cmp_words, mul_scalar_to},
+};
 
 /// One-sided HPS P/Q scaling followed by exact RNS t/P scale-and-round.
 ///
@@ -22,7 +24,7 @@ use super::{cmp_words, gcd, is_prime, mul_scalar_to};
 /// y=P*x/Q+epsilon-P*kappa with 0<=epsilon<L. P>2L makes kappa in {0,1}.
 /// Rounding and the two-component phase residual must be budgeted by callers;
 /// choosing a computation basis does not establish a ciphertext noise bound.
-pub(crate) struct HpsMultiplier<'a> {
+pub(super) struct HpsMultiplier<'a> {
     context: &'a BfvContext,
     level: usize,
     rns: HpsRns,
@@ -35,43 +37,23 @@ pub(crate) struct HpsMultiplier<'a> {
 }
 
 impl<'a> HpsMultiplier<'a> {
-    pub(crate) fn try_with_default_basis(
+    // The prepared multiplication request validated the ciphertext level.
+    pub(super) fn prepare(
         context: &'a BfvContext,
         level: usize,
+        auxiliary_moduli: Option<&[u64]>,
     ) -> Result<Self, BfvMultiplyError> {
-        check_level(context, level)?;
-        let primes = default_auxiliary_moduli(context, level)?;
-        Self::try_new(context, level, &primes)
-    }
-
-    pub(crate) fn try_new(
-        context: &'a BfvContext,
-        level: usize,
-        auxiliary_moduli: &[u64],
-    ) -> Result<Self, BfvMultiplyError> {
-        check_level(context, level)?;
         let n = context.parameters().poly_length().get();
         let base_q = context.codec(level).base_q();
-        let two_n = n.checked_mul(2).ok_or(BfvMultiplyError::LengthOverflow)?;
-        for (index, &p) in auxiliary_moduli.iter().enumerate() {
-            if !(3..(1 << 62)).contains(&p) || p % two_n as u64 != 1 {
-                return Err(BfvMultiplyError::AuxiliaryModulus { index, modulus: p });
+        let default_moduli;
+        let auxiliary_moduli = match auxiliary_moduli {
+            Some(moduli) => moduli,
+            None => {
+                default_moduli = default_auxiliary_moduli(context, level)?;
+                &default_moduli
             }
-            for &q in base_q.moduli_values() {
-                if gcd(p, q) != 1 {
-                    return Err(BfvMultiplyError::NonCoprime {
-                        auxiliary: p,
-                        ciphertext: q,
-                    });
-                }
-            }
-        }
-        let moduli_p: Vec<_> = auxiliary_moduli
-            .iter()
-            .copied()
-            .map(BarrettModulus::new)
-            .collect();
-        let base_p = RNSBase::new(&moduli_p)?;
+        };
+        let base_p = prepare_auxiliary_base(n, base_q, auxiliary_moduli)?;
         let minimum_p = base_q
             .moduli_count()
             .checked_mul(2)
@@ -115,57 +97,31 @@ impl<'a> HpsMultiplier<'a> {
         })
     }
 
-    pub(crate) fn auxiliary_moduli(&self) -> &[u64] {
+    pub(super) fn auxiliary_moduli(&self) -> &[u64] {
         self.rns.base_p().moduli_values()
     }
 
-    pub(crate) fn multiply_to<A, B, C>(
-        &mut self,
-        lhs: &BfvCiphertext<A>,
-        rhs: &BfvCiphertext<B>,
-        output: &mut BfvQuadraticCiphertext<C>,
-    ) where
-        A: Data<Elem = u64>,
-        B: Data<Elem = u64>,
-        C: DataMut<Elem = u64>,
-    {
-        lhs.check_binding(self.context, self.level);
-        rhs.check_binding(self.context, self.level);
-        output.check_binding(self.context, self.level);
-        let q_length = self.context.rns_poly_len(self.level);
-        assert_eq!(lhs.as_ref().len(), 2 * q_length);
-        assert_eq!(rhs.as_ref().len(), 2 * q_length);
-        assert_eq!(output.as_ref().len(), 3 * q_length);
-        self.inverse_q_coefficients(lhs.as_ref());
+    // The prepared request checks public operand bindings and complete lengths
+    // before any writes. It owns the matching scaled output scratch.
+    pub(super) fn multiply_scaled_to(&mut self, lhs: &[u64], rhs: &[u64], output: &mut [u64]) {
+        self.inverse_q_coefficients(lhs);
         self.prepare_lhs_coefficients();
-        self.inverse_q_coefficients(rhs.as_ref());
+        self.inverse_q_coefficients(rhs);
         self.prepare_rhs_coefficients();
-        self.tensor(lhs.as_ref());
-        self.scale(output.as_mut());
+        self.tensor(lhs);
+        self.scale(output);
     }
 
-    pub(crate) fn square_to<A, C>(
-        &mut self,
-        input: &BfvCiphertext<A>,
-        output: &mut BfvQuadraticCiphertext<C>,
-    ) where
-        A: Data<Elem = u64>,
-        C: DataMut<Elem = u64>,
-    {
-        input.check_binding(self.context, self.level);
-        output.check_binding(self.context, self.level);
-        let q_length = self.context.rns_poly_len(self.level);
-        assert_eq!(input.as_ref().len(), 2 * q_length);
-        assert_eq!(output.as_ref().len(), 3 * q_length);
+    pub(super) fn square_scaled_to(&mut self, input: &[u64], output: &mut [u64]) {
         // HPSPOVERQ still needs both asymmetric lifts: the right copy is
         // pre-scaled and the left is only expanded. Their shared coefficient
         // input is read-only, so one copy/INTT serves both without identifying
         // their distinct scaling residuals or using exact square's products.
-        self.inverse_q_coefficients(input.as_ref());
+        self.inverse_q_coefficients(input);
         self.prepare_lhs_coefficients();
         self.prepare_rhs_coefficients();
-        self.tensor(input.as_ref());
-        self.scale(output.as_mut());
+        self.tensor(input);
+        self.scale(output);
     }
 
     fn inverse_q_coefficients(&mut self, input: &[u64]) {
@@ -292,17 +248,6 @@ impl<'a> HpsMultiplier<'a> {
     }
 }
 
-fn check_level(context: &BfvContext, level: usize) -> Result<(), BfvMultiplyError> {
-    if level >= context.level_count() {
-        Err(BfvMultiplyError::Level {
-            requested: level,
-            maximum: context.level_count(),
-        })
-    } else {
-        Ok(())
-    }
-}
-
 // This arithmetic policy reserves Q/(8t) for the bounded epsilon term using
 // H=||s||_1<=N*B for the configured sampler support B. It does not certify
 // input noise, the wrap term, relinearization,
@@ -313,10 +258,6 @@ fn default_auxiliary_moduli(
 ) -> Result<Vec<u64>, BfvMultiplyError> {
     let n = u64::try_from(context.parameters().poly_length().get())
         .map_err(|_| BfvMultiplyError::LengthOverflow)?;
-    let step = n
-        .checked_mul(2)
-        .filter(|&x| x < (1 << 60))
-        .ok_or(BfvMultiplyError::LengthOverflow)?;
     let support = context
         .parameters()
         .encryption_parameters()
@@ -337,29 +278,12 @@ fn default_auxiliary_moduli(
         mul_scalar_to(&target, scalar, &mut next);
         target = next;
     }
-    let mut candidate = ((1u64 << 60) - 2) / step * step + 1;
-    let mut product = vec![1];
-    let mut primes = Vec::new();
-    while cmp_words(&product, &target) == Ordering::Less {
-        while candidate > (1 << 59)
-            && (!is_prime(candidate)
-                || base_q
-                    .moduli_values()
-                    .iter()
-                    .any(|&q| gcd(candidate, q) != 1))
-        {
-            candidate = candidate.saturating_sub(step);
-        }
-        if candidate <= (1 << 59) {
-            return Err(BfvMultiplyError::AuxiliarySearchExhausted);
-        }
-        primes.push(candidate);
-        let mut next = vec![0; product.len() + 1];
-        mul_scalar_to(&product, candidate, &mut next);
-        product = next;
-        candidate = candidate.saturating_sub(step);
-    }
-    Ok(primes)
+    // K is even and a product of NTT primes is odd, so P >= K is P > K.
+    search_auxiliary_moduli(
+        context.parameters().poly_length().get(),
+        base_q.moduli_values(),
+        &target,
+    )
 }
 
 #[cfg(test)]

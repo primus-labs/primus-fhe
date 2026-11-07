@@ -1,5 +1,9 @@
 //! Public storage rebinds real work; malformed frames never become scheme owners.
-use primus_bfv::*;
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
+};
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters, PublicObjectLimits};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -12,10 +16,9 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899905351681, 1125899905744897, 1125899906629633];
 fn context() -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
-            BarrettModulus::new((1 << 61) - 1),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
             ErrorDistribution::CenteredBinomial { eta: 1 },
@@ -243,10 +246,9 @@ fn malformed_storage_limits_context_role_and_sampler_descriptions_are_checked() 
         },
     ] {
         let owner = BfvContext::try_new(
-            BfvParameters::try_with_error_distribution(
+            BfvParameters::try_coefficients(
                 PolyLength::new(N),
                 BarrettModulus::new(P),
-                BarrettModulus::new((1 << 61) - 1),
                 &Q.map(BarrettModulus::new),
                 law,
                 ErrorDistribution::Gaussian {

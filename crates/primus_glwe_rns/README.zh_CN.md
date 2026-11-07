@@ -36,7 +36,7 @@ cargo run -p primus_glwe_rns --example gadget_encryption
 
 ## 公钥加密与预分配资源
 
-生成一次 `DcrtGlwePublicKey`，再准备
+用已检查的私钥绑定 `secret.public_key(&mut rng)` 生成 `DcrtGlwePublicKey`，再准备
 `public.try_bind_raw(&sampling,&base,&table)`。可变 encryptor 借用公钥并拥有一份
 ephemeral workspace，通过同一组 `_to` 方法复用调用方输出。Encoded CRT 输入在
 component 原有的一次 NTT 前加入系数噪声，不增加缩放或变换。

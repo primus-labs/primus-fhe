@@ -8,9 +8,9 @@ use primus_glwe_rns::{
     CrtGlweExpandCoeffParallelEvaluator, CrtGlweTraceEvaluator, CrtGlweTraceKey,
     DcrtGlweAutoEvaluator, DcrtGlweAutoKey, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
     DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
-    DcrtGlwePublicKey, DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey,
-    DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
-    HybridRnsGlweKeySwitchingKey, RnsDomainError, SecretKeyDistr,
+    DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator,
+    DcrtGlweTraceKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey,
+    RnsDomainError, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_modulus::BarrettModulus;
@@ -43,17 +43,10 @@ fn encryption_bindings_check_layout_and_ordered_moduli() {
     let mut rng = StdRng::seed_from_u64(0x4249_4e44);
     let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let public_key = DcrtGlwePublicKey::new(
-        &key,
-        params.encryption_parameters(),
-        params.base_q(),
-        &table,
-        &mut rng,
-    );
-    assert!(
-        key.try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
-            .is_ok()
-    );
+    let public_key = key
+        .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
+        .unwrap()
+        .public_key(&mut rng);
     assert!(
         public_key
             .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
@@ -97,18 +90,15 @@ fn encryption_bindings_check_layout_and_ordered_moduli() {
         // before sampling, even when the foreign base and table agree with each other.
         let mut rejected_rng = StdRng::seed_from_u64(19);
         let mut expected_rng = StdRng::seed_from_u64(19);
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                DcrtGlwePublicKey::new(
-                    &key,
-                    params.encryption_parameters(),
-                    other_params.base_q(),
-                    &other_table,
-                    &mut rejected_rng,
-                )
-            }))
-            .is_err()
-        );
+        assert!(matches!(
+            key.try_bind_raw(
+                params.encryption_parameters(),
+                other_params.base_q(),
+                &other_table,
+            )
+            .map(|binding| binding.public_key(&mut rejected_rng)),
+            Err(RnsDomainError::ModulusOrderMismatch { .. })
+        ));
         assert_eq!(
             rand::Rng::next_u64(&mut rejected_rng),
             rand::Rng::next_u64(&mut expected_rng)
@@ -669,13 +659,10 @@ fn independent_sampling_and_table_inputs_reject_before_key_generation() {
     let mut rng = StdRng::seed_from_u64(427);
     let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
     let dcrt_secret = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let public_key = DcrtGlwePublicKey::new(
-        &dcrt_secret,
-        params.encryption_parameters(),
-        params.base_q(),
-        &table,
-        &mut rng,
-    );
+    let public_key = dcrt_secret
+        .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
+        .unwrap()
+        .public_key(&mut rng);
     let longer_sampling = parameters(1, 64, &q);
     let wider_sampling = parameters(2, 32, &q);
     let reversed_sampling = parameters(1, 32, &[q[1], q[0]]);

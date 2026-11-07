@@ -59,7 +59,7 @@ impl BfvContext {
             .into_iter()
             .map(|q| BarrettModulus::try_new(q).ok_or(Error::Malformed("Q modulus")))
             .collect::<Result<Vec<_>, _>>()?;
-        let parameters = BfvParameters::try_with_error_distribution(
+        let parameters = BfvParameters::try_with_decoder_modulus(
             length,
             BarrettModulus::try_new(plaintext).ok_or(Error::Malformed("plaintext modulus"))?,
             BarrettModulus::try_new(gamma).ok_or(Error::Malformed("decoder modulus"))?,

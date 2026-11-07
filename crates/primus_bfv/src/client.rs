@@ -3,8 +3,10 @@ use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, RnsDomainError};
 use primus_ntt::NttTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial, PolynomialOwned};
 
-use crate::secret_key::phase_with_secret_to;
-use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvPublicKey, BfvSecretKeyContext};
+use crate::keys::BfvPublicKey;
+use crate::secret_key::{BfvSecretKeyContext, phase_with_secret_to};
+use crate::workspace::BfvDecryptWorkspace;
+use crate::{BfvCiphertext, BfvContext};
 
 /// A single secret and erasing recovery workspace borrowing shared BFV resources.
 ///
@@ -167,49 +169,6 @@ impl<'a> BfvClient<'a> {
             .encrypt_centered_to(input, output, rng);
     }
 
-    /// Samples native unscaled key-column noise at one prepared prefix level.
-    /// The context owns the unique sampler and each limb receives the same
-    /// integer error; this does not create lower-level plaintext encryptors.
-    /// Recorded output context/level and complete shape are checked before RNG.
-    pub(crate) fn encrypt_zeros_at_level_to<R, B>(
-        &self,
-        output: &mut BfvCiphertext<B>,
-        level: usize,
-        rng: &mut R,
-    ) where
-        R: rand::Rng + rand::CryptoRng,
-        B: DataMut<Elem = u64>,
-    {
-        output.check_binding(self.context, level);
-        let codec = self.context.codec(level);
-        let n = self.context.parameters().poly_length().get();
-        let sampling = self.context.parameters().encryption_parameters();
-        let length = self.context.rns_poly_len(level);
-        let (mut c0, mut c1) = output.c0_c1_mut(length);
-        sampling.sample_noise_to(c0.as_mut(), codec.moduli_values(), rng);
-        for (table, limb) in self
-            .context
-            .table()
-            .iter()
-            .zip(c0.as_mut().chunks_exact_mut(n))
-        {
-            table.transform_slice(limb);
-        }
-        primus_distr::sample_crt_uniform_values_to(
-            c1.as_mut(),
-            n,
-            &sampling.cipher_moduli_uniform_distr()[..codec.moduli_count()],
-            rng,
-        );
-        let secret = self.key.iter_dcrt_poly().next().expect("rank-one secret");
-        c0.sub_mul_assign(
-            &c1,
-            &DcrtPolynomial(&secret.as_ref()[..length]),
-            n,
-            codec.base_q().moduli(),
-        );
-    }
-
     /// Recovers normal bound ciphertext storage at its recorded level.
     ///
     /// # Panics
@@ -221,7 +180,7 @@ impl<'a> BfvClient<'a> {
         output: &mut Polynomial<B>,
     ) {
         let level = input.bound_level(self.context);
-        self.decrypt_at_level_to(input, level, output);
+        self.recover_at_level_to(input, level, output);
     }
 
     /// Allocates and recovers a normal bound ciphertext at its recorded level.
@@ -232,7 +191,9 @@ impl<'a> BfvClient<'a> {
         input: &BfvCiphertext<A>,
     ) -> PolynomialOwned<u64> {
         let level = input.bound_level(self.context);
-        self.decrypt_at_level(input, level)
+        let mut output = self.context.new_plaintext();
+        self.recover_at_level_to(input, level, &mut output);
+        output
     }
 
     /// Recovers N plaintext coefficients at an explicit level without allocation.
@@ -260,14 +221,19 @@ impl<'a> BfvClient<'a> {
         B: DataMut<Elem = u64>,
     {
         input.check_binding(self.context, level);
+        self.recover_at_level_to(input, level, output);
+    }
+
+    // Both entry points have established the ciphertext's level/provenance contract.
+    fn recover_at_level_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
+        &mut self,
+        input: &BfvCiphertext<A>,
+        level: usize,
+        output: &mut Polynomial<B>,
+    ) {
         let codec = self.context.codec(level);
         let n = self.context.parameters().poly_length().get();
-        let length = self.context.rns_poly_len(level);
-        assert_eq!(
-            input.as_ref().len(),
-            2 * length,
-            "BFV ciphertext length mismatch"
-        );
+        let length = n * codec.moduli_count();
         assert_eq!(
             output.as_ref().len(),
             n,
@@ -306,7 +272,7 @@ impl<'a> BfvClient<'a> {
         input: &BfvCiphertext<A>,
         level: usize,
     ) -> PolynomialOwned<u64> {
-        let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
+        let mut output = self.context.new_plaintext();
         self.decrypt_at_level_to(input, level, &mut output);
         output
     }

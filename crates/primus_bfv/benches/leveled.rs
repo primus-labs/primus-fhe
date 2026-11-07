@@ -9,9 +9,9 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use primus_bfv::{
-    BfvClient, BfvContext, BfvEvaluator, BfvModulusSwitch, BfvParameters, PlaintextEmbedding,
-};
+use primus_bfv::evaluation::{BfvEvaluator, BfvModulusSwitch};
+use primus_bfv::{BfvClient, BfvContext, BfvParameters, PlaintextEmbedding};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -42,7 +42,7 @@ fn expected_product(lhs: &[u64], rhs: &[u64], modulus: u64) -> Polynomial<Vec<u6
 fn bench_leveled(c: &mut Criterion) {
     const N: usize = 1024;
     const T: u64 = 12_289;
-    let parameters = BfvParameters::try_new(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(T),
         BarrettModulus::new(2_199_023_190_017),
@@ -53,7 +53,9 @@ fn bench_leveled(c: &mut Criterion) {
         ]
         .map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        3.2,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.2,
+        },
     )
     .unwrap();
     let context = BfvContext::try_with_levels(parameters, 3).unwrap();

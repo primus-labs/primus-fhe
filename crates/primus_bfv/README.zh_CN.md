@@ -19,12 +19,12 @@ cargo run -p primus_bfv --example slots --features batching
 
 两个基础示例采用相同的调用链：
 
-1. 用 `BfvParameters::try_coefficients(N,t,&Q,secret_law,sigma)` 建立参数，
+1. 用 `BfvParameters::try_coefficients(N,t,&Q,secret_law,error_law)` 建立参数，
    消费进 `BfvContext::try_new(parameters)`。
 2. `BfvClient::generate(&context,rng)` 生成本方 client，保留
    `client.public_key(rng)`，绑定 `context.public_key_encryptor(&public_key)`。
 3. 用 `context.new_plaintext()` 和 `context.new_ciphertext(level)` 准备输入/输出，
-   一次构造 `BfvEvaluator::new(&context,level)`。
+   一次构造 `evaluation::BfvEvaluator::new(&context,level)`。
 4. 加密后，用 `add_plain_to` / `mul_plain_to` 显式选择 `PlaintextEmbedding`，
    最后 `client.decrypt(&ciphertext)` 按密文绑定的 level 恢复。下个请求复用 setup 和输出，
    重新采样加密随机性。
@@ -37,6 +37,10 @@ Full-ring packing 要求明文素数 t≡1 mod 2N；subring 示例仅将明文�
 秘密和密文始终保留完整 N。
 
 ## 选择进阶工作流
+
+密钥材料及 Radix/Hybrid 配置放在 `keys`，运算执行器放在 `evaluation`。
+`planning` 提供普通分层请求及误差预算。`advanced` 提供显式已缩放张量与恢复缓冲区，
+`collective` 提供集体建钥和 fresh lookup。
 
 | 需求 | 入口与新增资源 |
 | --- | --- |
@@ -90,8 +94,9 @@ Collective 或 raw SSLE 需要另外计入完整误差。完整流程与独立�
 [参数与安全参考指南](../../guides/development/ordinary-parameter-budgets.md)。
 
 Codec 只在恢复界内精确，不是任意 phase 的精确舍入 oracle。
-`try_coefficients` 选择 gamma=2⁶¹−1 并要求 t<gamma；`try_new` 显式选择 gamma，
-`try_with_error_distribution` 选择 error law。构造器检查充分的 fresh private recovery，
+`try_coefficients` 选择 gamma=2⁶¹−1 并要求 t<gamma。两个入口均接收 Gaussian 或
+中心二项 `ErrorDistribution`。需显式选择 gamma 时使用 `try_with_decoder_modulus`。
+构造器检查充分的 fresh private recovery，
 不证明公钥/求值恢复或安全级别。须计入公钥 noise、delta drift、求值、keyswitch residual
 及每次 drop。自选 Q/P 必须确实是适用素数；支持 NTT roots 不等于证明素性。
 优化后端要求 q_i<2⁶²。

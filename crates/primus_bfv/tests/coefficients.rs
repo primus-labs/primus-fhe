@@ -1,9 +1,8 @@
 //! Scheme-boundary identities and independent integer/DFT recovery oracles.
 
-use primus_bfv::{
-    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
-    BfvPublicKeyEncryptor, BfvSecretKeyContext,
-};
+use primus_bfv::advanced::{BfvDecryptWorkspace, BfvSecretKeyContext};
+use primus_bfv::keys::BfvPublicKey;
+use primus_bfv::{BfvCiphertext, BfvContext, BfvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -21,7 +20,7 @@ const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
 const ROOTS: [u64; 2] = [18_105_782_770_620, 34_361_371_622_355];
 
 fn parameters(count: usize, t: u64, error: ErrorDistribution) -> BfvParameters {
-    BfvParameters::try_with_error_distribution(
+    BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(t),
         BarrettModulus::new(2_199_023_190_017),
@@ -310,7 +309,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
         &mut setup_rng,
     );
     let secret = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
-    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
+    let mut encryptor = owner.public_key_encryptor(&public).unwrap();
     for length in [0, N - 1, N + 1] {
         let input = Polynomial(vec![0; length]);
         for mode in 0..4 {
@@ -386,7 +385,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
             .is_err()
     );
     let foreign_context = BfvContext::try_new(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             parameters.poly_length(),
             BarrettModulus::new(257),
             BarrettModulus::new(2_199_023_190_017),
@@ -398,7 +397,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     )
     .unwrap();
     assert!(BfvSecretKeyContext::try_new(&key, &foreign_context).is_err());
-    assert!(BfvPublicKeyEncryptor::try_new(&public, &foreign_context).is_err());
+    assert!(foreign_context.public_key_encryptor(&public).is_err());
     let foreign = parameters_with_length(64);
     let mut workspace = BfvDecryptWorkspace::new(&foreign);
     let ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
@@ -435,20 +434,22 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
 }
 
 fn parameters_with_length(n: usize) -> BfvParameters {
-    BfvParameters::try_new(
+    BfvParameters::try_with_decoder_modulus(
         PolyLength::new(n),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
         &Q.map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        3.2,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.2,
+        },
     )
     .unwrap()
 }
 
 #[test]
 fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge() {
-    let parameters = BfvParameters::try_with_error_distribution(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),

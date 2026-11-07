@@ -9,22 +9,12 @@ use primus_glwe_rns::rlwe_parameters::{
 use primus_modulus::{BarrettModulus, is_prime_u64 as is_prime};
 use primus_shape::PolyLength;
 
-use crate::{
-    BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvEvaluationKeyError, BfvLeveledMultiplication,
-    BfvMultiplyError, BfvParameters, BfvRelinearizationKey,
-};
+use crate::evaluation::{BfvLeveledMultiplication, BfvMultiplyError};
+use crate::keys::{BfvEvaluationKeyConfig, BfvEvaluationKeyError, BfvRelinearizationKey};
+use crate::parameters::DEFAULT_DECODER_MODULUS;
+use crate::{BfvClient, BfvContext, BfvParameters};
 
-const Q: [u64; 6] = [
-    1152921422732787713,
-    1152921409847689217,
-    1152921396962590721,
-    1152921311061934081,
-    1152920937394077697,
-    1152920907328847873,
-];
 const KEY_P: [u64; 1] = [1152921504606584833];
-const ETA: u32 = 21;
-const GAMMA: u64 = (1 << 61) - 1;
 
 /// Numerical context request for the ordinary working-basis multiplication family.
 ///
@@ -59,7 +49,7 @@ impl BfvLeveledRequest {
     /// ordinary parameter/context errors. It does not attempt depth admission.
     pub fn create_context(self) -> Result<BfvContext, BfvLeveledParameterError> {
         let n = self.poly_length.get();
-        if self.plaintext_modulus <= 1 || self.plaintext_modulus >= GAMMA {
+        if self.plaintext_modulus <= 1 || self.plaintext_modulus >= DEFAULT_DECODER_MODULUS {
             return Err(unsupported("plaintext modulus must satisfy 1 < t < gamma"));
         }
         if self.ciphertext_prime_count < 2 {
@@ -81,13 +71,12 @@ impl BfvLeveledRequest {
             self.ciphertext_prime_bits,
             self.ciphertext_prime_count,
             None,
-            &[self.plaintext_modulus, GAMMA],
+            &[self.plaintext_modulus, DEFAULT_DECODER_MODULUS],
         )?;
         let moduli = q.into_iter().map(BarrettModulus::new).collect::<Vec<_>>();
-        let parameters = BfvParameters::try_with_error_distribution(
+        let parameters = BfvParameters::try_coefficients(
             self.poly_length,
             BarrettModulus::new(self.plaintext_modulus),
-            BarrettModulus::new(GAMMA),
             &moduli,
             self.secret_distribution,
             self.error_distribution,
@@ -98,57 +87,12 @@ impl BfvLeveledRequest {
     }
 }
 
-/// Finite numerical geometry; choosing it does not establish RLWE hardness.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BfvLeveledProfile {
-    /// N=16384 and the prescribed four 60-bit data primes.
-    N16384Q240,
-    /// N=32768 and the prescribed six 60-bit data primes.
-    N32768Q360,
-}
-impl BfvLeveledProfile {
-    fn geometry(self) -> (usize, &'static [u64]) {
-        match self {
-            Self::N16384Q240 => (16384, &Q[..4]),
-            Self::N32768Q360 => (32768, &Q),
-        }
-    }
-    /// Builds all prefix levels with CBD1 secrets/ephemerals and CBD21 errors.
-    ///
-    /// Only plaintext moduli257 and65537 are included in this arithmetic family.
-    /// Tables are owned by the returned context, never by the parameter plan.
-    pub fn create_context(self, plaintext: u64) -> Result<BfvContext, BfvLeveledParameterError> {
-        if ![257, 65537].contains(&plaintext) {
-            return Err(unsupported(
-                "legacy profiles support plaintext moduli 257 and 65537",
-            ));
-        }
-        let (n, q) = self.geometry();
-        let moduli = q
-            .iter()
-            .copied()
-            .map(BarrettModulus::new)
-            .collect::<Vec<_>>();
-        let parameters = BfvParameters::try_with_error_distribution(
-            PolyLength::new(n),
-            BarrettModulus::new(plaintext),
-            BarrettModulus::new(GAMMA),
-            &moduli,
-            SecretKeyDistr::SparseTernary,
-            ErrorDistribution::CenteredBinomial { eta: ETA },
-        )
-        .map_err(|e| BfvLeveledParameterError::Context(e.to_string()))?;
-        BfvContext::try_with_levels(parameters, q.len())
-            .map_err(|e| BfvLeveledParameterError::Context(e.to_string()))
-    }
-}
-
 /// Actual ordinary evaluation-key configuration covered by the finite budget.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BfvLeveledKeyBackend {
     /// Full signed radix16; its low-bit residual is included in every budget.
     Radix16,
-    /// One Q prime per partition, with the prescribed independent key P basis.
+    /// One Q prime per partition, with one independent key P prime.
     HybridAlpha1,
 }
 
@@ -369,7 +313,6 @@ impl<'a> BfvLeveledStep<'a> {
 /// working-level Hybrid tables are prepared once per selected level and shared
 /// by the steps; data-Q tables remain with the borrowed context.
 pub struct BfvLeveledParameters<'a> {
-    profile: Option<BfvLeveledProfile>,
     fresh_ledger: BfvLeveledFreshErrorLedger,
     secret_l1_bound: u64,
     ephemeral_l1_bound: u64,
@@ -414,16 +357,11 @@ impl<'a> BfvLeveledParameters<'a> {
                 "Radix16 requires every data prime to exceed its radix 65536",
             ));
         }
-        if parameters.codec().gamma() != GAMMA {
+        if parameters.codec().gamma() != DEFAULT_DECODER_MODULUS {
             return Err(unsupported(
                 "this family uses the default prime decoder gamma=2^61-1",
             ));
         }
-        let profile = match n {
-            16384 if qs == &Q[..4] => Some(BfvLeveledProfile::N16384Q240),
-            32768 if qs == Q => Some(BfvLeveledProfile::N32768Q360),
-            _ => None,
-        };
         let sampling = parameters.encryption_parameters();
         let support = sampling.secret_key_sampler().maximum_magnitude();
         let secret_l1_bound = match sampling.secret_key_distr() {
@@ -451,7 +389,7 @@ impl<'a> BfvLeveledParameters<'a> {
         }
         let t = parameters.codec().t();
         let q = product(qs);
-        let gamma = UBig::from(GAMMA);
+        let gamma = UBig::from(DEFAULT_DECODER_MODULUS);
         let r = &q % t;
         let decoder_overhead = UBig::from(2u8) * r * (t / 2) * &gamma + &q * (2 * qs.len());
         if &q * &gamma <= decoder_overhead {
@@ -573,7 +511,6 @@ impl<'a> BfvLeveledParameters<'a> {
             error = next;
         }
         Ok(Self {
-            profile,
             fresh_ledger,
             steps,
             secret_l1_bound,
@@ -582,11 +519,6 @@ impl<'a> BfvLeveledParameters<'a> {
             decoder_capacity: words(&capacity),
             security_inputs,
         })
-    }
-    /// Legacy shipped profile when the actual N/Q geometry matches it.
-    #[must_use]
-    pub const fn profile(&self) -> Option<BfvLeveledProfile> {
-        self.profile
     }
     /// Deterministic fresh public-key phase-error bound, little-endian u64 words.
     #[must_use]

@@ -10,10 +10,9 @@ use rand::{SeedableRng, rngs::StdRng};
 #[test]
 fn consuming_client_transfer_reuses_the_actual_key_after_recovery() {
     let context = BfvContext::try_new(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(32),
             BarrettModulus::new(193),
-            BarrettModulus::new((1 << 61) - 1),
             &[1_125_899_906_248_961, 1_125_899_906_051_329].map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
             ErrorDistribution::CenteredBinomial { eta: 21 },

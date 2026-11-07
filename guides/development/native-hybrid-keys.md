@@ -65,9 +65,13 @@ is not a bit radix or a multiplicative-depth budget. Generate keys for the
 actual level and use their bound parameters; slicing a matrix is not an API for
 converting its level or decomposition.
 
-`primus_lattice::hybrid::NativeHybridParameters` owns the immutable Hybrid RNS
-bases, constants and P NTT tables. Existing CRT bases share their allocations;
-Q NTT tables remain with the scheme context. Role keys share the parameter
+`primus_lattice::hybrid::NativeHybridParameters` owns the active Hybrid RNS
+bases and constants. When preparing several Q levels with the same N and
+ordered P, create one `Arc<NativeHybridAuxiliary>` using `try_new(N, &key_p)`
+and pass it to `NativeHybridParameters::try_with_auxiliary`. Each level prepares
+its own Q-dependent partitions and converters. The shared auxiliary owner
+supplies the P basis and P NTT tables. The scheme context owns the Q NTT tables.
+Role keys share the active-level parameter
 owner through `Arc` and each retain only their own public columns. A prepared
 operation owns its selected mutable scratch. Prepared numerical `_to` calls
 reuse that scratch and caller outputs without allocation; allocating convenience

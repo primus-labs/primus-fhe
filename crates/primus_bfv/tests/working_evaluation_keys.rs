@@ -1,10 +1,9 @@
 //! Temporary key-basis switching: independent integer rounding and scaled embed.
 use dashu_int::IBig;
-use primus_bfv::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvEvaluationKeyConfig,
-    BfvEvaluationKeyError, BfvKeySwitcher, BfvMultiplier, BfvParameters, BfvQuadraticCiphertext,
-    BfvRelinearizer,
-};
+use primus_bfv::advanced::{BfvMultiplier, BfvQuadraticCiphertext};
+use primus_bfv::evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvRelinearizer};
+use primus_bfv::keys::{BfvEvaluationKeyConfig, BfvEvaluationKeyError};
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -25,10 +24,9 @@ const Q: [u64; 4] = [
 ];
 fn context(q: &[u64]) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
-            BarrettModulus::new((1 << 61) - 1),
             &q.iter()
                 .copied()
                 .map(BarrettModulus::new)

@@ -5,7 +5,7 @@ use primus_poly::DcrtPolynomial;
 ///
 /// Each component has undergone the selected ordinary BFV backend's scaling:
 /// the exact backend uses `round(t*T/Q)` on its integer tensor, whereas
-/// [`crate::BfvMultiplicationBackend::HpsPOverQ`] uses one-sided P/Q scaling
+/// [`crate::evaluation::BfvMultiplicationBackend::HpsPOverQ`] uses one-sided P/Q scaling
 /// before tensoring and exact `round(t*T/P)` afterward.
 /// This is a degree-two ciphertext under one secret, not rank-two GLWE.
 /// The unscaled integer tensor is private to the multiplication owner; only

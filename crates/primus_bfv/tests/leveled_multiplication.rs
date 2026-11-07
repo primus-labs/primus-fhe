@@ -1,9 +1,9 @@
 //! External-Q restoration, independent integer residuals and real encrypted chains.
 use dashu_int::IBig;
-use primus_bfv::{
-    BfvCiphertext, BfvClient, BfvContext, BfvLeveledMultiplication, BfvModulusSwitch,
-    BfvMultiplication, BfvMultiplicationBackend, BfvParameters,
+use primus_bfv::evaluation::{
+    BfvLeveledMultiplication, BfvModulusSwitch, BfvMultiplication, BfvMultiplicationBackend,
 };
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -25,10 +25,9 @@ const P: [u64; 2] = [1_152_921_504_606_830_593, 1_152_921_504_606_748_673];
 
 fn context(t: u64, qs: &[u64]) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(t),
-            BarrettModulus::new((1 << 61) - 1),
             &qs.iter()
                 .copied()
                 .map(BarrettModulus::new)

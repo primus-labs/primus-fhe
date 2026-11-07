@@ -1,9 +1,9 @@
 //! BFV consumes the same subring batching encoder as BGV.
+use primus_bfv::evaluation::{BfvEvaluator, BfvModulusSwitch};
 use primus_bfv::{
-    BfvClient, BfvContext, BfvEvaluator, BfvModulusSwitch, BfvParameters, PlaintextEmbedding,
+    BfvClient, BfvContext, BfvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
 };
 use primus_encoding::BatchingEncoder;
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
@@ -21,7 +21,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )?,
         2,
     )?;

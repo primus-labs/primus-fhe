@@ -1,9 +1,10 @@
 #![cfg(feature = "batching")]
 
-use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluationKeyError, BfvModulusSwitch, BfvParameters,
-};
+use primus_bfv::evaluation::{BfvAutomorphism, BfvModulusSwitch};
+use primus_bfv::keys::BfvEvaluationKeyError;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -17,7 +18,9 @@ fn context(n: usize, p: u64) -> BfvContext {
             BarrettModulus::new(p),
             &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         2,

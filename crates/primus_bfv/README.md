@@ -20,12 +20,12 @@ cargo run -p primus_bfv --example slots --features batching
 
 Both examples follow the same chain:
 
-1. Build `BfvParameters::try_coefficients(N,t,&Q,secret_law,sigma)` and move it
+1. Build `BfvParameters::try_coefficients(N,t,&Q,secret_law,error_law)` and move it
    into `BfvContext::try_new(parameters)`.
 2. Generate `BfvClient::generate(&context,rng)`, retain `client.public_key(rng)`
    and bind `context.public_key_encryptor(&public_key)`.
 3. Allocate plaintexts and outputs with `context.new_plaintext()` and
-   `context.new_ciphertext(level)`. Prepare `BfvEvaluator::new(&context,level)`.
+   `context.new_ciphertext(level)`. Prepare `evaluation::BfvEvaluator::new(&context,level)`.
 4. Encrypt, use `add_plain_to` / `mul_plain_to` with `PlaintextEmbedding`, then
    recover with `client.decrypt(&ciphertext)`, which uses the bound level. Reuse
    setup and outputs for the next request, with fresh encryption coins.
@@ -40,6 +40,11 @@ Full-ring packing needs a plaintext prime t≡1 mod 2N. The subring examples use
 the plaintext ring n<N while retaining full-N secrets and ciphertexts.
 
 ## Choose an advanced workflow
+
+Find key material and Radix/Hybrid configuration in `keys`, and prepared
+operations in `evaluation`. Ordinary leveled requests and budgets live in
+`planning`. Use `advanced` for explicit scaled tensors and recovery scratch,
+and `collective` for shared key contributions and fresh lookup.
 
 | Need | Entry point and added resource |
 | --- | --- |
@@ -101,8 +106,9 @@ Collective or raw SSLE needs separate accounting. See the
 for the supported workflow and independent offline screening.
 
 The codec is exact within its recovery bound, not an arbitrary-phase rounding
-oracle. `try_coefficients` selects gamma=2⁶¹−1 and requires t<gamma; `try_new`
-selects gamma explicitly and `try_with_error_distribution` selects the error law.
+oracle. `try_coefficients` selects gamma=2⁶¹−1 and requires t<gamma.
+Choose a Gaussian or centered-binomial `ErrorDistribution` in either
+constructor. Use `try_with_decoder_modulus` to supply gamma explicitly.
 Construction checks sufficient fresh private recovery, not public/evaluated
 recovery or a security level. Include public-key noise, delta drift, evaluation,
 key-switch residuals and every drop. Supplied Q/P primes must actually be suitable

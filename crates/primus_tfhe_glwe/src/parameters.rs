@@ -13,7 +13,10 @@ use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, LweDimension};
 use primus_lwe::LweEncryptionParameters;
 use primus_reduce::{ModulusSwitch, RingContext};
-use primus_tfhe::{BlindRotationMethod, ModulusConfig, ModulusConfigError, PbsMessageConfig};
+use primus_tfhe::{
+    BlindRotationMethod, ModulusConfig, ModulusConfigError, PbsMessageConfig,
+    rotation::RotationModulusSwitch,
+};
 
 use crate::{
     GadgetEncryptionConfig, GgswParameters, GlevParameters, GlweKeySwitchingParameters, PbsConfig,
@@ -89,9 +92,8 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
                 capacity: capacity.get(),
             });
         }
-        if T::try_from(blind_rotation_ggsw.poly_length().get() * 2).is_err() {
-            return Err(TfheParameterError::RotationDomainTooLarge);
-        }
+        let two_n = 2 * blind_rotation_ggsw.poly_length().get();
+        T::try_from(two_n).map_err(|_| TfheParameterError::RotationDomainTooLarge)?;
 
         let key_switching_params = Self::derive_glwe_key_switching(
             &small_lwe,
@@ -101,12 +103,15 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         let ring_modulus = blind_rotation_ggsw.cipher_modulus();
         let ring_to_small = (ring_modulus.explicit_value() != small_lwe.cipher_modulus_value())
             .then(|| ModulusSwitch::new(ring_modulus, small_lwe.cipher_modulus()));
+        let rotation_modulus_switch =
+            RotationModulusSwitch::new(small_lwe.cipher_modulus(), two_n, 1);
         Ok(Self {
             evaluation: PbsEvaluationParameters {
                 small_dimension: small_lwe.dimension(),
                 small_modulus: small_lwe.cipher_modulus_value(),
                 small_secret_distr: small_lwe.secret_key_distr(),
                 ring_to_small,
+                rotation_modulus_switch,
                 pbs_order: config.order,
                 blind_rotation_params: blind_rotation_ggsw,
                 key_switching_params,

@@ -1,11 +1,12 @@
 //! Complete native BFV coefficient evaluation and a switch to another secret.
 
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
+};
 use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch,
-    BfvMultiplication, BfvParameters, PlaintextEmbedding,
+    BfvClient, BfvContext, BfvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
@@ -42,7 +43,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )?,
         3,
     )?;

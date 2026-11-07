@@ -2,9 +2,8 @@
 //! Run: cargo run -p primus_bfv --example hybrid_rns_key_switch
 //! These parameters demonstrate composition, not a security level.
 
-use primus_bfv::{
-    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext,
-};
+use primus_bfv::advanced::{BfvDecryptWorkspace, BfvSecretKeyContext};
+use primus_bfv::{BfvCiphertext, BfvContext, BfvParameters, ErrorDistribution};
 use primus_glwe_rns::{
     DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
     HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
@@ -28,13 +27,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_moduli).copied().collect();
     let qp_table = U64DcrtTable::new(poly_length, &qp_moduli).unwrap();
 
-    let glwe_parameters = BfvParameters::try_new(
+    let glwe_parameters = BfvParameters::try_with_decoder_modulus(
         poly_length,
         plaintext_modulus,
         gamma,
         &q_moduli,
         SecretKeyDistr::SparseTernary,
-        3.20,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.20,
+        },
     )?;
     let context = BfvContext::try_new(glwe_parameters)?;
     let glwe_parameters = context.parameters();

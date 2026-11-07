@@ -246,7 +246,6 @@ impl<'a> BfvEvaluator<'a> {
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
-        self.validate_plaintext(plain.as_ref());
         self.prepare_plaintext(plain, embedding, false);
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.codec(self.level).base_q().moduli();
@@ -267,7 +266,6 @@ impl<'a> BfvEvaluator<'a> {
     {
         input.check_binding(self.context, self.level);
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
-        self.validate_plaintext(plain.as_ref());
         self.prepare_plaintext(plain, embedding, false);
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.codec(self.level).base_q().moduli();
@@ -305,6 +303,7 @@ impl<'a> BfvEvaluator<'a> {
                 embedding,
             );
         } else {
+            self.validate_plaintext(plain.as_ref());
             let t = codec.t();
             let half = t.div_ceil(2);
             for (limb, &q) in self

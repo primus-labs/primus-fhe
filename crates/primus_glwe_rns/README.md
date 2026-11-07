@@ -37,7 +37,8 @@ cargo run -p primus_glwe_rns --example gadget_encryption
 
 ## Prepared public encryption
 
-Generate `DcrtGlwePublicKey` once, then prepare
+Generate `DcrtGlwePublicKey` from the checked secret binding with
+`secret.public_key(&mut rng)`, then prepare
 `public.try_bind_raw(&sampling,&base,&table)`. Its mutable encryptor borrows the
 key and owns one ephemeral workspace; the same `_to` methods reuse caller output.
 Encoded CRT input is added to coefficient noise before the component's existing

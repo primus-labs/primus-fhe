@@ -68,13 +68,13 @@ Mathematical independence comes from the separate algorithm, rather than public
 visibility of keys or raw buffers. The production path uses exact RNS NTT.
 
 For ordinary degree-one requests, prepare
-`BfvMultiplication::try_new(context,&relinearization_key)`. It derives the actual
+`evaluation::BfvMultiplication::try_new(context,&relinearization_key)`. It derives the actual
 level from the key, selects compatible computation-only primes and owns the scaled
 quadratic/relinearization scratch. `multiply_to` and `square_to` return degree-one
 outputs; `square_assign` overwrites one ciphertext using the same internal scratch.
 Advanced callers can explicitly choose the auxiliary basis with
-`try_with_auxiliary_moduli(context,key,&primes)`, or retain the separate
-`BfvMultiplier` → scaled quadratic → `BfvRelinearizer` flow.
+`try_with_backend_and_auxiliary_moduli(context,key,backend,&primes)`, or use
+the `advanced::BfvMultiplier` → scaled quadratic → `evaluation::BfvRelinearizer` flow.
 The [multiplication benchmark](../../crates/primus_bfv/benches/multiplication.rs)
 uses the combined public request for both backends. Its exact branch retains
 explicit historical P for comparison; the HPSPOVERQ branch uses its own prepared basis. It does not expose internal oracles solely for measurement.

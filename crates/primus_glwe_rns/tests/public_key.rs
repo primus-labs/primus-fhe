@@ -5,8 +5,8 @@ use primus_decompose::{
 };
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey,
-    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::{AsFrom, FheUint};
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize, ggsw::DcrtGgsw};
@@ -320,13 +320,10 @@ where
         SecretKeyDistr::SparseTernary,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        &key_parameters,
-        &base,
-        &table,
-        &mut StdRng::seed_from_u64(51),
-    );
+    let public = key
+        .try_bind_raw(&key_parameters, &base, &table)
+        .unwrap()
+        .public_key(&mut StdRng::seed_from_u64(51));
     let message: Vec<i64> = (0..32).map(|i| (i % 7) as i64 - 3).collect();
     let encoded = CrtPolynomial::new(
         values
@@ -497,13 +494,10 @@ fn prepared_public_and_gadget_calls_reuse_outputs_without_allocating_or_extra_nt
     let table = DcrtTable::<CountedTable>::new(PolyLength::new(32), &moduli).unwrap();
     let secret = GlweSecretKey::new(vec![1; 64], size.glwe_size(), SecretKeyDistr::SparseTernary);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        &parameters,
-        &base,
-        &table,
-        &mut StdRng::seed_from_u64(71),
-    );
+    let public = key
+        .try_bind_raw(&parameters, &base, &table)
+        .unwrap()
+        .public_key(&mut StdRng::seed_from_u64(71));
 
     let mut raw = public.try_bind_raw(&parameters, &base, &table).unwrap();
     let message = CrtPolynomial::new(vec![3; size.rns_poly_len()]);
@@ -554,13 +548,10 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     let table = DcrtTable::<U64NttTable>::new(PolyLength::new(32), &moduli).unwrap();
     let secret = GlweSecretKey::new(vec![1; 32], size.glwe_size(), SecretKeyDistr::SparseTernary);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        &parameters,
-        &base,
-        &table,
-        &mut StdRng::seed_from_u64(81),
-    );
+    let public = key
+        .try_bind_raw(&parameters, &base, &table)
+        .unwrap()
+        .public_key(&mut StdRng::seed_from_u64(81));
 
     let mut raw = public.try_bind_raw(&parameters, &base, &table).unwrap();
     for (message_len, output_len) in [
@@ -597,13 +588,10 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
         SecretKeyDistr::SparseTernary,
     );
     let foreign_key = DcrtGlweSecretKey::from_coeff_secret_key(&foreign_secret, &table);
-    let foreign_public = DcrtGlwePublicKey::new(
-        &foreign_key,
-        &foreign_parameters,
-        &base,
-        &table,
-        &mut StdRng::seed_from_u64(84),
-    );
+    let foreign_public = foreign_key
+        .try_bind_raw(&foreign_parameters, &base, &table)
+        .unwrap()
+        .public_key(&mut StdRng::seed_from_u64(84));
     let mut foreign_raw = foreign_public
         .try_bind_raw(&foreign_parameters, &base, &table)
         .unwrap();

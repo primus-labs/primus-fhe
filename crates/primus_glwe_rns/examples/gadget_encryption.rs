@@ -7,8 +7,8 @@
 use primus_decompose::DecompositionBaseLog;
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlwePublicKey, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize, ggsw::DcrtGgsw};
 use primus_modulus::BarrettModulus;
@@ -34,7 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let coefficient_key =
         GlweSecretKey::generate(size.glwe_size(), sampling.secret_key_sampler(), &mut rng);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let public = DcrtGlwePublicKey::new(&key, &sampling, &base, &table, &mut rng);
+    let public = key
+        .try_bind_raw(&sampling, &base, &table)?
+        .public_key(&mut rng);
 
     // Gadget arithmetic owns the base/decomposition. Sampling stays separate
     // so a distinct key role can select its required error distribution.

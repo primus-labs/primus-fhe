@@ -1,4 +1,5 @@
 use primus_bfv::{BfvClient, BfvContext, BfvContextError, BfvParameters};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
@@ -11,7 +12,7 @@ use std::sync::Arc;
 const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
 
 fn parameters(n: usize, q: &[u64]) -> BfvParameters {
-    BfvParameters::try_new(
+    BfvParameters::try_with_decoder_modulus(
         PolyLength::new(n),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
@@ -20,7 +21,9 @@ fn parameters(n: usize, q: &[u64]) -> BfvParameters {
             .map(BarrettModulus::new)
             .collect::<Vec<_>>(),
         SecretKeyDistr::UniformBinary,
-        1.0,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 1.0,
+        },
     )
     .unwrap()
 }
@@ -108,11 +111,12 @@ fn client_rejects_invalid_plaintext_before_randomness_and_invalid_recovery_befor
 
 #[test]
 fn local_context_level_provenance_is_preserved_and_raw_adoption_is_explicit() {
-    use primus_bfv::{
-        BfvAutomorphism, BfvCiphertext, BfvCiphertextBindingError as E, BfvEvaluationKeyError,
-        BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplier, BfvPublicKeyError,
-        BfvRelinearizer,
+    use primus_bfv::advanced::BfvMultiplier;
+    use primus_bfv::evaluation::{
+        BfvAutomorphism, BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch, BfvRelinearizer,
     };
+    use primus_bfv::keys::{BfvEvaluationKeyError, BfvPublicKeyError};
+    use primus_bfv::{BfvCiphertext, BfvCiphertextBindingError as E};
     use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 
     let context = BfvContext::try_with_levels(parameters(32, &Q), 2).unwrap();

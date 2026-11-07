@@ -1,9 +1,10 @@
-//! Finite-profile model binding and ordinary public-encryption circuit admission.
+//! Working-basis model binding and ordinary public-encryption circuit admission.
 use dashu_int::UBig;
-use primus_bfv::{
-    BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvLeveledKeyBackend, BfvLeveledParameterError,
-    BfvLeveledParameters, BfvLeveledProfile, BfvLeveledRequest, BfvParameters,
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::planning::{
+    BfvLeveledKeyBackend, BfvLeveledParameterError, BfvLeveledParameters, BfvLeveledRequest,
 };
+use primus_bfv::{BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -11,16 +12,44 @@ use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
+const Q: [u64; 6] = [
+    1152921422732787713,
+    1152921409847689217,
+    1152921396962590721,
+    1152921311061934081,
+    1152920937394077697,
+    1152920907328847873,
+];
+
+fn context(n: usize, q: &[u64], t: u64) -> BfvContext {
+    let moduli = q
+        .iter()
+        .copied()
+        .map(BarrettModulus::new)
+        .collect::<Vec<_>>();
+    let parameters = BfvParameters::try_coefficients(
+        PolyLength::new(n),
+        BarrettModulus::new(t),
+        &moduli,
+        SecretKeyDistr::SparseTernary,
+        ErrorDistribution::CenteredBinomial { eta: 21 },
+    )
+    .unwrap();
+    BfvContext::try_with_levels(parameters, moduli.len()).unwrap()
+}
+
 fn integer(words: &[u64]) -> UBig {
     words.iter().rev().fold(UBig::ZERO, |x, &v| (x << 64) + v)
 }
 
 #[test]
 fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
-    for profile in [BfvLeveledProfile::N16384Q240, BfvLeveledProfile::N32768Q360] {
-        for t in [257, 65537] {
-            let c = profile.create_context(t).unwrap();
-            let n = c.parameters().poly_length().get();
+    for (n, q, plaintext_depths) in [
+        (16384, &Q[..4], [(257, 4), (65537, 3)]),
+        (32768, Q.as_slice(), [(257, 7), (65537, 5)]),
+    ] {
+        for (t, admitted_depth) in plaintext_depths {
+            let c = context(n, q, t);
             let fresh = 21 * (2 * n + 1) as u64
                 + c.parameters()
                     .base_q()
@@ -33,13 +62,16 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
                 BfvLeveledKeyBackend::Radix16,
                 BfvLeveledKeyBackend::HybridAlpha1,
             ] {
-                let mut greatest = 0;
                 for depth in 1..=8 {
-                    let Ok(plan) = BfvLeveledParameters::try_new(&c, depth, backend) else {
+                    let result = BfvLeveledParameters::try_new(&c, depth, backend);
+                    if depth > admitted_depth {
+                        assert!(matches!(
+                            result,
+                            Err(BfvLeveledParameterError::Budget { .. })
+                        ));
                         continue;
-                    };
-                    greatest = depth;
-                    assert_eq!(plan.profile(), Some(profile));
+                    }
+                    let plan = result.unwrap();
                     assert_eq!(integer(plan.fresh_error_bound()), UBig::from(fresh));
                     assert_eq!(plan.steps().len(), depth);
                     let mut previous = integer(plan.fresh_error_bound());
@@ -76,10 +108,6 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
                         );
                     }
                 }
-                assert!(
-                    greatest >= 2,
-                    "each shipped model must admit a meaningful chain"
-                );
                 for depth in [0, 9] {
                     assert!(matches!(
                         BfvLeveledParameters::try_new(&c, depth, backend),
@@ -93,9 +121,9 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
 
 #[test]
 fn ordinary_unsigned_public_inputs_follow_the_admitted_external_q_square_chain() {
-    // Full dimension is necessary here: this exercises the exact shipped model,
-    // metadata binding and unsigned-lift budget; kernel edge tests use small rings.
-    let c = BfvLeveledProfile::N16384Q240.create_context(257).unwrap();
+    // Exercise the unsigned-lift budget and metadata binding at the full Q240
+    // geometry. Kernel edge tests use small rings.
+    let c = context(16384, &Q[..4], 257);
     let mut rng = StdRng::seed_from_u64(0x26_c0ef);
     let mut client = BfvClient::generate(&c, &mut rng);
     let pk = client.public_key(&mut rng);
@@ -149,7 +177,7 @@ fn ordinary_unsigned_public_inputs_follow_the_admitted_external_q_square_chain()
 
 #[test]
 fn admission_rejects_unsupported_gamma_incomplete_levels_or_context_owner() {
-    let c = BfvLeveledProfile::N16384Q240.create_context(257).unwrap();
+    let c = context(16384, &Q[..4], 257);
     let plan = BfvLeveledParameters::try_new(&c, 1, BfvLeveledKeyBackend::HybridAlpha1).unwrap();
     let q = c
         .parameters()
@@ -163,7 +191,7 @@ fn admission_rejects_unsupported_gamma_incomplete_levels_or_context_owner() {
         (SecretKeyDistr::SparseTernary, 21, (1 << 61) - 3, 4),
         (SecretKeyDistr::SparseTernary, 21, (1 << 61) - 1, 3),
     ] {
-        let p = BfvParameters::try_with_error_distribution(
+        let p = BfvParameters::try_with_decoder_modulus(
             PolyLength::new(16384),
             BarrettModulus::new(257),
             BarrettModulus::new(gamma),
@@ -178,14 +206,13 @@ fn admission_rejects_unsupported_gamma_incomplete_levels_or_context_owner() {
             Err(BfvLeveledParameterError::Unsupported { .. })
         ));
     }
-    let other = BfvLeveledProfile::N16384Q240.create_context(257).unwrap();
+    let other = context(16384, &Q[..4], 257);
     let mut rng = StdRng::seed_from_u64(0x26_bad);
     let client = BfvClient::generate(&other, &mut rng);
     assert!(matches!(
         plan.steps()[0].relinearization_key(&client, &mut rng),
         Err(BfvLeveledParameterError::Binding)
     ));
-    assert!(BfvLeveledProfile::N16384Q240.create_context(17).is_err());
 }
 
 fn small_request(secret: SecretKeyDistr, error: ErrorDistribution) -> BfvLeveledRequest {
@@ -236,7 +263,6 @@ fn custom_laws_report_public_support_and_execute_the_admitted_binary_circuit() {
             BfvLeveledKeyBackend::HybridAlpha1,
         ] {
             let plan = BfvLeveledParameters::try_new(&c, 2, backend).unwrap();
-            assert!(plan.profile().is_none());
             let h = match secret {
                 SecretKeyDistr::FixedHammingWeightTernary { hamming_weight } => {
                     hamming_weight as u64

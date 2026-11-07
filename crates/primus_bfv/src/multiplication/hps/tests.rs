@@ -1,6 +1,6 @@
 //! Independent integer tensors, centered-wrap residuals and complete native phases.
 use super::HpsMultiplier;
-use crate::{BfvCiphertext, BfvClient, BfvContext, BfvParameters, BfvRelinearizer};
+use crate::{BfvCiphertext, BfvClient, BfvContext, BfvParameters, evaluation::BfvRelinearizer};
 use dashu_int::IBig;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -90,7 +90,7 @@ fn phase(components: &[Vec<IBig>], secret: &[IBig]) -> Vec<IBig> {
 }
 fn context(t: u64) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(N),
             BarrettModulus::new(t),
             BarrettModulus::new((1 << 61) - 1),
@@ -236,7 +236,8 @@ fn integer_tensor_wrap_and_complete_phase_residual_hold_across_prefixes() {
             // 128 bits and exercises P>Q. Neither path assumes P>NQ.
             for p_moduli in [&P[..1], &P[..3]] {
                 let p = product_moduli(p_moduli);
-                let mut multiplier = HpsMultiplier::try_new(&context, level, p_moduli).unwrap();
+                let mut multiplier =
+                    HpsMultiplier::prepare(&context, level, Some(p_moduli)).unwrap();
                 let mut output = context.new_quadratic_ciphertext(level);
                 for square in [false, true] {
                     let right_coeff = if square { &lhs } else { &rhs };
@@ -257,9 +258,13 @@ fn integer_tensor_wrap_and_complete_phase_residual_hold_across_prefixes() {
                     multiplier.rhs_qp.fill(u64::MAX);
                     multiplier.tensor.fill(u64::MAX);
                     if square {
-                        multiplier.square_to(&left, &mut output);
+                        multiplier.square_scaled_to(left.as_ref(), output.as_mut());
                     } else {
-                        multiplier.multiply_to(&left, &right, &mut output);
+                        multiplier.multiply_scaled_to(
+                            left.as_ref(),
+                            right.as_ref(),
+                            output.as_mut(),
+                        );
                     }
                     assert_eq!(
                         decode_components(&context, level, output.as_ref()),
@@ -332,7 +337,7 @@ fn automatic_auxiliary_budget_includes_the_configured_secret_support() {
         },
     ] {
         let context = BfvContext::try_with_levels(
-            BfvParameters::try_with_error_distribution(
+            BfvParameters::try_with_decoder_modulus(
                 PolyLength::new(N),
                 BarrettModulus::new(65_537),
                 BarrettModulus::new((1 << 61) - 1),
@@ -351,7 +356,7 @@ fn automatic_auxiliary_budget_includes_the_configured_secret_support() {
             .maximum_magnitude();
         let h_plus_one = IBig::from(N) * b + 1u64;
         for level in 0..context.level_count() {
-            let multiplier = HpsMultiplier::try_with_default_basis(&context, level).unwrap();
+            let multiplier = HpsMultiplier::prepare(&context, level, None).unwrap();
             let p = product_moduli(multiplier.auxiliary_moduli());
             let l = Q.len() - level;
             let k = IBig::from(4u64) * 65_537u64 * 65_537u64 * N * l * &h_plus_one * &h_plus_one;

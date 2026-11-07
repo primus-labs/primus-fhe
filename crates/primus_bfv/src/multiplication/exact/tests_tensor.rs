@@ -1,7 +1,10 @@
 //! Exact BFV tensor/scaling semantics, independent of production CRT and NTT.
 
-use super::reference::BfvReferenceMultiplier;
-use crate::{BfvCiphertext, BfvContext, BfvMultiplier, BfvParameters, BfvQuadraticCiphertext};
+use super::{check_ciphertext, reference::BfvReferenceMultiplier};
+use crate::{
+    BfvCiphertext, BfvContext, BfvParameters,
+    advanced::{BfvMultiplier, BfvQuadraticCiphertext},
+};
 use dashu_int::IBig;
 use primus_data::{Data, DataMut};
 use primus_distr::ErrorDistribution;
@@ -110,8 +113,8 @@ impl BfvMultiplier<'_> {
         A: Data<Elem = u64>,
         B: Data<Elem = u64>,
     {
-        self.validate_input(lhs.as_ref());
-        self.validate_input(rhs.as_ref());
+        check_ciphertext(self.context, self.level, lhs);
+        check_ciphertext(self.context, self.level, rhs);
         self.validate_raw(output);
         self.workspace.tensor(
             self.context,
@@ -131,7 +134,7 @@ impl BfvMultiplier<'_> {
     where
         A: Data<Elem = u64>,
     {
-        self.validate_input(input.as_ref());
+        check_ciphertext(self.context, self.level, input);
         self.validate_raw(output);
         self.workspace.tensor(
             self.context,
@@ -161,7 +164,7 @@ impl BfvMultiplier<'_> {
         C: DataMut<Elem = u64>,
     {
         self.validate_raw(input);
-        self.validate_output(output.as_ref());
+        self.check_output(output);
         // Preserve the test's NTT tensor for its independent component oracle.
         // Production consumes its own tensor in place; this test reuses that
         // existing allocation rather than adding a production-only copy buffer.
@@ -205,7 +208,7 @@ const P: [u64; 4] = [
 
 fn context(t: u64) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(N),
             BarrettModulus::new(t),
             BarrettModulus::new(2_199_023_190_017),

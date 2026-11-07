@@ -7,7 +7,7 @@ use primus_lwe::LweCiphertext;
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use primus_reduce::RingContext;
-use primus_tfhe::{TfheEvaluationError, rotation::RotationModulusSwitch};
+use primus_tfhe::TfheEvaluationError;
 use primus_tfhe_glwe::PbsOrder;
 
 use crate::{
@@ -117,7 +117,6 @@ where
     pub(crate) fft: FftEngine<'a, Table>,
     blind_rotation: BlindRotationResources<'a, T>,
     input: InputPreparation<'a, T>,
-    ordinary_rotation: RotationModulusSwitch<T>,
     // Coefficient GLWE under the accumulator secret after either BR order.
     pub(crate) accumulator: GlweCiphertext<Vec<T>>,
 }
@@ -192,16 +191,6 @@ where
                     scratch: BlockGlweBlindRotationWorkspace::new(key),
                 },
             },
-            ordinary_rotation: RotationModulusSwitch::new(
-                parameters.small_lwe().cipher_modulus(),
-                2 * parameters
-                    .blind_rotation_params()
-                    .size()
-                    .glwe_size()
-                    .poly_length()
-                    .get(),
-                1,
-            ),
             input: match parameters.pbs_order() {
                 PbsOrder::BootstrapKeyswitch => InputPreparation::Direct,
                 PbsOrder::KeyswitchBootstrap => {
@@ -297,7 +286,9 @@ where
             }
         };
         // Bind this call's LUT spacing before quantizing coefficients.
-        let modulus_switch = self.ordinary_rotation.with_step(rotation_step);
+        let modulus_switch = parameters
+            .rotation_modulus_switch()
+            .with_step(rotation_step);
         match &mut self.blind_rotation {
             BlindRotationResources::Classic { key, scratch } => key
                 .fourier_blind_rotate_interleaved_lookup_table_kernel_to(

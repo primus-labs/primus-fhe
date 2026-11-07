@@ -1,5 +1,11 @@
 //! Collective public boundaries and normal native-key consumers.
-use primus_bfv::*;
+use primus_bfv::collective::{
+    BfvCollectiveAutomorphismKey, BfvCollectiveError, BfvCollectivePublicKey,
+    BfvCollectiveRelinearization, BfvCollectiveSwitchingKey, BfvRawQuadraticAggregate,
+};
+use primus_bfv::evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvMultiplication, BfvRelinearizer};
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -17,10 +23,9 @@ const Q: [u64; 3] = [
 ];
 fn context(n: usize) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(257),
-            BarrettModulus::new((1 << 61) - 1),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
             ErrorDistribution::CenteredBinomial { eta: 21 },

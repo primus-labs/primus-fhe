@@ -90,8 +90,9 @@ signed decomposition、已检查的列 geometry 和 CRT weights。它绑定 N �
 
 启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
-CRT bases，仅自持 P NTT tables，实际 Q NTT 资源仍由方案拥有。Prepared product
-共享该参数 owner，并复用全部可变 scratch。`HybridModDown::Centered` 和
+CRT bases。`NativeHybridAuxiliary` 持有一个环的有序 P 基与 NTT 表。多个活跃 Q 层
+可以通过 `NativeHybridParameters::try_with_auxiliary` 复用它。方案层持有 Q NTT 表。
+Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridModDown::Centered` 和
 `PlaintextPreserving(p)` 保持不同 correction；不新增密文类型族或 raw GLWE bridge。
 方案层仍生成/检查角色 keys 并建立完整误差与安全条件；共享 setup 扩展先恢复唯一
 受支撑的实际系数秘密，再构造 P limbs。详见[Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。

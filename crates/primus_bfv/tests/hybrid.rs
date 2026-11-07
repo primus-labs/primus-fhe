@@ -1,8 +1,9 @@
 //! Native Hybrid keys at each prefix, through ordinary public BFV operations.
-use primus_bfv::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch,
-    BfvMultiplication, BfvParameters,
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
 };
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -25,7 +26,9 @@ fn context() -> BfvContext {
             BarrettModulus::new(T),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         3,
