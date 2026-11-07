@@ -1,6 +1,7 @@
 //! Independent integer quotients, dense native phases and adjacent-level bounds.
 use dashu_int::IBig;
-use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvModulusSwitch, BgvParameters};
+use primus_bgv::evaluation::BgvModulusSwitch;
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -16,7 +17,7 @@ const WIDE_Q: [u64; 3] = [
 ];
 
 fn context(p: u64, moduli: &[u64]) -> BgvContext {
-    let parameters = BgvParameters::try_with_error_distribution(
+    let parameters = BgvParameters::try_coefficients(
         PolyLength::new(N),
         BarrettModulus::new(p),
         &moduli

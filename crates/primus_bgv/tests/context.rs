@@ -1,4 +1,4 @@
-use primus_bgv::{BgvContext, BgvContextError, BgvParameters};
+use primus_bgv::{BgvContext, BgvContextError, BgvParameters, ErrorDistribution};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
@@ -17,7 +17,9 @@ fn parameters() -> BgvParameters {
         BarrettModulus::new(193),
         &Q.map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )
     .unwrap()
 }

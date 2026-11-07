@@ -1,9 +1,13 @@
-use crate::evaluator::{square_to, tensor_to};
-use crate::{
-    BgvCiphertext, BgvContext, BgvEvaluationKeyError, BgvQuadraticCiphertext,
-    BgvRelinearizationKey, BgvRelinearizer,
-};
+mod tensor;
+
+pub use tensor::{square_to, tensor_to};
+
+use crate::evaluation::BgvRelinearizer;
+use crate::keys::{BgvEvaluationKeyError, BgvRelinearizationKey};
+use crate::quadratic::BgvQuadraticCiphertext;
+use crate::{BgvCiphertext, BgvContext};
 use primus_data::{Data, DataMut};
+use tensor::{square_at_level_to, tensor_at_level_to};
 
 /// Prepared ciphertext multiplication followed by native BGV relinearization.
 ///
@@ -57,8 +61,9 @@ impl<'a> BgvMultiplication<'a> {
         C: DataMut<Elem = u64>,
     {
         self.validate_output(output);
-        tensor_to(self.context, self.level, lhs, rhs, &mut self.quadratic);
-        self.relinearizer.relinearize_to(&self.quadratic, output);
+        tensor_at_level_to(self.context, self.level, lhs, rhs, &mut self.quadratic);
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, output);
     }
 
     /// Writes the relinearized square, reusing the three-product square kernel.
@@ -70,8 +75,9 @@ impl<'a> BgvMultiplication<'a> {
         B: DataMut<Elem = u64>,
     {
         self.validate_output(output);
-        square_to(self.context, self.level, input, &mut self.quadratic);
-        self.relinearizer.relinearize_to(&self.quadratic, output);
+        square_at_level_to(self.context, self.level, input, &mut self.quadratic);
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, output);
     }
 
     /// Replaces a ciphertext with its relinearized square without allocating.
@@ -81,8 +87,9 @@ impl<'a> BgvMultiplication<'a> {
     /// Rejects recorded context/level or complete length mismatches before writes; failure may
     /// partially overwrite internal scratch or the ciphertext.
     pub fn square_assign<A: DataMut<Elem = u64>>(&mut self, input: &mut BgvCiphertext<A>) {
-        square_to(self.context, self.level, input, &mut self.quadratic);
-        self.relinearizer.relinearize_to(&self.quadratic, input);
+        square_at_level_to(self.context, self.level, input, &mut self.quadratic);
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, input);
     }
 
     fn validate_output<B: Data<Elem = u64>>(&self, output: &BgvCiphertext<B>) {

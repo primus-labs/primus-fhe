@@ -7,10 +7,14 @@
 //! distribution metadata and matching moduli cannot prove either provenance.
 
 use super::{
-    BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitchingKey, BgvRelinearizationKey,
-    EvaluationKeyConfig, KeyBase, NativeEvaluationKey, scale_with_p, scale_with_p_to,
+    BgvAutomorphismKey, BgvEvaluationKeyConfig, BgvEvaluationKeyError, BgvKeySwitchingKey,
+    BgvRelinearizationKey,
+    backend::KeyBase,
+    error::validate_level,
+    generate::{scale_with_p, scale_with_p_to},
+    material::NativeEvaluationKey,
 };
-use crate::{BgvCiphertext, BgvClient, BgvContext, BgvPublicKey};
+use crate::{BgvCiphertext, BgvClient, BgvContext, keys::BgvPublicKey};
 use primus_data::{Data, DataMut};
 #[cfg(test)]
 use primus_decompose::DecompositionConfig;
@@ -70,7 +74,7 @@ impl<'c> Binding<'c> {
         polynomials: usize,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
-        super::validate_level(context, level)?;
+        validate_level(context, level)?;
         Ok(Self {
             context,
             base: context.base_q(level).clone(),
@@ -88,7 +92,7 @@ impl<'c> Binding<'c> {
         base: &KeyBase,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
-        super::validate_level(context, level)?;
+        validate_level(context, level)?;
         Ok(Self {
             context,
             words: context
@@ -606,20 +610,17 @@ impl<'c> LinearPlan<'c> {
     fn new(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
         let template = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        let binding = Binding::with_base(
-            context,
-            level,
-            template.digit_count(),
-            template.base(context),
-        )?;
+        let binding =
+            Binding::with_base(context, level, template.digit_count(), template.key_base())?;
         let mut masks = vec![0; binding.words];
-        for mask in masks.chunks_exact_mut(template.poly_len(context)) {
-            template.uniform(context, mask, rng);
+        let uniforms = template.uniform_distributions(context);
+        for mask in masks.chunks_exact_mut(template.key_poly_len()) {
+            primus_distr::sample_crt_uniform_values_to(mask, template.n, &uniforms, rng);
         }
         Ok(Self {
             binding,
@@ -630,17 +631,13 @@ impl<'c> LinearPlan<'c> {
     fn from_masks(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
         let template = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        let binding = Binding::with_base(
-            context,
-            level,
-            template.digit_count(),
-            template.base(context),
-        )?;
+        let binding =
+            Binding::with_base(context, level, template.digit_count(), template.key_base())?;
         binding.validate(&masks, binding.words)?;
         Ok(Self {
             binding,
@@ -669,9 +666,9 @@ impl<'c> LinearPlan<'c> {
     ) -> BgvCollectiveContribution<'_> {
         let context = self.binding.context;
         let key = &self.template;
-        let len = key.poly_len(context);
+        let len = key.key_poly_len();
         let n = context.parameters().poly_length().get();
-        let base = key.base(context);
+        let base = key.key_base();
         let mut values = vec![0; self.binding.words];
         for (digit, (body, mask)) in values
             .chunks_exact_mut(len)
@@ -711,7 +708,7 @@ impl<'c> LinearPlan<'c> {
         check_sum(&self.binding, &aggregate, 0, None)?;
         let context = self.binding.context;
         let key = &self.template;
-        let len = key.poly_len(context);
+        let len = key.key_poly_len();
         let mut columns = vec![0; 2 * self.binding.words];
         for ((column, body), mask) in columns
             .chunks_exact_mut(2 * len)
@@ -726,17 +723,14 @@ impl<'c> LinearPlan<'c> {
                 scale_with_p_to(
                     key.p,
                     context.parameters().poly_length().get(),
-                    key.base(context),
+                    key.key_base(),
                     mask,
                     c1,
                 );
             }
         }
-        Ok(copy_template(key, columns))
+        Ok(key.with_columns(columns))
     }
-}
-fn copy_template(template: &NativeEvaluationKey, columns: Vec<u64>) -> NativeEvaluationKey {
-    template.clone_metadata(columns)
 }
 
 /// Concrete collective identity switch from source shares to target shares.
@@ -752,7 +746,7 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
     pub fn try_new(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         Ok(Self {
@@ -768,7 +762,7 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
     pub fn try_from_common_masks(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         Ok(Self {
@@ -837,7 +831,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
         context: &'c BgvContext,
         level: usize,
         exponent: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         validate_exponent(context, exponent)?;
@@ -859,7 +853,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
         context: &'c BgvContext,
         level: usize,
         exponent: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         validate_exponent(context, exponent)?;
@@ -889,7 +883,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
         let context = self.plan.binding.context;
         let n = context.parameters().poly_length().get();
         let secret = self.plan.template.secret(context, share)?;
-        let mut transformed = Zeroizing::new(vec![0; self.plan.template.poly_len(context)]);
+        let mut transformed = Zeroizing::new(vec![0; self.plan.template.key_poly_len()]);
         for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
             self.permutation.apply_to(input, output);
         }
@@ -972,7 +966,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     pub fn try_new(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         let plan = LinearPlan::new(context, level, config, rng)?;
@@ -980,7 +974,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             context,
             level,
             2 * plan.template.digit_count(),
-            plan.template.base(context),
+            plan.template.key_base(),
         )?;
         Ok(Self {
             plan,
@@ -995,7 +989,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     pub fn try_from_common_masks(
         context: &'c BgvContext,
         level: usize,
-        config: impl Into<EvaluationKeyConfig>,
+        config: impl Into<BgvEvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         let plan = LinearPlan::from_masks(context, level, config, masks)?;
@@ -1003,7 +997,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             context,
             level,
             2 * plan.template.digit_count(),
-            plan.template.base(context),
+            plan.template.key_base(),
         )?;
         Ok(Self {
             plan,
@@ -1036,13 +1030,13 @@ impl<'c> BgvCollectiveRelinearization<'c> {
         let context = self.plan.binding.context;
         let n = context.parameters().poly_length().get();
         let key = &self.plan.template;
-        let len = key.poly_len(context);
-        let base = key.base(context);
+        let len = key.key_poly_len();
+        let base = key.key_base();
         let secret = key.secret(context, share)?;
         let mut ephemeral = Zeroizing::new(vec![0; len]);
         let minus_one: Vec<_> = base.moduli_values().iter().map(|&q| q - 1).collect();
         primus_distr::sample_crt_sparse_ternary_values_to(&mut ephemeral, n, &minus_one, rng);
-        key.transform(context, &mut ephemeral);
+        key.basis.transform_to_ntt(context, &mut ephemeral);
         let mut values = vec![0; self.round_one_binding.words];
         for (digit, (column, mask)) in values
             .chunks_exact_mut(2 * len)
@@ -1172,7 +1166,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
         }
         let context = self.plan.binding.context;
         let key = &self.plan.template;
-        let len = key.poly_len(context);
+        let len = key.key_poly_len();
         let mut columns = vec![0; 2 * self.plan.binding.words];
         for ((column, z), first) in columns
             .chunks_exact_mut(2 * len)
@@ -1185,12 +1179,12 @@ impl<'c> BgvCollectiveRelinearization<'c> {
                 c1.copy_from_slice(&first[len..]);
             } else {
                 let n = context.parameters().poly_length().get();
-                scale_with_p_to(key.p, n, key.base(context), z, c0);
-                scale_with_p_to(key.p, n, key.base(context), &first[len..], c1);
+                scale_with_p_to(key.p, n, key.key_base(), z, c0);
+                scale_with_p_to(key.p, n, key.key_base(), &first[len..], c1);
             }
         }
         Ok(BgvRelinearizationKey {
-            key: copy_template(&self.plan.template, columns),
+            key: key.with_columns(columns),
         })
     }
 }
@@ -1214,9 +1208,9 @@ impl BgvCollectiveRelinearizationState<'_, '_> {
         }
         let context = plan.plan.binding.context;
         let key = &plan.plan.template;
-        let len = key.poly_len(context);
+        let len = key.key_poly_len();
         let n = context.parameters().poly_length().get();
-        let base = key.base(context);
+        let base = key.key_base();
         DcrtPolynomial(self.ephemeral.as_mut_slice()).sub_assign(
             &DcrtPolynomial(self.secret.as_slice()),
             n,
@@ -1266,7 +1260,7 @@ impl BgvClient<'_> {
         level: usize,
         output: &mut DcrtPolynomial<B>,
     ) -> Result<(), BgvCollectiveError> {
-        super::validate_level(self.context, level)?;
+        validate_level(self.context, level)?;
         input
             .validate_binding(self.context, level)
             .map_err(|_| BgvCollectiveError::Binding)?;

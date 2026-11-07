@@ -1,4 +1,7 @@
-use crate::{BgvContext, binding::Binding};
+use crate::{
+    BgvContext,
+    binding::{Binding, CiphertextMetadata},
+};
 use primus_data::{Data, DataMut};
 use primus_poly::DcrtPolynomial;
 
@@ -64,8 +67,7 @@ pub enum BgvCiphertextBindingError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BgvCiphertext<C> {
     data: C,
-    binding: Option<Binding>,
-    correction_factor: u64,
+    metadata: CiphertextMetadata,
 }
 
 impl<C: Data<Elem = u64>> BgvCiphertext<C> {
@@ -80,16 +82,14 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
     pub fn from_raw(data: C) -> Self {
         Self {
             data,
-            binding: None,
-            correction_factor: 1,
+            metadata: CiphertextMetadata::raw(),
         }
     }
 
     pub(crate) fn from_bound(data: C, context: &BgvContext, level: usize) -> Self {
         Self {
             data,
-            binding: Some(Binding::new(context, level)),
-            correction_factor: 1,
+            metadata: CiphertextMetadata::bound(context, level),
         }
     }
 
@@ -97,17 +97,15 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
     /// Recovery removes this factor after exact centered CRT reduction modulo p.
     #[must_use]
     pub fn correction_factor(&self) -> u64 {
-        self.correction_factor
+        self.metadata.correction_factor
     }
 
     pub(crate) fn set_correction_factor(&mut self, factor: u64) {
-        self.correction_factor = factor;
+        self.metadata.correction_factor = factor;
     }
 
     pub(crate) fn check_binding(&self, context: &BgvContext, level: usize) {
-        if let Some(binding) = &self.binding {
-            binding.check(context, level);
-        }
+        self.metadata.check_binding(context, level);
     }
 
     pub(crate) fn validate_binding(
@@ -115,40 +113,29 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
         context: &BgvContext,
         level: usize,
     ) -> Result<(), BgvCiphertextBindingError> {
-        if let Some(binding) = &self.binding {
-            binding.validate(context, level)?;
-        }
-        Ok(())
+        self.metadata.validate_binding(context, level)
     }
 
     pub(crate) fn is_bound_to(&self, context: &BgvContext, level: usize) -> bool {
-        self.binding
+        self.metadata
+            .binding
             .as_ref()
             .is_some_and(|binding| binding.validate(context, level).is_ok())
     }
 
     pub(crate) fn bind_context(&mut self, context: &BgvContext, level: usize) {
         self.check_binding(context, level);
-        if self.binding.is_none() {
-            self.binding = Some(Binding::new(context, level));
+        if self.metadata.binding.is_none() {
+            self.metadata.binding = Some(Binding::new(context, level));
         }
     }
 
     pub(crate) fn bound_level(&self, context: &BgvContext) -> usize {
-        self.binding
+        self.metadata
+            .binding
             .as_ref()
             .expect("raw BGV ciphertext recovery requires decrypt_at_level")
             .level(context)
-    }
-
-    /// Borrows the physical `[c0,c1]` storage.
-    #[must_use]
-    pub fn as_view(&self) -> BgvCiphertext<&[u64]> {
-        BgvCiphertext {
-            data: self.as_ref(),
-            binding: self.binding.clone(),
-            correction_factor: self.correction_factor,
-        }
     }
 
     /// Borrows both DCRT components, checking the full ciphertext length.

@@ -15,25 +15,29 @@ cargo run -p primus_bgv --example coefficients
 cargo run -p primus_bgv --example slots --features batching
 ```
 
-1. 用 `BgvParameters::try_coefficients(N,p,&Q,secret_law,sigma)` 构造参数，随后消费进
-   `BgvContext::try_new(parameters)`。显式 Gaussian/CBD 分布用
-   `try_with_error_distribution` 选择。
+1. 用 `BgvParameters::try_coefficients(N,p,&Q,secret_law,error_law)` 构造参数，
+   直接传入 Gaussian 或中心二项 `ErrorDistribution`，再用
+   `BgvContext::try_new(parameters)` 准备 Context。
 2. 生成 `BgvClient::generate(&context,rng)`，保留 `client.public_key(rng)`，
    通过 `context.public_key_encryptor(&key)` 绑定公钥。
-3. 准备 `BgvEvaluator::new(&context,0)`、`context.new_plaintext()` 和
-   `context.new_ciphertext(0)`。公钥加密使用 `encrypt_centered`；线性求值使用
-   `add_plain_assign`、`mul_plain_to`，并显式选择 `PlaintextEmbedding`。
-   随后用 `client.decrypt(&result)` 按密文绑定的 level 恢复。
+3. 准备 `evaluation::BgvEvaluator::new(&context,0)`、`context.new_plaintext()` 和
+   `context.new_ciphertext(0)`。使用 `encrypt_centered_to`、`add_plain_assign` 和
+   `mul_plain_assign` 执行中心化明文运算，再用
+   `client.decrypt_to(&result, &mut plaintext)` 按密文绑定的 level 恢复。
 4. 启用 `batching` 时，一次准备 `context.batching_encoder()`。通过 `encode_to`
    直接写入 context 分配的明文，再对恢复的多项式调用 `decode`。
-5. 复用预备资源，只更换明文并使用新鲜加密随机性。基础示例选择分配返回结果的
-   加密/解密便利入口；对应 `*_to` 可复用调用方输出。
+5. 复用预备资源，只更换明文并重新采样加密随机性。系数示例复用调用方缓冲区。
+   需要独立持有的返回值时，也可使用分配式便利入口。
 
 两种加密 embedding 都接收 `[0,p)` 中的 N 个规范系数；`Unsigned` 直接提升，
 `Centered` 使用 `[-floor(p/2),ceil(p/2))`，恢复结果为规范系数。
 示例参数只验证功能，不是安全预设。
 
 ## 进阶工作流
+
+密钥材料和 Radix/Hybrid 配置放在 `keys`，运算执行器放在 `evaluation`，
+普通电路预算放在 `planning`，集体建钥贡献放在 `collective`。
+显式二次输出用 `advanced::tensor_to` 或 `advanced::square_to`，无需明文缓冲区。
 
 | 示例 | 新增概念 |
 | --- | --- |
@@ -134,12 +138,16 @@ ephemeral 和恢复 scratch 遵守各自擦除合同；公钥 encryptor 可用 `
 worker buffer 时，可用 `with_plaintext_scratch` 借用准确的 active N·|Q| 前缀；
 同一 buffer 不能借给并发操作。
 
-公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。Context 创建的密文及其
-clone/view 保留本地 context、level 与 correction factor；prepared key 必须来自同一 context，已绑定的错
+公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。Context 创建的密文保留
+本地 context、level 与 correction factor。Prepared key 必须来自同一 context，已绑定的错
 context/level 输入和输出在写前拒绝。`client.decrypt(&ciphertext)` 直接使用该绑定，
 但不证明实际同 secret 关系，也不认证通过 `AsMut` 改写的 residues。显式
 `from_raw` / `zero_raw` 容器与 `decrypt_at_level` / `decrypt_at_level_to` 保留高级
-调用方合同，并声明 factor1。`context.try_bind_ciphertext(raw,level)` 一次检查存储与规范性。不同 factor 的外部密文通过 `context.try_import_ciphertext(words,level,factor)` 导入：它另外检查 `0<factor<p` 且 `gcd(factor,p)=1`，再绑定 context/level；调用方仍须认证该 scalar，并保证实际变换和 secret 来源。
+调用方合同。新建 raw 密文的 factor 为 1。`context.try_bind_ciphertext(raw,level)`
+检查完整存储、规范 residues 和 factor。使用
+`context.try_import_ciphertext(words,level,factor)` 可声明收到的密文的 factor。
+两种方式都要求 `0<factor<p` 且 `gcd(factor,p)=1`。调用方仍须认证该 scalar，
+并保证实际变换和 secret 来源。
 
 ```rust,ignore
 let imported = context.try_import_ciphertext(received_words, level, received_factor)?;
@@ -148,7 +156,8 @@ let message = client.decrypt(&imported);
 evaluator.add_to(&left, &right, &mut output);
 ```
 
-`as_view()` 保留不可变元数据。Prepared 输出直接传 `&mut ciphertext`；旧 `as_mut_view()` 便利入口已退休，避免操作只更新临时元数据副本而使 owner 的 factor 过期。详见[context、level 与 raw 互操作](../../guides/development/scheme-context-binding.md)。准确 panic、correctness 和 partial-write 合同由逐方法 rustdoc 维护。
+输入和输出直接借用完整密文。执行器随 residue 缓冲区读取 factor 和 level，
+输出运算更新同一对象的 factor。详见 [context、level 与 raw 互操作](../../guides/development/scheme-context-binding.md)。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly 后端。
 运行期 NTT intrinsic 分派独立于该 feature；关闭 `simd` 不表示强制 scalar NTT。

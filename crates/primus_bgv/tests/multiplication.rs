@@ -1,8 +1,7 @@
 //! Ordinary prepared multiplication, in-place square and complete-length boundaries.
-use primus_bgv::{
-    BgvCiphertext, BgvClient, BgvContext, BgvEvaluator, BgvMultiplication, BgvParameters,
-    BgvRelinearizer,
-};
+use primus_bgv::advanced::tensor_to;
+use primus_bgv::evaluation::{BgvMultiplication, BgvRelinearizer};
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters, ErrorDistribution};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -30,7 +29,9 @@ fn context(n: usize, p: u64, moduli: &[u64]) -> BgvContext {
                 .map(BarrettModulus::new)
                 .collect::<Vec<_>>(),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         moduli.len(),
@@ -77,11 +78,10 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         expected[..3].copy_from_slice(&[15, 13, 2]);
         assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
 
-        let evaluator = BgvEvaluator::new(&context, level);
         let mut quadratic = context.new_quadratic_ciphertext(level);
         let mut staged = context.new_ciphertext(level);
         let mut relin = BgvRelinearizer::try_new(&context, &key).unwrap();
-        evaluator.mul_to(&left, &right, &mut quadratic);
+        tensor_to(&context, level, &left, &right, &mut quadratic);
         relin.relinearize_to(&quadratic, &mut staged);
         assert_eq!(output.as_ref(), staged.as_ref());
         request.square_to(&left, &mut output);

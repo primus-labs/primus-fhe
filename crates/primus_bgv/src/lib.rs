@@ -8,12 +8,12 @@
 //! phase, reduces modulo p and removes `f`; it never invokes a BFV decoder.
 //!
 //! Shared [`BgvContext`] resources are borrowed by clients and prepared public
-//! encryptors. [`BgvMultiplication`] combines multiplication and relinearization
-//! using prepared scratch. Advanced [`BgvEvaluator`] writes explicit quadratic
-//! products; role-specific
-//! [`BgvRelinearizer`], [`BgvKeySwitcher`] and [`BgvAutomorphism`] apply
-//! p-preserving gadget products. [`BgvModulusSwitch`] drops an adjacent prime
-//! using the exact p-constrained quotient. All prepared operations reuse scratch.
+//! encryptors. [`BgvMultiplication`](evaluation::BgvMultiplication) combines
+//! multiplication and relinearization using prepared scratch. [`advanced`]
+//! provides explicit quadratic products. Role executors in [`evaluation`]
+//! apply p-preserving gadget products, and
+//! [`BgvModulusSwitch`](evaluation::BgvModulusSwitch) drops an adjacent prime
+//! using the exact p-constrained quotient.
 //! Modulus levels and retained gadget digits are different quantities; each
 //! evaluation key belongs to one prepared level and its actual decomposition.
 //! [`BgvContext::hybrid_key_parameters`] prepares a shared QP owner for native
@@ -39,7 +39,7 @@ mod modulus_switch;
 mod multiplication;
 mod parameters;
 mod persistence;
-mod planning;
+pub mod planning;
 mod public_key;
 mod quadratic;
 mod workspace;
@@ -47,26 +47,42 @@ mod workspace;
 pub use ciphertext::{BgvCiphertext, BgvCiphertextBindingError};
 pub use client::BgvClient;
 pub use context::{BgvContext, BgvContextError};
-pub use evaluation_key::{
-    BgvAutomorphism, BgvAutomorphismKey, BgvEvaluationKeyConfig, BgvEvaluationKeyError,
-    BgvKeySwitcher, BgvKeySwitchingKey, BgvRelinearizationKey, BgvRelinearizer,
-};
-pub use evaluation_key::{
-    BgvCollectiveAggregate, BgvCollectiveAutomorphismKey, BgvCollectiveContribution,
-    BgvCollectiveError, BgvCollectivePublicKey, BgvCollectiveRelinearization,
-    BgvCollectiveRelinearizationState, BgvCollectiveRoundOne, BgvCollectiveSwitchingKey,
-    BgvSeededInput,
-};
-pub use evaluator::BgvEvaluator;
-pub use modulus_switch::BgvModulusSwitch;
-pub use multiplication::BgvMultiplication;
 pub use parameters::{BgvParameters, BgvParametersError};
-pub use planning::{
-    BgvBudgetBackend, BgvBudgetStep, BgvBudgetTerm, BgvCircuitOperation, BgvCircuitPlan,
-    BgvParameterRequest, BgvPlaintextBounds, BgvPlanningError,
-};
+pub use primus_distr::ErrorDistribution;
 pub use primus_encoding::PlaintextEmbedding;
-pub use public_key::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
-pub use quadratic::BgvQuadraticCiphertext;
+pub use primus_glwe_rns::SecretKeyDistr;
+
+/// Individual public and evaluation keys, with Radix/Hybrid configuration.
+pub mod keys {
+    pub use crate::evaluation_key::{
+        BgvAutomorphismKey, BgvEvaluationKeyConfig, BgvEvaluationKeyError, BgvKeySwitchingKey,
+        BgvRelinearizationKey,
+    };
+    pub use crate::public_key::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
+}
+
+/// Prepared linear, plaintext, ciphertext and key application operations.
+pub mod evaluation {
+    pub use crate::evaluation_key::{BgvAutomorphism, BgvKeySwitcher, BgvRelinearizer};
+    pub use crate::evaluator::BgvEvaluator;
+    pub use crate::modulus_switch::BgvModulusSwitch;
+    pub use crate::multiplication::BgvMultiplication;
+}
+
+/// Explicit quadratic tensors and common-mask input composition.
+pub mod advanced {
+    pub use crate::evaluation_key::BgvSeededInput;
+    pub use crate::multiplication::{square_to, tensor_to};
+    pub use crate::quadratic::BgvQuadraticCiphertext;
+}
+
+/// Collective key contributions, aggregation and pending relinearization state.
+pub mod collective {
+    pub use crate::evaluation_key::{
+        BgvCollectiveAggregate, BgvCollectiveAutomorphismKey, BgvCollectiveContribution,
+        BgvCollectiveError, BgvCollectivePublicKey, BgvCollectiveRelinearization,
+        BgvCollectiveRelinearizationState, BgvCollectiveRoundOne, BgvCollectiveSwitchingKey,
+    };
+}
 
 pub use primus_glwe_rns::persistence::{PublicObjectError, PublicObjectLimits};

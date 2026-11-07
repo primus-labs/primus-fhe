@@ -21,7 +21,7 @@ const Q: [u64; 3] = [
 ];
 fn context(count: usize, error: ErrorDistribution) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q[..count]

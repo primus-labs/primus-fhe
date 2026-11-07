@@ -16,20 +16,20 @@ cargo run -p primus_bgv --example coefficients
 cargo run -p primus_bgv --example slots --features batching
 ```
 
-1. Build `BgvParameters::try_coefficients(N,p,&Q,secret_law,sigma)` and move it
-   into `BgvContext::try_new(parameters)`. Explicit Gaussian/CBD selection uses
-   `try_with_error_distribution`.
+1. Build `BgvParameters::try_coefficients(N,p,&Q,secret_law,error_law)` with a
+   Gaussian or centered-binomial `ErrorDistribution`. Move it into
+   `BgvContext::try_new(parameters)`.
 2. Generate `BgvClient::generate(&context,rng)`, retain `client.public_key(rng)`
    and bind `context.public_key_encryptor(&key)`.
-3. Prepare `BgvEvaluator::new(&context,0)`, `context.new_plaintext()` and
-   `context.new_ciphertext(0)`. Public encryption is `encrypt_centered`; linear
-   evaluation uses `add_plain_assign` and `mul_plain_to` with an explicit
-   `PlaintextEmbedding`. Recover with `client.decrypt(&result)`, using its bound level.
+3. Prepare `evaluation::BgvEvaluator::new(&context,0)`, `context.new_plaintext()`
+   and `context.new_ciphertext(0)`. Use `encrypt_centered_to`,
+   `add_plain_assign` and `mul_plain_assign` with centered lifts, then recover
+   at the recorded level with `client.decrypt_to(&result, &mut plaintext)`.
 4. With `batching`, prepare `context.batching_encoder()` once. Use `encode_to`
    directly on context-sized plaintexts and `decode` on the recovered polynomial.
 5. Reuse prepared resources with new messages and fresh encryption coins.
-   The basic examples use allocating encryption/decryption conveniences;
-   corresponding `*_to` calls reuse caller-owned outputs.
+   The coefficient example reuses caller-owned buffers. Allocating conveniences
+   are available when the caller needs an owned return value.
 
 Both encryption embeddings accept N canonical coefficients in `[0,p)`;
 `Unsigned` lifts them directly and `Centered` uses `[-floor(p/2),ceil(p/2))`.
@@ -37,6 +37,11 @@ Recovery returns canonical coefficients. Example parameters demonstrate
 functionality and are not security presets.
 
 ## Advanced workflows
+
+Find key material and Radix/Hybrid configuration in `keys`, prepared
+operations in `evaluation`, ordinary circuit budgets in `planning` and
+shared key contributions in `collective`. Use `advanced::tensor_to` or
+`advanced::square_to` for explicit degree-two output without plaintext scratch.
 
 | Example | Additional concepts |
 | --- | --- |
@@ -154,13 +159,18 @@ For sequential operations sharing a worker buffer, `with_plaintext_scratch`
 borrows its exact active N·|Q| prefix; do not lend that buffer concurrently.
 
 Public entries check their documented complete lengths and plaintext conditions
-before writes/RNG consumption. Context-created ciphertexts, clones and views
-retain the local context, level and correction factor. Prepared keys must belong to that same
+before writes/RNG consumption. Context-created ciphertexts retain their local
+context, level and correction factor. Prepared keys must belong to that same
 context; bound foreign-context or wrong-level values reject before writes.
 `client.decrypt(&ciphertext)` uses its bound level. This does not prove the actual
 same-secret relationship or authenticate residues edited through `AsMut`. Explicit
 `from_raw` / `zero_raw` containers and `decrypt_at_level` / `decrypt_at_level_to`
-preserve advanced caller contracts and declare factor one. `context.try_bind_ciphertext(raw,level)` checks storage and canonicality once. Import a different factor with `context.try_import_ciphertext(words,level,factor)`; it additionally requires `0<factor<p` and `gcd(factor,p)=1`, then binds the context/level. The caller still authenticates the scalar and attests the actual transform and secret.
+preserve advanced caller contracts. Fresh raw storage starts with factor one.
+`context.try_bind_ciphertext(raw,level)` checks storage, canonical residues and
+the factor. Declare the factor of received words with
+`context.try_import_ciphertext(words,level,factor)`. Both require
+`0<factor<p` and `gcd(factor,p)=1`. The caller still authenticates the scalar
+and attests the actual transform and secret.
 
 ```rust,ignore
 let imported = context.try_import_ciphertext(received_words, level, received_factor)?;
@@ -169,7 +179,9 @@ let message = client.decrypt(&imported);
 evaluator.add_to(&left, &right, &mut output);
 ```
 
-`as_view()` preserves immutable metadata. Pass `&mut ciphertext` directly for prepared outputs; the former `as_mut_view()` convenience is retired so a metadata-changing operation cannot update a temporary copy while leaving its owner's factor stale. See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md). Per-method rustdoc owns exact panic, correctness and partial-write contracts.
+Borrow the whole ciphertext for input and output. Operations see the stored
+factor and level with the residue buffer, and an output operation updates the
+owner's factor. See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md).
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards the existing nightly backends. Runtime NTT intrinsic dispatch is

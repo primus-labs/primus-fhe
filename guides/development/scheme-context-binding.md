@@ -2,13 +2,12 @@
 
 普通调用沿一条实际资源链使用：参数移入 context，client 和公钥/求值键从该 context
 生成，prepared operation 借用这些资源，密文输出也由这个 context 分配。密文保存
-不可变的本地 context/level 关系；克隆与借用 view 保留关系。借用 view 不复制密文
-数组；克隆 owned `Vec` 密文仍会复制它的数据。
+不可变的本地 context/level 关系。借用密文不会复制数组，克隆 owned `Vec` 密文会复制数据。
 
-BGV 密文还保存随实际运算历史变化的 `correction_factor()`，克隆和不可变 view
-也保留它。它是消息缩放状态，不是 context 或 level 的身份：同一 level 的密文可能
-具有不同 factor，求值器按实际 factor 对齐加减法。BGV 输出直接传 `&mut ciphertext`，
-不再提供 `as_mut_view()`，以便输出数组与 factor 一起更新。BFV 的缩放语义保持独立。
+BGV 密文还保存随运算历史变化的 `correction_factor()`。同一 level 的密文可以具有
+不同 factor，求值器按实际 factor 对齐加减法。BGV 运算直接借用整个密文，输入传
+`&ciphertext`，输出传 `&mut ciphertext`。这样数组与其 factor、context 和 level
+使用同一份元数据。
 
 这项绑定防止把同尺寸但不同 context、不同 level 的对象意外组合。它不证明外部数组
 采用了正确秘密，不认证 `AsMut` 改写后的内容，也不建立噪声预算或密码安全证明。
@@ -84,8 +83,9 @@ let recovered = client.decrypt(&ciphertext);
 调用方必须确认其 phase 和 factor 的约定与 Primus 相同，并把 factor 与整个密文一同
 认证；只复制 physical words 会丢失消息语义。库不提供任意公开 factor setter。
 
-`try_bind_ciphertext` 在这次显式入站中验证完整长度及 canonical residues，再保存实际
-context/level；已有匹配绑定的输入也扫描，因为 `AsMut` 可以改写数组。输入若已有
+`try_bind_ciphertext` 在显式导入时验证完整长度及 canonical residues，BGV 还验证
+factor 在目标 p 下为单位，然后保存实际 context/level。已有匹配绑定的输入也扫描，
+因为 `AsMut` 可以改写数组。输入若已有
 绑定，必须属于同一 context 和 level；接口不提供 foreign retag。普通算术只做 O(1)
 身份/level/形状检查，不逐系数重复准入；推荐链不在每一步再次调用此导入接口。检查
 通过不证明该数组的实际 NTT 或 secret 来源：调用方必须先确定这个数学关系。
@@ -98,9 +98,10 @@ context/level，不能借显式 level 绕过错绑定。低层 `BfvSecretKeyCont
 workspace 保留独立借用接口；[explicit coefficients](../../crates/primus_bfv/examples/explicit_coefficients.rs)
 展示 raw 工作区复用、消费式 checked binding，再交给普通 client 恢复。
 
-对 `AsMut` 的访问只借出原数组，不更换 context/level 绑定或 BGV factor。调用方可以
-写入任意值，因此必须维护数值及来源合同；绑定不是数组完整性认证。不要通过先拆 raw 数组再重新
-包装来掩盖普通流程的 context 错配，除非确实完成了该高级导入所需的数学验证。
+对 `AsMut` 的访问只借出原数组，context、level 和 factor 仍由原密文持有。将借出的
+数组包装成另一个 raw 容器后，运算只会更新该 raw 容器的 factor，原密文的元数据随即
+失去与数组的对应关系。会改变 factor 的操作应借用整个密文。直接修改数组时，调用方
+负责维护数值及来源合同。
 
 ## Key 绑定的范围
 

@@ -14,10 +14,8 @@ use primus_glwe_rns::{
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 
-use crate::{
-    BgvContext, BgvContextError, BgvEvaluationKeyConfig, BgvEvaluationKeyError, BgvParameters,
-    BgvParametersError, PlaintextEmbedding,
-};
+use crate::keys::{BgvEvaluationKeyConfig, BgvEvaluationKeyError};
+use crate::{BgvContext, BgvContextError, BgvParameters, BgvParametersError, PlaintextEmbedding};
 
 /// Arithmetic generation or a public circuit admission failed.
 #[derive(Debug, thiserror::Error)]
@@ -101,7 +99,7 @@ impl BgvParameterRequest {
             .into_iter()
             .map(BarrettModulus::new)
             .collect::<Vec<_>>();
-        let parameters = BgvParameters::try_with_error_distribution(
+        let parameters = BgvParameters::try_coefficients(
             self.poly_length,
             BarrettModulus::new(self.plaintext_modulus),
             &moduli,

@@ -18,7 +18,7 @@ const Q: [u64; 3] = [
 ];
 fn context(count: usize, error: ErrorDistribution) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q[..count]
@@ -212,7 +212,9 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
             BarrettModulus::new(15),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            1.0
+            ErrorDistribution::Gaussian {
+                standard_deviation: 1.0
+            }
         ),
         Err(BgvParametersError::PlaintextNotCoprime { .. })
     ));
@@ -264,13 +266,13 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
 
 #[test]
 fn public_binding_rejects_different_plaintext_error_scale_on_the_same_basis() {
-    use primus_bgv::BgvPublicKeyError;
+    use primus_bgv::keys::BgvPublicKeyError;
     let context = context(1, ErrorDistribution::CenteredBinomial { eta: 1 });
     let mut rng = StdRng::seed_from_u64(45);
     let client = BgvClient::generate(&context, &mut rng);
     let public = client.public_key(&mut rng);
     let other = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(2),
             &[BarrettModulus::new(Q[0])],
@@ -293,7 +295,7 @@ fn public_binding_rejects_different_plaintext_error_scale_on_the_same_basis() {
 fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     let p = 2;
     let context = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(p),
             &[BarrettModulus::new(Q[0])],

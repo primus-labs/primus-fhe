@@ -1,4 +1,4 @@
-use crate::{BgvContext, binding::Binding};
+use crate::{BgvContext, binding::CiphertextMetadata};
 use primus_data::{Data, DataMut};
 use primus_poly::DcrtPolynomial;
 
@@ -14,8 +14,7 @@ use primus_poly::DcrtPolynomial;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BgvQuadraticCiphertext<C> {
     data: C,
-    binding: Option<Binding>,
-    correction_factor: u64,
+    metadata: CiphertextMetadata,
 }
 
 impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
@@ -26,43 +25,29 @@ impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
     pub fn from_raw(data: C) -> Self {
         Self {
             data,
-            binding: None,
-            correction_factor: 1,
+            metadata: CiphertextMetadata::raw(),
         }
     }
 
     pub(crate) fn from_bound(data: C, context: &BgvContext, level: usize) -> Self {
         Self {
             data,
-            binding: Some(Binding::new(context, level)),
-            correction_factor: 1,
+            metadata: CiphertextMetadata::bound(context, level),
         }
     }
 
     /// Returns the canonical plaintext message multiplier of this tensor.
     #[must_use]
     pub fn correction_factor(&self) -> u64 {
-        self.correction_factor
+        self.metadata.correction_factor
     }
 
     pub(crate) fn set_correction_factor(&mut self, factor: u64) {
-        self.correction_factor = factor;
+        self.metadata.correction_factor = factor;
     }
 
     pub(crate) fn check_binding(&self, context: &BgvContext, level: usize) {
-        if let Some(binding) = &self.binding {
-            binding.check(context, level);
-        }
-    }
-
-    /// Borrows storage without copying or changing its representation.
-    #[must_use]
-    pub fn as_view(&self) -> BgvQuadraticCiphertext<&[u64]> {
-        BgvQuadraticCiphertext {
-            data: self.as_ref(),
-            binding: self.binding.clone(),
-            correction_factor: self.correction_factor,
-        }
+        self.metadata.check_binding(context, level);
     }
 
     /// Borrows all three complete DCRT components.

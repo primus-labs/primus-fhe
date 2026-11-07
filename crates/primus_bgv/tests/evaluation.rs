@@ -1,7 +1,6 @@
 //! Exact native phases and component products, without production transforms/codecs.
-use primus_bgv::{
-    BgvCiphertext, BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding,
-};
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -21,7 +20,7 @@ const SECRET: [i128; N] = [
 
 fn context(p: u64) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(p),
             &Q.map(BarrettModulus::new),
@@ -187,7 +186,7 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
         check(&mut client, &lhs, &lhs_phase, p);
         check(&mut client, &rhs, &rhs_phase, p);
 
-        evaluator.add_to(&lhs.as_view(), &rhs.as_view(), &mut output);
+        evaluator.add_to(&lhs, &rhs, &mut output);
         check(&mut client, &output, &combine(&lhs_phase, &rhs_phase, 1), p);
         let mut assigned = lhs.clone();
         evaluator.add_assign(&mut assigned, &rhs);

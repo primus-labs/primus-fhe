@@ -1,5 +1,13 @@
 //! General-prime history, independent quotient and checked representation contracts.
-use primus_bgv::*;
+use primus_bgv::advanced::square_to;
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+    BgvRelinearizer,
+};
+use primus_bgv::keys::BgvEvaluationKeyConfig;
+use primus_bgv::{
+    BgvCiphertextBindingError, BgvClient, BgvContext, BgvParameters, PlaintextEmbedding,
+};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -12,7 +20,7 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899905351681, 1125899905744897, 1125899906629633];
 fn context(n: usize, p: u64, qs: &[u64]) -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(p),
             &qs.iter()
@@ -136,7 +144,7 @@ fn distinct_histories_align_and_all_ordinary_consumers_preserve_the_factor() {
         assert_eq!(alice.decrypt(&right).as_ref(), product);
         let mut evaluator = BgvEvaluator::new(&context, 1);
         let mut added = context.new_ciphertext(1);
-        evaluator.add_to(&left.as_view(), &right, &mut added);
+        evaluator.add_to(&left, &right, &mut added);
         let sum: Vec<_> = product.iter().map(|x| 2 * x % P).collect();
         assert_eq!(alice.decrypt(&added).as_ref(), sum);
         let mut in_place = left.clone();
@@ -185,9 +193,8 @@ fn distinct_histories_align_and_all_ordinary_consumers_preserve_the_factor() {
         evaluator.mul_plain_assign(&mut in_place, &plain, PlaintextEmbedding::Unsigned);
         assert_eq!(in_place, with_plain);
         let mut tensor = context.new_quadratic_ciphertext(1);
-        evaluator.square_to(&left, &mut tensor);
+        square_to(&context, 1, &left, &mut tensor);
         assert_eq!(tensor.correction_factor(), f * f % P);
-        assert_eq!(tensor.as_view().correction_factor(), f * f % P);
         let mut squared = context.new_ciphertext(1);
         BgvRelinearizer::try_new(&context, &relin1)
             .unwrap()

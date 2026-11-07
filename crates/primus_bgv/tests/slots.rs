@@ -1,6 +1,7 @@
 #![cfg(feature = "batching")]
 
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding};
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -29,7 +30,9 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
                 BarrettModulus::new(P),
                 &moduli,
                 SecretKeyDistr::SparseTernary,
-                0.849,
+                ErrorDistribution::Gaussian {
+                    standard_deviation: 0.849,
+                },
             )
             .unwrap(),
         )

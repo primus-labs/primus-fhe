@@ -27,7 +27,7 @@ and [`BgvCiphertext` contract](../../crates/primus_bgv/src/ciphertext.rs).
 
 ## Tensor and degree lifecycle
 
-Ordinary requests prepare `BgvMultiplication::try_new(context,&relinearization_key)`.
+Ordinary requests prepare `evaluation::BgvMultiplication::try_new(context,&relinearization_key)`.
 The operation derives the actual level from the key and owns reusable quadratic
 and relinearization scratch. `multiply_to` and `square_to` write ordinary
 degree-one ciphertexts; `square_assign` overwrites one input after its tensor
@@ -36,11 +36,10 @@ not require the caller to manage an intermediate degree-two buffer. Public and
 private encryptors also provide allocating `encrypt`/`encrypt_centered` methods;
 prepared `*_to` entries retain explicit output reuse.
 
-The advanced split lifecycle remains available for callers that need its actual
-unscaled quadratic intermediate:
-
-`BgvEvaluator::mul_to` writes `[c0*d0,c0*d1+c1*d0,c1*d1]`; `square_to` uses
-`[c0²,2*c0*c1,c1²]`. Their phase is the product of the input phases. This is
+For explicit quadratic output, `advanced::tensor_to` writes
+`[c0*d0,c0*d1+c1*d0,c1*d1]` and `advanced::square_to` writes
+`[c0²,2*c0*c1,c1²]`. Neither needs plaintext scratch. Their phase is the
+product of the input phases. This is
 ordinary multiplication in R_Q, with no BFV scale-and-round. If the actual
 factor-encoded integer message lifts satisfy `u*v=lift(f_out*m_out mod p)+p*k`,
 where `f_out=f_left*f_right mod p`, the intended product error is

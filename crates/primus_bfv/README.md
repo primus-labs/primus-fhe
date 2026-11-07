@@ -26,15 +26,16 @@ Both examples follow the same chain:
    and bind `context.public_key_encryptor(&public_key)`.
 3. Allocate plaintexts and outputs with `context.new_plaintext()` and
    `context.new_ciphertext(level)`. Prepare `evaluation::BfvEvaluator::new(&context,level)`.
-4. Encrypt, use `add_plain_to` / `mul_plain_to` with `PlaintextEmbedding`, then
-   recover with `client.decrypt(&ciphertext)`, which uses the bound level. Reuse
-   setup and outputs for the next request, with fresh encryption coins.
+4. Use `encrypt_centered_to`, `add_plain_assign` and `mul_plain_assign` with
+   centered lifts, then recover at the recorded level with
+   `client.decrypt_to(&ciphertext, &mut plaintext)`. Reuse the prepared operations
+   and buffers with fresh encryption coins.
 
 [Slots](examples/slots.rs) adds one `context.batching_encoder()` and uses n=N.
 `encode_to` writes directly into the context's plaintext polynomial; `decode`
 recovers slots after decryption. The encoder owns its plaintext NTT table, so
-retain it across requests. Basic examples use allocating encryption/recovery
-conveniences; prepared `*_to` calls support reusable caller-owned outputs.
+retain it across requests. The coefficient example uses caller-owned buffers.
+Allocating conveniences are available when the caller needs an owned result.
 Their small parameters demonstrate functionality and are not security presets.
 Full-ring packing needs a plaintext prime t≡1 mod 2N. The subring examples use
 the plaintext ring n<N while retaining full-N secrets and ciphertexts.

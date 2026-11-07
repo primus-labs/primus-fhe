@@ -1,8 +1,10 @@
 //! Basic full-ring slots: public encryption, plaintext +1 and slotwise scaling.
 //! Run: cargo run -p primus_bgv --example slots --features batching
 
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding};
-use primus_glwe_rns::SecretKeyDistr;
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{
+    BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
+};
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -28,7 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BarrettModulus::new(P),
         &moduli,
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )?;
     let context = BgvContext::try_new(parameters)?;
     let batching = context.batching_encoder()?;

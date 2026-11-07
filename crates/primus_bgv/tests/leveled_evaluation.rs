@@ -1,7 +1,8 @@
 //! Degree-two native tensor components and phases against schoolbook/DFT oracles.
 
 use dashu_int::UBig;
-use primus_bgv::{BgvCiphertext, BgvContext, BgvEvaluator, BgvParameters, BgvQuadraticCiphertext};
+use primus_bgv::advanced::{BgvQuadraticCiphertext, square_to, tensor_to};
+use primus_bgv::{BgvCiphertext, BgvContext, BgvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -17,7 +18,7 @@ const Q: [u64; 3] = [
 
 fn context(p: u64) -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(p),
             &Q.map(BarrettModulus::new),
@@ -175,9 +176,8 @@ fn dense_and_monomial_tensors_and_squares_match_independent_phases_at_every_leve
                 let count = Q.len() - level;
                 let left = ciphertext(&lhs, count);
                 let right = ciphertext(&rhs, count);
-                let evaluator = BgvEvaluator::new(&context, level);
                 let mut output = context.new_quadratic_ciphertext(level);
-                evaluator.mul_to(&left.as_view(), &right.as_view(), &mut output);
+                tensor_to(&context, level, &left, &right, &mut output);
                 verify_quadratic(
                     &output,
                     &[
@@ -189,7 +189,7 @@ fn dense_and_monomial_tensors_and_squares_match_independent_phases_at_every_leve
                     &secret,
                     count,
                 );
-                evaluator.square_to(&left, &mut output);
+                square_to(&context, level, &left, &mut output);
                 verify_quadratic(
                     &output,
                     &[
@@ -205,7 +205,7 @@ fn dense_and_monomial_tensors_and_squares_match_independent_phases_at_every_leve
                     count,
                 );
                 let squared = output.clone();
-                evaluator.mul_to(&left, &left, &mut output);
+                tensor_to(&context, level, &left, &left, &mut output);
                 assert_eq!(squared, output);
             }
         }
@@ -216,7 +216,6 @@ fn dense_and_monomial_tensors_and_squares_match_independent_phases_at_every_leve
 fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
     let context = context(193);
     for level in 0..context.level_count() {
-        let evaluator = BgvEvaluator::new(&context, level);
         let input = context.new_ciphertext(level);
         let length = context.rns_poly_len(level);
         for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
@@ -224,22 +223,25 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
             let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; 3 * length]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
-                    evaluator.mul_to(&malformed, &input, &mut output);
+                    tensor_to(&context, level, &malformed, &input, &mut output);
                 }))
                 .is_err()
             );
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
-                    evaluator.mul_to(&input, &malformed, &mut output);
+                    tensor_to(&context, level, &input, &malformed, &mut output);
                 }))
                 .is_err()
             );
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
             assert!(
-                catch_unwind(AssertUnwindSafe(
-                    || evaluator.square_to(&malformed, &mut output)
-                ))
+                catch_unwind(AssertUnwindSafe(|| square_to(
+                    &context,
+                    level,
+                    &malformed,
+                    &mut output
+                )))
                 .is_err()
             );
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
@@ -247,7 +249,9 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
         for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
             let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; bad_length]);
             assert!(
-                catch_unwind(AssertUnwindSafe(|| evaluator.mul_to(
+                catch_unwind(AssertUnwindSafe(|| tensor_to(
+                    &context,
+                    level,
                     &input,
                     &input,
                     &mut output
@@ -256,8 +260,13 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
             );
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
             assert!(
-                catch_unwind(AssertUnwindSafe(|| evaluator.square_to(&input, &mut output)))
-                    .is_err()
+                catch_unwind(AssertUnwindSafe(|| square_to(
+                    &context,
+                    level,
+                    &input,
+                    &mut output
+                )))
+                .is_err()
             );
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         }
@@ -266,7 +275,7 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
             let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; 3 * length]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
-                    evaluator.mul_to(&input, &wrong_level, &mut output);
+                    tensor_to(&context, level, &input, &wrong_level, &mut output);
                 }))
                 .is_err()
             );

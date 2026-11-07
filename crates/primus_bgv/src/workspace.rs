@@ -43,7 +43,7 @@ mod tests {
     use primus_shape::PolyLength;
     #[test]
     fn erasure_keeps_complete_workspace_allocations() {
-        let parameters = BgvParameters::try_with_error_distribution(
+        let parameters = BgvParameters::try_coefficients(
             PolyLength::new(32),
             BarrettModulus::new(17),
             &[BarrettModulus::new(5441)],

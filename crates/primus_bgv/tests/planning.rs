@@ -1,11 +1,14 @@
 //! Ordinary public budgets are consumed by actual role keys and leveled requests.
 
 use dashu_int::UBig;
-use primus_bgv::{
-    BgvAutomorphism, BgvBudgetBackend, BgvCircuitOperation as Op, BgvCircuitPlan, BgvClient,
-    BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
-    BgvParameterRequest, BgvParameters, BgvPlaintextBounds, BgvPlanningError, PlaintextEmbedding,
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::planning::{
+    BgvBudgetBackend, BgvCircuitOperation as Op, BgvCircuitPlan, BgvParameterRequest,
+    BgvPlaintextBounds, BgvPlanningError,
+};
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -280,7 +283,7 @@ fn general_prime_plan_tracks_same_level_factor_histories_and_alignment() {
     const PLAIN: u64 = 17;
     let moduli = [12_289, 40_961, 65_537].map(BarrettModulus::new);
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(PLAIN),
             &moduli,

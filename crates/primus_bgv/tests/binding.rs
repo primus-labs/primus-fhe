@@ -1,8 +1,14 @@
 //! Local provenance is distinct from raw numerical and actual-secret contracts.
 use primus_bgv::{
-    BgvAutomorphism, BgvCiphertext, BgvCiphertextBindingError, BgvClient, BgvCollectiveError,
-    BgvContext, BgvEvaluationKeyError, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,
-    BgvMultiplication, BgvParameters, BgvPublicKeyError, BgvRelinearizer, PlaintextEmbedding,
+    BgvCiphertext, BgvCiphertextBindingError, BgvClient, BgvContext, BgvParameters,
+    PlaintextEmbedding, PublicObjectLimits,
+    advanced::tensor_to,
+    collective::BgvCollectiveError,
+    evaluation::{
+        BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+        BgvRelinearizer,
+    },
+    keys::{BgvEvaluationKeyError, BgvPublicKeyError},
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -20,9 +26,13 @@ const Q: [u64; 3] = [
     1_125_899_904_322_049,
 ];
 fn parameters() -> BgvParameters {
-    BgvParameters::try_with_error_distribution(
+    parameters_with_plaintext_modulus(193)
+}
+
+fn parameters_with_plaintext_modulus(p: u64) -> BgvParameters {
+    BgvParameters::try_coefficients(
         PolyLength::new(N),
-        BarrettModulus::new(193),
+        BarrettModulus::new(p),
         &Q.map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
         ErrorDistribution::CenteredBinomial { eta: 21 },
@@ -56,7 +66,7 @@ impl rand::TryRng for RecordingRng {
 impl rand::TryCryptoRng for RecordingRng {}
 
 #[test]
-fn import_preserves_storage_and_views_keep_exact_owner_and_level() {
+fn import_preserves_storage_and_borrows_keep_exact_owner_and_level() {
     let context = BgvContext::try_with_levels(parameters(), 3).unwrap();
     let other = foreign(&context);
     let values = vec![0; 2 * context.rns_poly_len(1)];
@@ -67,11 +77,11 @@ fn import_preserves_storage_and_views_keep_exact_owner_and_level() {
     assert_eq!(bound.as_ref().as_ptr(), pointer);
     assert!(context.check_ciphertext(&bound, 1).is_ok());
     assert!(matches!(
-        other.check_ciphertext(&bound.as_view(), 1),
+        other.check_ciphertext(&bound, 1),
         Err(BgvCiphertextBindingError::ContextMismatch)
     ));
     assert!(matches!(
-        context.check_ciphertext(&bound.as_view(), 0),
+        context.check_ciphertext(&bound, 0),
         Err(BgvCiphertextBindingError::BoundLevel { .. })
     ));
     assert!(matches!(
@@ -85,6 +95,7 @@ fn import_preserves_storage_and_views_keep_exact_owner_and_level() {
     // Provenance does not certify values after the explicit mutable storage API.
     bound.as_mut()[0] = Q[0];
     assert!(context.check_ciphertext(&bound, 1).is_ok());
+    assert!(context.export_ciphertext(&bound, 1).is_err());
     assert!(matches!(
         context.try_bind_ciphertext(bound, 1),
         Err(BgvCiphertextBindingError::NonCanonical { index: 0, .. })
@@ -99,6 +110,35 @@ fn import_preserves_storage_and_views_keep_exact_owner_and_level() {
     ));
     // Identical values under independent owners do not compare as the same object.
     assert_ne!(context.new_ciphertext(0), other.new_ciphertext(0));
+}
+
+#[test]
+fn raw_factor_is_checked_when_adopting_or_exporting() {
+    let source = BgvContext::try_with_levels(parameters(), 2).unwrap();
+    let target = BgvContext::try_with_table(
+        parameters_with_plaintext_modulus(15),
+        2,
+        source.shared_table(),
+    )
+    .unwrap();
+    let words = 2 * source.rns_poly_len(1);
+    let input = source.try_import_ciphertext(vec![0; words], 1, 3).unwrap();
+    let mut raw = BgvCiphertext::zero_raw(words);
+    BgvEvaluator::new(&source, 1).neg_to(&input, &mut raw);
+    assert_eq!(raw.correction_factor(), 3);
+    let bytes = source.export_ciphertext(&raw, 1).unwrap();
+    let imported = source
+        .import_ciphertext(&bytes, PublicObjectLimits::default())
+        .unwrap();
+    assert_eq!(imported, input);
+    assert!(target.export_ciphertext(&raw, 1).is_err());
+    assert!(matches!(
+        target.try_bind_ciphertext(raw, 1),
+        Err(BgvCiphertextBindingError::CorrectionFactor {
+            factor: 3,
+            plaintext_modulus: 15,
+        })
+    ));
 }
 
 #[test]
@@ -153,12 +193,12 @@ fn ordinary_operations_reject_foreign_context_before_writes_or_randomness() {
     });
     let mut tensor = context.new_quadratic_ciphertext(0);
     let tensor_before = tensor.clone();
-    rejects(|| evaluator.mul_to(&encrypted, &foreign_input, &mut tensor));
+    rejects(|| tensor_to(&context, 0, &encrypted, &foreign_input, &mut tensor));
     assert_eq!(tensor, tensor_before);
     let mut foreign_tensor = other.new_quadratic_ciphertext(0);
     foreign_tensor.as_mut().fill(123);
     let foreign_tensor_before = foreign_tensor.clone();
-    rejects(|| evaluator.mul_to(&encrypted, &encrypted, &mut foreign_tensor));
+    rejects(|| tensor_to(&context, 0, &encrypted, &encrypted, &mut foreign_tensor));
     assert_eq!(foreign_tensor, foreign_tensor_before);
     let mut relinearizer = BgvRelinearizer::try_new(&context, &relin).unwrap();
     rejects(|| relinearizer.relinearize_to(&foreign_tensor, &mut output));

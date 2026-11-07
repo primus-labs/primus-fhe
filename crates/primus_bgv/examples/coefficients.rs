@@ -1,19 +1,15 @@
 //! Basic coefficient workflow: public encryption, plaintext +1 and scalar product.
 //! Run: cargo run -p primus_bgv --example coefficients
 
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding};
-use primus_glwe_rns::SecretKeyDistr;
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{
+    BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
+};
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::args().nth(1).is_some() {
-        return Err(
-            "this basic example takes no arguments; see ciphertext_multiplication for --hybrid"
-                .into(),
-        );
-    }
     const N: usize = 32;
     // Functional demonstration parameters, not a security preset.
     let moduli = [
@@ -27,7 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BarrettModulus::new(193),
         &moduli,
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )?;
     let context = BgvContext::try_new(parameters)?;
     let mut rng = StdRng::seed_from_u64(0x09b6_0001);
@@ -36,27 +34,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut encryptor = context.public_key_encryptor(&public_key)?;
     let mut evaluator = BgvEvaluator::new(&context, 0);
     let mut input = context.new_plaintext();
-    let mut one = context.new_plaintext();
-    one.as_mut()[0] = 1;
-    let mut factor = context.new_plaintext();
-    let mut output = context.new_ciphertext(0);
-    let mut expected = context.new_plaintext();
+    let mut scalar_plaintext = context.new_plaintext();
+    let mut encrypted = context.new_ciphertext(0);
 
-    // Reuse context, keys, evaluator and output; encrypt with fresh coins each time.
+    // Reuse the prepared operations and buffers with fresh encryption coins.
+    let embedding = PlaintextEmbedding::Centered;
     for (message, scalar, answer) in [([3, 2], 7, [28, 14]), ([4, 1], 11, [55, 11])] {
         input.as_mut()[..2].copy_from_slice(&message);
-        factor.as_mut()[0] = scalar;
-        let mut encrypted = encryptor.encrypt_centered(&input, &mut rng);
-        evaluator.add_plain_assign(&mut encrypted, &one, PlaintextEmbedding::Centered);
-        evaluator.mul_plain_to(
-            &encrypted,
-            &factor,
-            &mut output,
-            PlaintextEmbedding::Centered,
-        );
-        let recovered = client.decrypt(&output);
-        expected.as_mut()[..2].copy_from_slice(&answer);
-        assert_eq!(recovered, expected);
+        encryptor.encrypt_centered_to(&input, &mut encrypted, &mut rng);
+        scalar_plaintext.as_mut()[0] = 1;
+        evaluator.add_plain_assign(&mut encrypted, &scalar_plaintext, embedding);
+        scalar_plaintext.as_mut()[0] = scalar;
+        evaluator.mul_plain_assign(&mut encrypted, &scalar_plaintext, embedding);
+        client.decrypt_to(&encrypted, &mut input);
+        assert_eq!(input.as_ref()[..2], answer);
+        assert!(input.as_ref()[2..].iter().all(|&value| value == 0));
     }
     println!("BGV: two coefficient requests recovered using one prepared setup");
     Ok(())

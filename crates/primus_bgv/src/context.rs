@@ -1,8 +1,7 @@
 use crate::correction::is_unit;
-use crate::{
-    BgvCiphertext, BgvCiphertextBindingError, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor,
-    BgvPublicKeyError, BgvQuadraticCiphertext,
-};
+use crate::keys::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
+use crate::quadratic::BgvQuadraticCiphertext;
+use crate::{BgvCiphertext, BgvCiphertextBindingError, BgvParameters};
 use primus_data::Data;
 use primus_glwe_rns::RnsDomainError;
 use primus_integer::BigUint;
@@ -159,36 +158,6 @@ impl BgvContext {
         Arc::clone(&self.table)
     }
 
-    /// Prepares one native Hybrid key domain using this context's actual prefix.
-    ///
-    /// The auxiliary QP basis is for evaluation keys, not ciphertext encryption.
-    /// Construction establishes arithmetic geometry, not a security or noise budget.
-    /// # Correctness
-    /// Auxiliary moduli must be actual NTT primes; transform preparation does not
-    /// certify primality. See [`primus_lattice::hybrid::NativeHybridParameters::try_new`].
-    /// # Errors
-    /// Rejects an unprepared level or invalid Hybrid bases/partition/transforms.
-    pub fn hybrid_key_parameters(
-        &self,
-        level: usize,
-        decomposition_count: usize,
-        auxiliary_moduli: &[u64],
-    ) -> Result<
-        std::sync::Arc<primus_lattice::hybrid::NativeHybridParameters>,
-        crate::BgvEvaluationKeyError,
-    > {
-        super::evaluation_key::validate_level(self, level)?;
-        Ok(std::sync::Arc::new(
-            primus_lattice::hybrid::NativeHybridParameters::try_new(
-                self.parameters().poly_length(),
-                self.base_q(level),
-                self.parameters().base_q().moduli_count(),
-                auxiliary_moduli,
-                decomposition_count,
-            )?,
-        ))
-    }
-
     /// Returns the number of prepared levels, including level zero.
     #[must_use]
     pub fn level_count(&self) -> usize {
@@ -270,13 +239,6 @@ impl BgvContext {
         level: usize,
         correction_factor: u64,
     ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
-        let p = self.parameters.plain_modulus().value();
-        if !is_unit(correction_factor, p) {
-            return Err(BgvCiphertextBindingError::CorrectionFactor {
-                factor: correction_factor,
-                plaintext_modulus: p,
-            });
-        }
         let mut ciphertext = BgvCiphertext::from_raw(data);
         ciphertext.set_correction_factor(correction_factor);
         self.try_bind_ciphertext(ciphertext, level)
@@ -285,19 +247,44 @@ impl BgvContext {
     /// Consumes complete native storage and binds it to this context and level.
     ///
     /// Existing context/level provenance must match; this never retags a foreign
-    /// bound object. All public residues are checked once without copying or
-    /// allocating storage. Raw input asserts this context's actual NTT order and
-    /// intended secret; neither canonical residues nor local identity prove them.
+    /// bound object. Checks the factor and public residues without copying or
+    /// allocating storage. Raw input asserts this context's actual NTT order
+    /// and intended secret.
     ///
     /// # Errors
     /// Rejects an unavailable level, conflicting provenance, wrong complete
-    /// geometry or the first noncanonical residue before changing the binding.
+    /// geometry, nonunit factor or first noncanonical residue before binding.
     pub fn try_bind_ciphertext<C: Data<Elem = u64>>(
         &self,
         mut ciphertext: BgvCiphertext<C>,
         level: usize,
     ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
-        self.check_ciphertext(&ciphertext, level)?;
+        self.validate_canonical_ciphertext(&ciphertext, level)?;
+        ciphertext.bind_context(self, level);
+        Ok(ciphertext)
+    }
+
+    pub(crate) fn validate_correction_factor(
+        &self,
+        factor: u64,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        let plaintext_modulus = self.parameters.plain_modulus().value();
+        if !is_unit(factor, plaintext_modulus) {
+            return Err(BgvCiphertextBindingError::CorrectionFactor {
+                factor,
+                plaintext_modulus,
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_canonical_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        ciphertext: &BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        self.check_ciphertext(ciphertext, level)?;
+        self.validate_correction_factor(ciphertext.correction_factor())?;
         let n = self.parameters().poly_length().get();
         let qs = self.base_q(level).moduli_values();
         for (limb_index, limb) in ciphertext.as_ref().chunks_exact(n).enumerate() {
@@ -312,8 +299,7 @@ impl BgvContext {
                 }
             }
         }
-        ciphertext.bind_context(self, level);
-        Ok(ciphertext)
+        Ok(())
     }
 
     /// Checks complete geometry and any recorded context/level without scanning residues.

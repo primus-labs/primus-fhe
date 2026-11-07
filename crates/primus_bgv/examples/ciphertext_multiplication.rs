@@ -1,9 +1,10 @@
 //! Advanced: multiply two ciphertexts with one prepared relinearization key.
 //! Run: cargo run -p primus_bgv --example ciphertext_multiplication
 //! Select native Hybrid keys: append -- --hybrid.
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvMultiplication, BgvParameters};
+use primus_bgv::evaluation::BgvMultiplication;
+use primus_bgv::keys::BgvEvaluationKeyConfig;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -22,7 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BarrettModulus::new(193),
         &moduli,
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )?)?;
     let mut rng = StdRng::seed_from_u64(0x09b6_0001);
     let mut client = BgvClient::generate(&context, &mut rng);

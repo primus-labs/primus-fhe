@@ -1,8 +1,9 @@
 //! Independent DFT/CRT phases and integer signed-digit residuals for BGV keys.
 
 use crate::{
-    BgvAutomorphism, BgvCiphertext, BgvClient, BgvContext, BgvKeySwitcher, BgvParameters,
-    BgvQuadraticCiphertext, BgvRelinearizer,
+    BgvCiphertext, BgvClient, BgvContext, BgvParameters,
+    advanced::BgvQuadraticCiphertext,
+    evaluation::{BgvAutomorphism, BgvKeySwitcher, BgvRelinearizer},
 };
 use dashu_int::IBig;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
@@ -25,7 +26,7 @@ const Q: [u64; 3] = [
 fn p_scaling_overwrites_dirty_columns_and_matches_wide_percent_reference() {
     // The small first prime checks that p is reduced even in an auxiliary
     // modulus below p. This is a private arithmetic test, not a scheme preset.
-    let base = super::KeyBase::new(&[97, 65537, Q[0]].map(BarrettModulus::new)).unwrap();
+    let base = super::backend::KeyBase::new(&[97, 65537, Q[0]].map(BarrettModulus::new)).unwrap();
     for components in [1, 3] {
         let mut input = vec![0; components * N * base.moduli_count()];
         for (index, limb) in input.as_chunks_mut::<N>().0.iter_mut().enumerate() {
@@ -47,10 +48,10 @@ fn p_scaling_overwrites_dirty_columns_and_matches_wide_percent_reference() {
                     limb.iter().map(move |&value| multiply(value, p, q))
                 })
                 .collect::<Vec<_>>();
-            super::scale_with_p_to(p, N, &base, &input, &mut output);
+            super::generate::scale_with_p_to(p, N, &base, &input, &mut output);
             assert_eq!(output, expected);
             let mut assigned = input.clone();
-            super::scale_with_p(p, N, &base, &mut assigned);
+            super::generate::scale_with_p(p, N, &base, &mut assigned);
             assert_eq!(assigned, expected);
             output.fill(17);
         }
@@ -59,7 +60,7 @@ fn p_scaling_overwrites_dirty_columns_and_matches_wide_percent_reference() {
 
 fn make_context(p: u64, moduli: &[u64], n: usize) -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(p),
             &moduli
@@ -588,7 +589,7 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         assert!(BgvAutomorphism::try_new(wrong, &auto_key).is_err());
     }
     let unprepared = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -605,11 +606,11 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         let relin_key = client.relinearization_key(level, config, &mut rng).unwrap();
         let auto_key = client.automorphism_key(level, 5, config, &mut rng).unwrap();
         assert!(matches!(BgvKeySwitcher::try_new(&unprepared, &switch_key),
-            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
+            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
         assert!(matches!(BgvRelinearizer::try_new(&unprepared, &relin_key),
-            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
+            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
         assert!(matches!(BgvAutomorphism::try_new(&unprepared, &auto_key),
-            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
+            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
     }
     for exponent in [0, 2, 2 * N, usize::MAX] {
         assert!(
@@ -707,17 +708,16 @@ fn projector(count: usize, range: std::ops::Range<usize>) -> IBig {
     modulo(&result, &q)
 }
 fn hybrid_column_errors(
-    key: &super::NativeEvaluationKey,
-    context: &BgvContext,
+    key: &super::material::NativeEvaluationKey,
     source: &[IBig],
     target: &[IBig],
     error_bound: u64,
 ) -> Vec<Vec<IBig>> {
     let count = Q.len() - key.level;
-    let super::KeyDecomposition::Hybrid(parameters) = &key.decomposition else {
+    let super::backend::NativeEvaluationBasis::Hybrid(parameters) = &key.basis else {
         panic!("hybrid oracle requires Hybrid");
     };
-    let moduli = key.base(context).moduli_values();
+    let moduli = key.key_base().moduli_values();
     let total = modulus_product(moduli);
     let p_aux = modulus_product(parameters.hybrid_rns().p_base().moduli_values());
     let alpha = parameters.hybrid_rns().partition_moduli_count();
@@ -746,7 +746,7 @@ fn hybrid_column_errors(
 fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_integer_oracles() {
     const AUX: [u64; 2] = [1152921504606830593, 1152921504606748673];
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -773,21 +773,15 @@ fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_int
             let switch = b
                 .key_switching_key(&a, level, parameters.clone(), &mut rng)
                 .unwrap();
-            let errors = hybrid_column_errors(&switch.key, &context, &source, &target, 21);
+            let errors = hybrid_column_errors(&switch.key, &source, &target, 21);
             let relin = a
                 .relinearization_key(level, parameters.clone(), &mut rng)
                 .unwrap();
-            hybrid_column_errors(
-                &relin.key,
-                &context,
-                &product(&source, &source),
-                &source,
-                21,
-            );
+            hybrid_column_errors(&relin.key, &product(&source, &source), &source, 21);
             let auto = a
                 .automorphism_key(level, 5, parameters.clone(), &mut rng)
                 .unwrap();
-            hybrid_column_errors(&auto.key, &context, &automorphism(&source, 5), &source, 21);
+            hybrid_column_errors(&auto.key, &automorphism(&source, 5), &source, 21);
             let p_aux = modulus_product(auxiliary);
             let qp = &q * &p_aux;
             let x: Vec<_> = (0..N).map(|i| &q / 2u64 - IBig::from(i * 13)).collect();
@@ -799,7 +793,7 @@ fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_int
                 .map(|(m, a)| centered(&(m - a), &q))
                 .collect();
             let input = BgvCiphertext::from_raw(encode(&[body.clone(), x.clone()], count));
-            let moduli = switch.key.base(&context).moduli_values();
+            let moduli = switch.key.key_base().moduli_values();
             let mut accumulator = vec![vec![IBig::ZERO; N]; 2];
             let mut epsilon = vec![IBig::ZERO; N];
             for (digit, column) in switch
@@ -894,11 +888,11 @@ fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_int
 
 #[test]
 fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
-    use crate::{
+    use crate::collective::{
         BgvCollectiveAutomorphismKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey,
     };
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -942,7 +936,7 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
             .unwrap();
         }
         let key = plan.finalize(sum).unwrap();
-        hybrid_column_errors(&key.key, &context, &source, &source, 63);
+        hybrid_column_errors(&key.key, &source, &source, 63);
         let plan =
             BgvCollectiveAutomorphismKey::try_new(&context, level, 5, parameters.clone(), &mut rng)
                 .unwrap();
@@ -952,7 +946,7 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
                 .unwrap();
         }
         let key = plan.finalize(sum).unwrap();
-        hybrid_column_errors(&key.key, &context, &automorphism(&source, 5), &source, 63);
+        hybrid_column_errors(&key.key, &automorphism(&source, 5), &source, 63);
         let plan =
             BgvCollectiveRelinearization::try_new(&context, level, parameters, &mut rng).unwrap();
         let mut first = plan.round_one_aggregate();
@@ -972,7 +966,6 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
         let key = plan.finalize(&frozen, second).unwrap();
         hybrid_column_errors(
             &key.key,
-            &context,
             &product(&source, &source),
             &source,
             21 * 3 * (2 * 3 * N as u64 + 1),

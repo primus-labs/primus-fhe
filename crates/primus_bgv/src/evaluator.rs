@@ -6,9 +6,9 @@ use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_reduce::{ReduceAdd, ReduceSub};
 
 use crate::client::validate_plaintext;
-use crate::{BgvCiphertext, BgvContext, BgvQuadraticCiphertext, PlaintextEmbedding};
+use crate::{BgvCiphertext, BgvContext, PlaintextEmbedding};
 
-/// Prepared BGV linear, plaintext and quadratic operations at one Q level.
+/// Prepared BGV linear and plaintext operations at one Q level.
 ///
 /// The evaluator borrows immutable parameters/tables and uses one reusable
 /// plaintext polynomial, owned by default or borrowed from a worker. It retains
@@ -38,7 +38,11 @@ impl<'a> BgvEvaluator<'a> {
     /// Rejects an unprepared level before allocating.
     #[must_use]
     pub fn new(context: &'a BgvContext, level: usize) -> Self {
-        Self::with_plaintext_scratch(context, level, vec![0; context.rns_poly_len(level)])
+        Self {
+            context,
+            level,
+            plaintext: DcrtPolynomial::zero(context.rns_poly_len(level)),
+        }
     }
 }
 
@@ -271,40 +275,6 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         input1.mul_assign(&self.plaintext, n, moduli);
     }
 
-    /// Writes the exact quadratic tensor of two native degree-one inputs.
-    ///
-    /// Output components are `[l0*r0, l0*r1+l1*r0, l1*r1]`, with phase
-    /// `(l0+l1*s)*(r0+r1*s)`. There is no BFV scale-and-round. Use a prepared
-    /// relinearizer to obtain a degree-one ciphertext. The complete product
-    /// phase must remain in the centered recovery interval.
-    ///
-    /// # Panics
-    /// Recorded context/level and all complete lengths are checked before writes.
-    pub fn mul_to<A, B, C>(
-        &self,
-        lhs: &BgvCiphertext<A>,
-        rhs: &BgvCiphertext<B>,
-        output: &mut BgvQuadraticCiphertext<C>,
-    ) where
-        A: Data<Elem = u64>,
-        B: Data<Elem = u64>,
-        C: DataMut<Elem = u64>,
-    {
-        tensor_to(self.context, self.level, lhs, rhs, output);
-    }
-
-    /// Writes `[c0², 2*c0*c1, c1²]` using three polynomial products.
-    ///
-    /// This is the square specialization of [`Self::mul_to`], with the same
-    /// representation, recovery-bound and complete-length panic contracts.
-    pub fn square_to<A, B>(&self, input: &BgvCiphertext<A>, output: &mut BgvQuadraticCiphertext<B>)
-    where
-        A: Data<Elem = u64>,
-        B: DataMut<Elem = u64>,
-    {
-        square_to(self.context, self.level, input, output);
-    }
-
     fn linear_to<A, B, C>(
         &self,
         lhs: &BgvCiphertext<A>,
@@ -491,73 +461,6 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
             table.transform_slice(limb);
         }
     }
-}
-
-// Shared tensor kernels keep the ordinary multiplication request independent of
-// the evaluator's plaintext scratch. Public callers establish their own output
-// shape before invoking these functions; all input/component lengths are checked
-// before the first arithmetic write.
-pub(crate) fn tensor_to<A, B, C>(
-    context: &BgvContext,
-    level: usize,
-    lhs: &BgvCiphertext<A>,
-    rhs: &BgvCiphertext<B>,
-    output: &mut BgvQuadraticCiphertext<C>,
-) where
-    A: Data<Elem = u64>,
-    B: Data<Elem = u64>,
-    C: DataMut<Elem = u64>,
-{
-    lhs.check_binding(context, level);
-    rhs.check_binding(context, level);
-    output.check_binding(context, level);
-    let length = context.rns_poly_len(level);
-    let (l0, l1) = lhs.c0_c1(length);
-    let (r0, r1) = rhs.c0_c1(length);
-    let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
-    let n = context.parameters().poly_length().get();
-    let moduli = context.base_q(level).moduli();
-    l0.mul_to(&r0, &mut o0, n, moduli);
-    l0.mul_to(&r1, &mut o1, n, moduli);
-    o1.add_mul_assign(&l1, &r0, n, moduli);
-    l1.mul_to(&r1, &mut o2, n, moduli);
-    output.set_correction_factor(correction::multiply(
-        lhs.correction_factor(),
-        rhs.correction_factor(),
-        context.parameters().plain_modulus().value(),
-    ));
-}
-
-pub(crate) fn square_to<A, B>(
-    context: &BgvContext,
-    level: usize,
-    input: &BgvCiphertext<A>,
-    output: &mut BgvQuadraticCiphertext<B>,
-) where
-    A: Data<Elem = u64>,
-    B: DataMut<Elem = u64>,
-{
-    input.check_binding(context, level);
-    output.check_binding(context, level);
-    use primus_reduce::ReduceAdd;
-    let length = context.rns_poly_len(level);
-    let (c0, c1) = input.c0_c1(length);
-    let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
-    let n = context.parameters().poly_length().get();
-    let moduli = context.base_q(level).moduli();
-    c0.mul_to(&c0, &mut o0, n, moduli);
-    c0.mul_to(&c1, &mut o1, n, moduli);
-    for (limb, q) in o1.as_mut().chunks_exact_mut(n).zip(moduli) {
-        for value in limb {
-            *value = q.reduce_add(*value, *value);
-        }
-    }
-    c1.mul_to(&c1, &mut o2, n, moduli);
-    output.set_correction_factor(correction::multiply(
-        input.correction_factor(),
-        input.correction_factor(),
-        context.parameters().plain_modulus().value(),
-    ));
 }
 
 // p<q; a negative centered scalar is represented by q-(p-scale), never by

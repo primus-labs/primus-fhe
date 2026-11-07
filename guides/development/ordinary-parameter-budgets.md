@@ -38,7 +38,7 @@ key switch 和 drop。后续操作须实际使用 plan 返回的相应 level key
 
 一般 BGV 密文携带规范可逆的 scalar f，其 intended integer phase 为 `z=lift(f*m mod p)+p*e`；z 须落在 `(-Q/2,Q/2)`，才与原生 phase 的 centered lift 相同。Fresh 加密 f=1；乘法把输入 factors 相乘，丢弃 prime q 将 f 更新为 `f*q^-1 mod p`；relinearization、换钥和自同构保留 f。相同 level 可以有不同历史和 factor，加减法会用公开 centered scalars 对齐后合并，明文加法也会使用 f 加权 lift。它们的额外整数尺度由 planner 与实际求值按同一策略处理。
 
-`BgvCircuitPlan::steps()` 中的每个节点同时报告 factor 与 phase 界；它不要求调用方手动改写消息。正常恢复先对物理 phase 做 centered CRT 与模 p，再应用 f 的逆。`BgvCiphertext::as_view()` 保留该标量，prepared 输出直接传 `&mut ciphertext`，避免 mutable view 复制元数据后发生丢写。
+`BgvCircuitPlan::steps()` 中的每个节点同时报告 factor 与 phase 界。正常恢复先对物理 phase 做 centered CRT 与模 p，再应用 f 的逆。Prepared 运算借用整个 `BgvCiphertext`，输出直接传 `&mut ciphertext`，将数组和实际 factor 一起更新。
 
 外部 canonical NTT 数据通过 `context.try_import_ciphertext(words,level,factor)` 导入；它验证完整 shape、canonical residues，以及 `0<factor<p`、`gcd(factor,p)=1` 后绑定 context/level。明文 p 为合数时，仅非零不代表可逆。调用方仍须认证factor和实际secret/NTT约定；检查通过不证明这些关系。`from_raw`/`zero_raw` 明确声明 f=1，不能用它们丢弃一般链的factor。
 

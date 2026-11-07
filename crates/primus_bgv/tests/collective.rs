@@ -1,9 +1,12 @@
-use primus_bgv::{
-    BgvAutomorphism, BgvCiphertext, BgvClient, BgvCollectiveAutomorphismKey, BgvCollectiveError,
-    BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey, BgvContext,
-    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvParameters,
-    BgvRelinearizer, BgvSeededInput,
+use primus_bgv::advanced::{BgvSeededInput, square_to};
+use primus_bgv::collective::{
+    BgvCollectiveAutomorphismKey, BgvCollectiveError, BgvCollectivePublicKey,
+    BgvCollectiveRelinearization, BgvCollectiveSwitchingKey,
 };
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvRelinearizer,
+};
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters};
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::DecompositionConfig;
 use primus_distr::ErrorDistribution;
@@ -20,7 +23,7 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899906248961, 1125899906051329, 1125899904322049];
 fn context() -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -246,7 +249,7 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
     );
     let cipher = oracle.encrypt(&message, &mut rng);
     let mut quadratic = context.new_quadratic_ciphertext(0);
-    BgvEvaluator::new(&context, 0).square_to(&cipher, &mut quadratic);
+    square_to(&context, 0, &cipher, &mut quadratic);
     let mut output = context.new_ciphertext(0);
     BgvRelinearizer::try_new(&context, &key)
         .unwrap()
@@ -277,7 +280,7 @@ fn collective_partial_recovery_preserves_general_prime_drop_correction() {
     let qs = [1_125_899_905_351_681, 1_125_899_905_744_897];
     assert!(qs.iter().all(|&q| q % P != 1));
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &qs.map(BarrettModulus::new),
@@ -511,7 +514,9 @@ fn collective_linear_keys_and_rejection_boundaries() {
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            1.0,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 1.0,
+            },
         )
         .unwrap(),
     )

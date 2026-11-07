@@ -25,14 +25,14 @@ cargo run -p primus_bfv --example slots --features batching
    `client.public_key(rng)`，绑定 `context.public_key_encryptor(&public_key)`。
 3. 用 `context.new_plaintext()` 和 `context.new_ciphertext(level)` 准备输入/输出，
    一次构造 `evaluation::BfvEvaluator::new(&context,level)`。
-4. 加密后，用 `add_plain_to` / `mul_plain_to` 显式选择 `PlaintextEmbedding`，
-   最后 `client.decrypt(&ciphertext)` 按密文绑定的 level 恢复。下个请求复用 setup 和输出，
-   重新采样加密随机性。
+4. 使用 `encrypt_centered_to`、`add_plain_assign` 和 `mul_plain_assign` 执行
+   中心化明文运算，再用 `client.decrypt_to(&ciphertext, &mut plaintext)` 按密文绑定的
+   level 恢复。下个请求复用预备运算和缓冲区，重新采样加密随机性。
 
 [Slots](examples/slots.rs) 增加一个 `context.batching_encoder()`，采用 n=N。
 `encode_to` 直接写入 context 的明文多项式；解密后用 `decode` 恢复 slots。
-Encoder 自持 plaintext NTT table，应跨请求保留。基础示例选择分配式加密/恢复；
-prepared `*_to` 支持复用调用方输出。示例的小参数只验证功能，不是安全 preset。
+Encoder 自持 plaintext NTT table，应跨请求保留。系数示例复用调用方缓冲区。
+需要独立持有的返回值时，也可使用分配式便利入口。示例的小参数只验证功能，不是安全 preset。
 Full-ring packing 要求明文素数 t≡1 mod 2N；subring 示例仅将明文放在 n<N 环，
 秘密和密文始终保留完整 N。
 

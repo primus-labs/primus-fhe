@@ -54,35 +54,13 @@ pub struct BgvParameters {
 }
 
 impl BgvParameters {
-    /// Prepares coefficient parameters with the existing discrete Gaussian sampler.
+    /// Prepares coefficient parameters with Gaussian or centered-binomial error sampling.
     ///
     /// # Errors
     /// Rejects invalid geometry, RNS/sampling parameters, noncoprime moduli
-    /// or insufficient fresh private recovery margin. Establishes no security level.
+    /// or insufficient fresh private recovery margin. NTT compatibility is
+    /// established by [`crate::BgvContext::try_new`].
     pub fn try_coefficients(
-        poly_length: PolyLength,
-        plain_modulus: BarrettModulus<u64>,
-        cipher_moduli: &[BarrettModulus<u64>],
-        secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
-    ) -> Result<Self, BgvParametersError> {
-        Self::try_with_error_distribution(
-            poly_length,
-            plain_modulus,
-            cipher_moduli,
-            secret_key_distr,
-            ErrorDistribution::Gaussian {
-                standard_deviation: noise_standard_deviation,
-            },
-        )
-    }
-
-    /// Prepares Gaussian or exact CBD coefficient error sampling.
-    ///
-    /// # Errors
-    /// The same geometry, coprimality and recovery checks as [`Self::try_coefficients`]
-    /// apply. NTT compatibility is established by [`crate::BgvContext::try_new`].
-    pub fn try_with_error_distribution(
         poly_length: PolyLength,
         plain_modulus: BarrettModulus<u64>,
         cipher_moduli: &[BarrettModulus<u64>],

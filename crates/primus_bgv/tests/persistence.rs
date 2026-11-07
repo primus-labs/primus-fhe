@@ -1,5 +1,9 @@
 //! Public storage rebinds real work; malformed frames never become scheme owners.
-use primus_bgv::*;
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+};
+use primus_bgv::keys::BgvEvaluationKeyConfig;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, PublicObjectLimits};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -12,7 +16,7 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899905351681, 1125899905744897, 1125899906629633];
 fn context() -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -246,7 +250,7 @@ fn malformed_storage_limits_context_role_and_sampler_descriptions_are_checked() 
         },
     ] {
         let owner = BgvContext::try_new(
-            BgvParameters::try_with_error_distribution(
+            BgvParameters::try_coefficients(
                 PolyLength::new(N),
                 BarrettModulus::new(P),
                 &Q.map(BarrettModulus::new),

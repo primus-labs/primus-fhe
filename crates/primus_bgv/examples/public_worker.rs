@@ -1,13 +1,10 @@
 //! A remote evaluator receives only public storage; the client keeps its secret.
 //! Run: cargo run -p primus_bgv --example public_worker
 
-use primus_bgv::{
-    BgvClient, BgvContext, BgvModulusSwitch, BgvMultiplication, BgvParameterRequest,
-    PublicObjectLimits,
-};
+use primus_bgv::evaluation::{BgvModulusSwitch, BgvMultiplication};
+use primus_bgv::planning::BgvParameterRequest;
+use primus_bgv::{BgvClient, BgvContext, ErrorDistribution, PublicObjectLimits, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 

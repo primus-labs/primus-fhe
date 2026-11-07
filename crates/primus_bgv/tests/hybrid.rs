@@ -1,9 +1,11 @@
 //! Native Hybrid roles use the ordinary requests and actual QP collective messages.
-use primus_bgv::{
-    BgvAutomorphism, BgvCiphertext, BgvClient, BgvCollectiveAutomorphismKey,
-    BgvCollectiveRelinearization, BgvCollectiveSwitchingKey, BgvContext, BgvKeySwitcher,
-    BgvModulusSwitch, BgvMultiplication, BgvParameters,
+use primus_bgv::collective::{
+    BgvCollectiveAutomorphismKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey,
 };
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+};
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -17,7 +19,7 @@ const Q: [u64; 3] = [1125899906248961, 1125899906051329, 1125899904322049];
 const P: [u64; 2] = [1152921504606830593, 1152921504606748673];
 fn context() -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(T),
             &Q.map(BarrettModulus::new),
@@ -275,7 +277,7 @@ fn hybrid_binding_and_prewrite_rejections_do_not_consume_randomness_or_output() 
 #[test]
 fn hybrid_secret_extension_handles_the_configured_gaussian_hard_support() {
     let context = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(T),
             &Q.map(BarrettModulus::new),
@@ -309,7 +311,7 @@ fn hybrid_secret_lift_uses_complete_stored_q_when_the_first_prime_is_ambiguous()
         standard_deviation: 25.0,
     };
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(2),
             &[449, 577].map(BarrettModulus::new),
@@ -367,7 +369,7 @@ fn hybrid_secret_lift_uses_complete_stored_q_when_the_first_prime_is_ambiguous()
         )
         .unwrap();
     let ambiguous = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(2),
             &[449].map(BarrettModulus::new),
@@ -391,7 +393,7 @@ fn hybrid_secret_lift_uses_complete_stored_q_when_the_first_prime_is_ambiguous()
             ambiguous.hybrid_key_parameters(0, 1, &[193]).unwrap(),
             &mut rng
         ),
-        Err(primus_bgv::BgvEvaluationKeyError::Hybrid(
+        Err(primus_bgv::keys::BgvEvaluationKeyError::Hybrid(
             primus_lattice::hybrid::NativeHybridError::AmbiguousSecret { bound: 300 }
         ))
     ));

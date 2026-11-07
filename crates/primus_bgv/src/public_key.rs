@@ -37,8 +37,8 @@ impl BgvPublicKey {
     /// Borrows the public native ciphertext for authenticated serialization.
     /// The payload alone does not identify its NTT/context or recipient secret.
     #[must_use]
-    pub fn as_ciphertext(&self) -> BgvCiphertext<&[u64]> {
-        self.ciphertext.as_view()
+    pub fn as_ciphertext(&self) -> &BgvCiphertext<Vec<u64>> {
+        &self.ciphertext
     }
 
     pub(crate) fn from_collective(
@@ -57,11 +57,11 @@ impl BgvPublicKey {
 
     pub(crate) fn generate<R: rand::Rng + rand::CryptoRng>(
         client: &BgvClient<'_>,
-        context: &BgvContext,
         rng: &mut R,
     ) -> Self {
+        let context = client.context();
         let mut ciphertext = context.new_ciphertext(0);
-        client.encrypt_zeros_at_level_to(&mut ciphertext, 0, rng);
+        client.encrypt_zeros_to(&mut ciphertext, rng);
         Self {
             ciphertext,
             size: context.parameters().size(),
@@ -128,7 +128,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
     /// # Errors
     /// Rejects another context or a different numerical key layout. Imported key
     /// material's actual secret and NTT convention remain caller contracts.
-    pub fn try_new(
+    pub(crate) fn try_new(
         key: &'a BgvPublicKey,
         context: &'a BgvContext,
     ) -> Result<Self, BgvPublicKeyError> {
@@ -222,7 +222,8 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
             "BGV public workspace shape mismatch"
         );
         let n = parameters.poly_length().get();
-        let (mut c0, mut c1) = output.c0_c1_mut(self.context.rns_poly_len(0));
+        let length = parameters.size().rns_poly_len();
+        let (mut c0, mut c1) = output.c0_c1_mut(length);
         let sampling = parameters.encryption_parameters();
         let ephemeral = self.workspace.as_mut_slice();
         primus_distr::sample_crt_sparse_ternary_values_to(
@@ -233,7 +234,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         );
         self.context.table().transform_slice(ephemeral);
         let ephemeral = DcrtPolynomial(&*ephemeral);
-        let (pk0, pk1) = self.key.ciphertext.c0_c1(self.context.rns_poly_len(0));
+        let (pk0, pk1) = self.key.ciphertext.c0_c1(length);
         sample_scaled_noise(self.context, 0, c0.as_mut(), rng);
         add_plaintext(self.context, input.as_ref(), c0.as_mut(), centered);
         self.context.table().transform_slice(c0.as_mut());

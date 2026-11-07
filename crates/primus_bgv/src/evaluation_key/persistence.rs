@@ -1,6 +1,19 @@
 //! Public role-key storage. Actual secrets are never serialized.
-use super::*;
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
+use std::sync::Arc;
+
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
+use primus_lattice::hybrid::NativeHybridParameters;
+use primus_ntt::NttAutomorphismPermutation;
+
+use crate::BgvContext;
+
+use super::{
+    BgvEvaluationKeyConfig,
+    backend::NativeEvaluationBasis,
+    material::{
+        BgvAutomorphismKey, BgvKeySwitchingKey, BgvRelinearizationKey, NativeEvaluationKey,
+    },
+};
 use primus_glwe_rns::persistence::{
     PublicObjectError as Error, PublicObjectLimits as Limits, decode_public_words, ntt_fingerprint,
 };
@@ -16,13 +29,13 @@ fn encode(
     let mut writer = context.public_writer(role);
     writer.usize(key.level);
     writer.usize(exponent);
-    match &key.decomposition {
-        KeyDecomposition::Radix(metadata) => {
+    match &key.basis {
+        NativeEvaluationBasis::Radix(metadata) => {
             writer.u64(0);
             writer.u64(u64::from(metadata.basis().log_basis().get()));
             writer.usize(metadata.basis().level_count().get());
         }
-        KeyDecomposition::Hybrid(metadata) => {
+        NativeEvaluationBasis::Hybrid(metadata) => {
             writer.u64(1);
             writer.usize(metadata.hybrid_rns().partitioning().full_q_moduli_count());
             writer.usize(metadata.hybrid_rns().decomposition_count());
@@ -119,7 +132,7 @@ fn decode(
             if metadata.basis().level_count().get() != expected {
                 return Err(Error::Malformed("radix columns"));
             }
-            EvaluationKeyConfig::PreparedRadix(metadata)
+            BgvEvaluationKeyConfig::PreparedRadix(metadata)
         }
         Configuration::Hybrid {
             full,
@@ -140,12 +153,12 @@ fn decode(
             if ntt_fingerprint(metadata.table_p()) != digest {
                 return Err(Error::Binding);
             }
-            EvaluationKeyConfig::Hybrid(metadata)
+            BgvEvaluationKeyConfig::Hybrid(metadata)
         }
     };
     let mut key =
         NativeEvaluationKey::prepare_metadata(context, level, config).map_err(Error::parameters)?;
-    if key.key_len(context) != count {
+    if key.key_len() != count {
         return Err(Error::Malformed("key columns"));
     }
     key.columns = decode_public_words(data);

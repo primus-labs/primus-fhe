@@ -1,8 +1,9 @@
 //! Prepared coefficient operations retain their full-ring allocations.
-use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvEvaluator, BgvKeySwitcher,
-    BgvModulusSwitch, BgvMultiplication, BgvParameters, PlaintextEmbedding,
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::keys::BgvEvaluationKeyConfig;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -35,19 +36,26 @@ unsafe impl GlobalAlloc for Counting {
 static ALLOCATOR: Counting = Counting;
 #[test]
 fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
-    for hybrid in [false, true] {
-        prepared_request(hybrid);
-    }
-}
-fn prepared_request(hybrid: bool) {
-    let moduli = [
+    let factor_one = [
         1_125_899_906_248_961,
         1_125_899_906_051_329,
         1_125_899_904_322_049,
-    ]
-    .map(BarrettModulus::new);
+    ];
+    let general = [
+        1_125_899_905_351_681,
+        1_125_899_905_744_897,
+        1_125_899_906_629_633,
+    ];
+    for primes in [factor_one, general] {
+        for hybrid in [false, true] {
+            prepared_request(primes, hybrid);
+        }
+    }
+}
+fn prepared_request(primes: [u64; 3], hybrid: bool) {
+    let moduli = primes.map(BarrettModulus::new);
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(32),
             BarrettModulus::new(193),
             &moduli,
@@ -130,6 +138,8 @@ fn prepared_request(hybrid: bool) {
     let mut squared0 = context.new_ciphertext(0);
     let mut reduced1 = context.new_ciphertext(1);
     let mut squared1 = context.new_ciphertext(1);
+    let mut mixed = context.new_ciphertext(1);
+    let mut evaluator1 = BgvEvaluator::new(&context, 1);
     let mut rotated1 = context.new_ciphertext(1);
     let mut switched1 = context.new_ciphertext(1);
     let mut reduced2 = context.new_ciphertext(2);
@@ -171,8 +181,17 @@ fn prepared_request(hybrid: bool) {
     multiplication0.multiply_to(&combined, &combined, &mut squared0);
     drop0.switch_to(&squared0, &mut reduced1);
     multiplication1.square_to(&reduced1, &mut squared1);
+    // Drop-then-square and just drop carry different factors on general chains.
+    assert_eq!(
+        squared1.correction_factor() == reduced1.correction_factor(),
+        primes[2] % 193 == 1,
+    );
+    evaluator1.add_to(&squared1, &reduced1, &mut mixed);
+    evaluator1.sub_assign(&mut mixed, &reduced1);
+    evaluator1.add_plain_assign(&mut mixed, &ones, embedding);
+    evaluator1.mul_plain_assign(&mut mixed, &negative_one, embedding);
     multiplication1.square_assign(&mut reduced1);
-    automorphism.apply_to(&squared1, &mut rotated1);
+    automorphism.apply_to(&mixed, &mut rotated1);
     key_switcher.switch_to(&rotated1, &mut switched1);
     drop1.switch_to(&switched1, &mut reduced2);
     recipient.decrypt_at_level_to(&reduced2, 2, &mut output);
@@ -204,7 +223,8 @@ fn prepared_request(hybrid: bool) {
     };
     let fourth = square(&square(&expected));
     let mut expected = vec![0; 32];
-    for (i, &x) in fourth.iter().enumerate() {
+    for (i, &coefficient) in fourth.iter().enumerate() {
+        let x = (192 - coefficient).rem_euclid(193);
         let degree = i * 5;
         expected[degree % 32] = if degree / 32 % 2 == 0 {
             x

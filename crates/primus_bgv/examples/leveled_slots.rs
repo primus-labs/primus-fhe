@@ -1,13 +1,12 @@
 //! Advanced: subring slots, row operations, key switching and two prime drops.
 //! Run: cargo run -p primus_bgv --example leveled_slots --features batching
 
-use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
-    BgvParameters,
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -29,7 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )?,
         3,
     )?;

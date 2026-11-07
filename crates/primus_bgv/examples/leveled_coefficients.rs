@@ -2,14 +2,14 @@
 //! Run: cargo run -p primus_bgv --example leveled_coefficients
 //! Native Hybrid keys: append -- --hybrid.
 
-use primus_bgv::{
-    BgvAutomorphism, BgvBudgetBackend, BgvCircuitOperation, BgvCircuitPlan, BgvClient,
-    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvParameterRequest,
-    BgvPlaintextBounds, PlaintextEmbedding,
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::planning::{
+    BgvBudgetBackend, BgvCircuitOperation, BgvCircuitPlan, BgvParameterRequest, BgvPlaintextBounds,
+};
+use primus_bgv::{BgvClient, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};

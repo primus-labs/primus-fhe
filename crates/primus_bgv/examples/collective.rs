@@ -2,13 +2,11 @@
 //! parameter certificate. Native shares are consumed into online clients only
 //! after key generation. Each owner keeps its own secret; no aggregate secret is built.
 //! Run: cargo run -p primus_bgv --example collective
-use primus_bgv::{
-    BgvClient, BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvContext, BgvModulusSwitch,
-    BgvMultiplication, BgvParameters,
-};
+use primus_bgv::collective::{BgvCollectivePublicKey, BgvCollectiveRelinearization};
+use primus_bgv::evaluation::{BgvModulusSwitch, BgvMultiplication};
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_distr::ErrorDistribution;
-use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
+use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey};
 use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
@@ -18,7 +16,7 @@ use rand::{SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(32),
             BarrettModulus::new(193),
             &[1_125_899_905_351_681, 1_125_899_905_744_897].map(BarrettModulus::new),
