@@ -192,3 +192,11 @@ The focused `workflow` bench measures public-encrypt/plaintext-evaluate/recover;
 timing. Independent DFT, schoolbook and wide-integer oracles protect phase,
 residual, exact quotient and boundary contracts. See the
 [testing guide](../../guides/development/testing.md) for feature and consumer checks.
+
+## Public storage
+
+`BgvContext::to_public_bytes()` and `from_public_bytes(bytes, limits)` store complete public parameters and restore a new local context. Its `export_*` / `import_*` methods cover native ciphertexts, public keys and typed relinearization, switching and automorphism keys, including Radix and Hybrid Q/P metadata. Set `PublicObjectLimits` for your deployment; imports check version, role, full geometry, canonical residues and actual NTT representation before accepting owned data. BGV correction factors survive storage and are checked as canonical units.
+
+No secret or local binding pointer is serialized. Authenticate the public object together with its application source/target identities and declared budgets. Structural validation does not prove honest key generation or the claimed secret relationship. Independent key imports can repeat numerical metadata/P-table preparation; no implicit key cache is introduced.
+
+See [public storage](../../guides/development/public-storage.md) and the [BGV public-worker example](../primus_bgv/examples/public_worker.rs), which keeps the client secret local and evaluates through public byte containers. These containers do not add headers to a protocol's online round payloads.

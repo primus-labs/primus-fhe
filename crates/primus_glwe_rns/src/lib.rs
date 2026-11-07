@@ -13,6 +13,7 @@ mod dcrt;
 mod expansion;
 mod key_switch;
 mod parameter;
+pub mod persistence;
 mod public_key;
 pub mod rlwe_parameters;
 mod secret_key;

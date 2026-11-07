@@ -143,6 +143,6 @@ raw 绑定及写入/RNG 前拒绝；原独立整数/DFT/phase、dirty scratch �
 普通 BGV 支持与 p 互素的一般 prime 链及带 factor 的外部密文导入；其声明电路准入见
 [BGV workflow](../../crates/primus_bgv/README.md#generate-parameters-and-admit-a-declared-circuit)。
 这不放宽 Flexilect 自己的 per-prime q_i≡1 mod p、factor=1 与桥接参数限制。
-这一层不提供持久化身份、跨进程完整建钥导入或生产多选举联合安全证明。
+公共对象可通过[独立存储格式](public-storage.md)导出并在远端重建本地绑定；不保存或恢复旧进程的指针身份。跨进程完整建钥由上层协议负责，这一层不提供生产多选举联合安全证明。
 跨进程导入必须重建本地关系并认证外部数学来源，不能把
 进程内指针或 identity token 序列化后当成认证证据。

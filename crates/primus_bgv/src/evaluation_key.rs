@@ -966,3 +966,5 @@ mod tests;
 
 mod collective;
 pub use collective::*;
+
+mod persistence;

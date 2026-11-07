@@ -65,6 +65,7 @@ mod modulus_switch;
 mod multiplication;
 mod multiply;
 mod parameters;
+mod persistence;
 mod public_key;
 mod quadratic;
 mod secret_key;
@@ -101,3 +102,5 @@ pub use evaluation_key::{
     BfvCollectiveRelinearizationRound1, BfvCollectiveRelinearizationState,
     BfvCollectiveSwitchingKey, BfvFreshLookup, BfvFreshLookupKey, BfvRawQuadraticAggregate,
 };
+
+pub use primus_glwe_rns::persistence::{PublicObjectError, PublicObjectLimits};

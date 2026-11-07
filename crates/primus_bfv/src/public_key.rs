@@ -343,3 +343,5 @@ impl Zeroize for BfvPublicKeyEncryptor<'_> {
 
 #[cfg(test)]
 mod tests;
+
+mod persistence;

@@ -45,6 +45,7 @@ pub enum BfvContextError {
 /// local provenance does not prove the actual coefficient secret or noise bound.
 pub struct BfvContext {
     identity: Arc<()>,
+    pub(crate) public_ntt_digest: std::sync::OnceLock<[u8; 32]>,
     parameters: BfvParameters,
     table: Arc<U64DcrtTable>,
     lower_codecs: Vec<BfvRnsCodec<u64, BarrettModulus<u64>>>,
@@ -127,6 +128,7 @@ impl BfvContext {
         }
         Ok(Self {
             identity: Arc::new(()),
+            public_ntt_digest: std::sync::OnceLock::new(),
             parameters,
             table,
             lower_codecs,

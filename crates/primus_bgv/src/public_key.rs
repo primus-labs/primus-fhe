@@ -254,3 +254,5 @@ impl Zeroize for BgvPublicKeyEncryptor<'_> {
 
 #[cfg(test)]
 mod tests;
+
+mod persistence;

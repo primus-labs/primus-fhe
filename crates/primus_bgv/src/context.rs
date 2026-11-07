@@ -42,6 +42,7 @@ struct LowerLevel {
 /// Clients, evaluators and public encryptors borrow this owner without cloning.
 pub struct BgvContext {
     identity: Arc<()>,
+    pub(crate) public_ntt_digest: std::sync::OnceLock<[u8; 32]>,
     parameters: BgvParameters,
     table: Arc<U64DcrtTable>,
     lower_levels: Vec<LowerLevel>,
@@ -129,6 +130,7 @@ impl BgvContext {
         }
         Self {
             identity: Arc::new(()),
+            public_ntt_digest: std::sync::OnceLock::new(),
             parameters,
             table,
             lower_levels,

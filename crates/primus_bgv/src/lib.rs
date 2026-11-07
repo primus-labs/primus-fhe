@@ -38,6 +38,7 @@ mod evaluator;
 mod modulus_switch;
 mod multiplication;
 mod parameters;
+mod persistence;
 mod planning;
 mod public_key;
 mod quadratic;
@@ -67,3 +68,5 @@ pub use planning::{
 pub use primus_encoding::PlaintextEmbedding;
 pub use public_key::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
 pub use quadratic::BgvQuadraticCiphertext;
+
+pub use primus_glwe_rns::persistence::{PublicObjectError, PublicObjectLimits};

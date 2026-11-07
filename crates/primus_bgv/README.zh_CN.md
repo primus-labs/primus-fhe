@@ -168,3 +168,11 @@ cargo bench -p primus_bgv --bench leveled --features batching
 setup 和 validation 在计时外。独立 DFT、schoolbook 和宽整数 oracle 保护 phase、
 residual、精确商和边界契约。Feature 与独立 consumer 检查见
 [测试指南](../../guides/development/testing.md)。
+
+## 公共对象持久化
+
+`BgvContext::to_public_bytes()` 与 `from_public_bytes(bytes, limits)` 保存完整公共参数并重建新的本地 context；其 `export_*` / `import_*` 方法支持原生密文、公钥，以及 typed relinearization、switching、automorphism key，保留 Radix 或 Hybrid 的实际 Q/P 元数据。部署时设置 `PublicObjectLimits`；接收方在接受 owned 数据前检查版本、角色、完整几何、canonical residues 和实际 NTT 表示。BGV correction factor 会一同保存，并校验 canonical unit 条件。
+
+不保存 secret 或本地绑定指针。上层须认证公共对象及其实际 source/target 身份和预算声明；结构校验不证明诚实建钥或实际 secret 关系。多次独立 key 导入可能重复准备 numerical metadata/P 表，本接口没有隐式 key cache。
+
+完整契约见[公共对象持久化](../../guides/development/public-storage.md)及[BGV public-worker 示例](../primus_bgv/examples/public_worker.rs)：client secret 留在本地，worker 只处理公共字节容器。这些容器不向在线协议的逐轮 payload 添加 header。
