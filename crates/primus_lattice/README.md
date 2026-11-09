@@ -7,7 +7,7 @@ English | [简体中文](README.zh_CN.md)
 
 `primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT and by RNS GLWE implementations.
 
-Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers.
+Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), and [`primus_glwe_rns`](../primus_glwe_rns).
 
 ## Ciphertext families
 

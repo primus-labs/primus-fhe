@@ -1,0 +1,43 @@
+[package]
+name = "primus_lwe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror.workspace = true
+primus_data = { path = "../primus_data" }
+primus_decompose = { path = "../primus_decompose" }
+primus_distr = { path = "../primus_distr" }
+primus_encoding = { path = "../primus_encoding" }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice" }
+primus_modulus = { path = "../primus_modulus" }
+primus_reduce = { path = "../primus_reduce" }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "secret_key"
+harness = false
+
+[[bench]]
+name = "key_switch"
+harness = false
+
+[[bench]]
+name = "public_key"
+harness = false
+
+[features]
+default = []
+simd = [
+    "primus_encoding/simd",
+    "primus_integer/simd",
+    "primus_lattice/simd",
+    "primus_modulus/simd",
+]

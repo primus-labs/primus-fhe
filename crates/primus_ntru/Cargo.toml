@@ -1,0 +1,112 @@
+[package]
+name = "primus_ntru"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_data = { path = "../primus_data" }
+primus_decompose = { path = "../primus_decompose" }
+primus_distr = { path = "../primus_distr" }
+primus_encoding = { path = "../primus_encoding" }
+primus_factor = { path = "../primus_factor" }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice" }
+primus_lwe = { path = "../primus_lwe" }
+primus_modulus = { path = "../primus_modulus" }
+primus_ntt = { path = "../primus_ntt", optional = true }
+primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "constant_gadget"
+harness = false
+required-features = ["ntt"]
+
+[[bench]]
+name = "primitives"
+harness = false
+required-features = ["ntt"]
+
+[[bench]]
+name = "ternary_cmux"
+harness = false
+required-features = ["ntt"]
+
+[[bench]]
+name = "encryption"
+harness = false
+required-features = ["ntt"]
+
+[[bench]]
+name = "lwe_return"
+harness = false
+
+# Targets declare the representations they exercise.
+[[test]]
+name = "automorphism"
+required-features = ["ntt"]
+
+[[test]]
+name = "constant_gadget"
+required-features = ["ntt"]
+
+[[test]]
+name = "gadget_generation"
+required-features = ["ntt"]
+
+[[test]]
+name = "key_switch"
+required-features = ["ntt"]
+
+[[test]]
+name = "lwe_key_switch"
+required-features = ["ntt"]
+
+[[test]]
+name = "phase_contracts"
+required-features = ["ntt"]
+
+[[test]]
+name = "scheme_switch"
+required-features = ["ntt"]
+
+[[test]]
+name = "secret_key"
+required-features = ["ntt"]
+
+[[test]]
+name = "ternary_cmux"
+required-features = ["ntt"]
+
+[[test]]
+name = "trace"
+required-features = ["ntt"]
+
+[[test]]
+name = "zeroize"
+required-features = ["ntt"]
+
+[[example]]
+name = "automorphism"
+required-features = ["ntt"]
+
+[features]
+default = []
+ntt = ["dep:primus_ntt", "primus_lattice/ntt"]
+simd = [
+    "primus_integer/simd",
+    "primus_factor/simd",
+    "primus_lattice/simd",
+    "primus_lwe/simd",
+    "primus_ntt?/simd",
+    "primus_poly/simd",
+]

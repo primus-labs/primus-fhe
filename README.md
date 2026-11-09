@@ -9,6 +9,7 @@ The APIs are still evolving.
 - [Negacyclic NTT](crates/primus_ntt) and [Fourier transforms](crates/primus_fft)
 - [Residue number systems](crates/primus_rns)
 - [Lattice layouts and operations](crates/primus_lattice)
+- [LWE](crates/primus_lwe), [GLWE](crates/primus_glwe), [RNS GLWE](crates/primus_glwe_rns), and [NTRU](crates/primus_ntru) primitives
 
 Build and test from the workspace root. Cargo features select the enabled representations and engines.
 
