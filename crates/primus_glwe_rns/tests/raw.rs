@@ -446,7 +446,8 @@ fn raw_binding_rejects_foreign_shapes_and_ordered_bases() {
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), n), 2);
     let parameters =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap();
     let table = DcrtTable::<U32NttTable>::new(n, &moduli).unwrap();
 
     let coefficient_key = GlweSecretKey::<u32>::new(
@@ -507,7 +508,8 @@ fn malformed_raw_layouts_are_rejected_before_writes_or_randomness() {
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(32)), 2);
     let parameters =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap();
     let table = DcrtTable::<U64NttTable>::new(PolyLength::new(32), &moduli).unwrap();
 
     let key = GlweSecretKey::<u64>::new(

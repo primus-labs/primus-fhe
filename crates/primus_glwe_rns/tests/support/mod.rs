@@ -41,7 +41,8 @@ where
     ) -> Self {
         let base = RNSBase::new(moduli).unwrap();
         let size = RnsGlweSize::new(GlweSize::new(dimension, n), base.moduli_count());
-        let core = Arc::new(CrtGlweEncryptionParameters::new(size, &base, secret, sigma));
+        let core =
+            Arc::new(CrtGlweEncryptionParameters::try_new(size, &base, secret, sigma).unwrap());
         Self { core, base }
     }
 
@@ -74,7 +75,7 @@ where
         log: DecompositionBaseLog,
         levels: Option<DecompositionLevelCount>,
     ) -> CrtGlevParameters<T, BarrettModulus<T>> {
-        CrtGlevParameters::new(self.size(), self.base.clone(), log, levels)
+        CrtGlevParameters::try_new(self.size(), self.base.clone(), log, levels).unwrap()
     }
 }
 

@@ -32,7 +32,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
             accumulator_qp,
             q_scratch,
             mod_up_limb,
-            mod_up_scratch,
+            conversion_scratch,
             ..
         } = workspace;
 
@@ -64,7 +64,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 q_scratch,
                 mod_up_limb,
                 poly_length,
-                &mut mod_up_scratch[..scratch_len],
+                &mut conversion_scratch[..scratch_len],
                 |modulus_index, converted_limb| {
                     table.ntt_tables()[modulus_index].transform_slice(converted_limb);
                     add_qp_glwe_product(
@@ -96,6 +96,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         let poly_length = self.input_size.poly_length().get();
         let qp_poly_len = self.qp_size.rns_poly_len();
         let q_poly_len = self.output_size.rns_poly_len();
+        let scratch_len = hybrid_rns.mod_down_scratch_len(poly_length);
 
         for accumulator in workspace.accumulator_qp.chunks_exact_mut(qp_poly_len) {
             approx_mod_down_ntt(
@@ -104,7 +105,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 accumulator,
                 poly_length,
                 &mut workspace.q_scratch,
-                &mut workspace.mod_down_scratch,
+                &mut workspace.conversion_scratch[..scratch_len],
             );
         }
 
@@ -196,7 +197,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                     mask_polynomial.as_slice(),
                     &mut digit_qp,
                     poly_length,
-                    &mut workspace.mod_up_scratch[..scratch_len],
+                    &mut workspace.conversion_scratch[..scratch_len],
                 );
                 table.transform_slice(&mut digit_qp);
 
@@ -327,20 +328,15 @@ where
         if expected != actual {
             return Err(RnsDomainError::PartitionWidthMismatch { expected, actual });
         }
+        let poly_length = key.input_size.poly_length().get();
+        let conversion_scratch_len = hybrid_rns
+            .max_mod_up_scratch_len(poly_length)
+            .max(hybrid_rns.mod_down_scratch_len(poly_length));
         let workspace = HybridRnsGlweKeySwitchingWorkspace {
             accumulator_qp: vec![T::ZERO; key.qp_size.rns_glwe_len()],
             q_scratch: vec![T::ZERO; key.input_size.rns_poly_len()],
-            mod_up_limb: vec![T::ZERO; key.input_size.poly_length().get()],
-            mod_up_scratch: vec![
-                T::ZERO;
-                hybrid_rns
-                    .max_mod_up_scratch_len(key.input_size.poly_length().get())
-            ],
-            mod_down_scratch: vec![
-                T::ZERO;
-                hybrid_rns
-                    .mod_down_scratch_len(key.input_size.poly_length().get())
-            ],
+            mod_up_limb: vec![T::ZERO; poly_length],
+            conversion_scratch: vec![T::ZERO; conversion_scratch_len],
         };
         Ok(Self {
             key,
@@ -377,15 +373,16 @@ where
     }
 }
 
-/// Scratch overwritten by each switch; its numerical binding belongs to the evaluator.
+/// Reusable scratch whose numerical binding belongs to the evaluator.
 struct HybridRnsGlweKeySwitchingWorkspace<T: FheUint> {
     accumulator_qp: Vec<T>,
     // One coefficient-domain Q polynomial, also reused for mixed ModDown output.
     q_scratch: Vec<T>,
     // One streamed coefficient-domain ModUp limb before its forward NTT.
     mod_up_limb: Vec<T>,
-    mod_up_scratch: Vec<T>,
-    mod_down_scratch: Vec<T>,
+    // ModUp completes before ModDown starts. Each converter overwrites its
+    // required prefix before reading it; one max-sized allocation serves both.
+    conversion_scratch: Vec<T>,
 }
 
 #[cfg(test)]
@@ -410,22 +407,18 @@ mod tests {
         type Value = u64;
 
         let dimension = 2;
-        // Small ring; three Q limbs retain wide arithmetic and an uneven partition.
         let poly_length = PolyLength::new(32);
         let q_moduli =
             [1125899906826241, 1125899906629633, 1125899906031617].map(BarrettModulus::new);
-        let p_moduli = [1125899905036289].map(BarrettModulus::new);
-        let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_moduli).copied().collect();
         let q_table = UintDcrtTable::new(poly_length, &q_moduli).unwrap();
-        let qp_table = UintDcrtTable::new(poly_length, &qp_moduli).unwrap();
         let base = RNSBase::new(&q_moduli).unwrap();
         let size = RnsGlweSize::new(
             GlweSize::new(GlweDimension::new(dimension), poly_length),
             base.moduli_count(),
         );
         let parameters =
-            CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
-        let hybrid = HybridRNS::new(&q_moduli, &p_moduli, 2).unwrap();
+            CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+                .unwrap();
         let mut rng = StdRng::seed_from_u64(0x4859_4252_4944);
         let input_key = GlweSecretKey::generate(
             parameters.size().glwe_size(),
@@ -438,42 +431,67 @@ mod tests {
             &mut rng,
         );
         let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, &q_table);
-        let switching_key = HybridRnsGlweKeySwitchingKey::generate(
-            &input_key,
-            &parameters,
-            &output_key,
-            &hybrid,
-            &qp_table,
-            &mut rng,
-        );
-
-        let encoded = CrtPolynomial::new(
-            (0..size.rns_poly_len())
-                .map(|i| (i % 17) as Value)
-                .collect::<Vec<_>>(),
-        );
-        let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
         let context = input_dcrt_key
             .try_bind_raw(&parameters, &base, &q_table)
             .unwrap();
-        context.encrypt_encoded_crt_to(&encoded, &mut input, &mut rng);
-        let input_coeff = input.clone().into_coeff_form(&q_table);
-        let mut from_ntt: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
-        let mut from_coeff: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
-        let mut ntt_evaluator =
-            HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
-        let mut coeff_evaluator =
-            HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
 
-        ntt_evaluator.key_switch_to(&input, &mut from_ntt);
-        switching_key.key_switch_coeff_reference_to(
-            input_coeff.as_view(),
-            from_coeff.as_mut_view(),
-            &hybrid,
-            &qp_table,
-            &mut coeff_evaluator.workspace,
-        );
+        // Exercise a zero ModDown workspace, then U>D, U=D and U<D. The
+        // uneven two-partition case and single-input conversion remain covered.
+        for (decomposition_count, p_count) in [(2, 1), (1, 2), (2, 2), (3, 2)] {
+            let p_moduli = [1125899905036289, 1125899904679937].map(BarrettModulus::new);
+            let p_moduli = &p_moduli[..p_count];
+            let qp_moduli: Vec<_> = q_moduli.iter().chain(p_moduli).copied().collect();
+            let qp_table = UintDcrtTable::new(poly_length, &qp_moduli).unwrap();
+            let hybrid = HybridRNS::new(&q_moduli, p_moduli, decomposition_count).unwrap();
+            let switching_key = HybridRnsGlweKeySwitchingKey::generate(
+                &input_key,
+                &parameters,
+                &output_key,
+                &hybrid,
+                &qp_table,
+                &mut rng,
+            );
+            let encoded = CrtPolynomial::new(
+                (0..size.rns_poly_len())
+                    .map(|i| (i % 17) as Value)
+                    .collect::<Vec<_>>(),
+            );
+            let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            context.encrypt_encoded_crt_to(&encoded, &mut input, &mut rng);
+            let mut input_coeff = input.clone().into_coeff_form(&q_table);
+            let mut from_ntt: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            let mut from_coeff: DcrtGlwe<Vec<Value>> =
+                DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            let mut ntt_evaluator =
+                HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
+            let mut coeff_evaluator =
+                HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
+            ntt_evaluator.workspace.conversion_scratch.fill(Value::MAX);
+            coeff_evaluator
+                .workspace
+                .conversion_scratch
+                .fill(Value::MAX);
 
-        assert_eq!(from_ntt.as_ref(), from_coeff.as_ref());
+            for zero_input in [false, true] {
+                if zero_input {
+                    input.as_mut().fill(0);
+                    input_coeff.as_mut().fill(0);
+                }
+                from_ntt.as_mut().fill(Value::MAX);
+                from_coeff.as_mut().fill(Value::MAX);
+                ntt_evaluator.key_switch_to(&input, &mut from_ntt);
+                switching_key.key_switch_coeff_reference_to(
+                    input_coeff.as_view(),
+                    from_coeff.as_mut_view(),
+                    &hybrid,
+                    &qp_table,
+                    &mut coeff_evaluator.workspace,
+                );
+                assert_eq!(from_ntt.as_ref(), from_coeff.as_ref());
+                if zero_input {
+                    assert!(from_ntt.as_ref().iter().all(|&value| value == 0));
+                }
+            }
+        }
     }
 }

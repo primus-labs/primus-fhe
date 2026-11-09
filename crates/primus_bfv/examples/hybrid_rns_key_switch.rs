@@ -2,7 +2,9 @@
 //! Run: cargo run -p primus_bfv --example hybrid_rns_key_switch
 //! These parameters demonstrate composition, not a security level.
 
-use primus_bfv::{BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
+use primus_bfv::{
+    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext,
+};
 use primus_glwe_rns::{
     DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
     HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
@@ -15,7 +17,7 @@ use primus_rns::HybridRNS;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     type Value = u64;
 
     let poly_length = PolyLength::new(512);
@@ -24,17 +26,19 @@ fn main() {
     let q_moduli = [1125899906826241, 1125899906629633, 1125899906031617].map(BarrettModulus::new);
     let p_moduli = [1125899905036289].map(BarrettModulus::new);
     let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_moduli).copied().collect();
-    let q_table = U64DcrtTable::new(poly_length, &q_moduli).unwrap();
     let qp_table = U64DcrtTable::new(poly_length, &qp_moduli).unwrap();
 
-    let glwe_parameters = BfvParameters::new(
+    let glwe_parameters = BfvParameters::try_new(
         poly_length,
         plaintext_modulus,
         gamma,
         &q_moduli,
         SecretKeyDistr::SparseTernary,
         3.20,
-    );
+    )?;
+    let context = BfvContext::try_new(glwe_parameters)?;
+    let glwe_parameters = context.parameters();
+    let q_table = context.table();
     let hybrid_rns = HybridRNS::new(&q_moduli, &p_moduli, 2).unwrap();
 
     // Client: generate both secrets and the switching key supplied to the server.
@@ -49,8 +53,8 @@ fn main() {
         glwe_parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
-    let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, &q_table);
-    let output_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&output_key, &q_table);
+    let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, q_table);
+    let output_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&output_key, q_table);
     let switching_key = HybridRnsGlweKeySwitchingKey::generate(
         &input_key,
         glwe_parameters.encryption_parameters(),
@@ -66,13 +70,12 @@ fn main() {
         DcrtGlweCiphertext::zero(glwe_parameters.size().rns_glwe_len());
     let mut output: DcrtGlwe<Vec<Value>> =
         DcrtGlweCiphertext::zero(glwe_parameters.size().rns_glwe_len());
-    let input_dcrt_key_context =
-        BfvSecretKeyContext::try_new(&input_dcrt_key, &glwe_parameters, &q_table).unwrap();
+    let input_dcrt_key_context = BfvSecretKeyContext::try_new(&input_dcrt_key, &context)?;
     let mut native = BfvCiphertext::zero(glwe_parameters.size().rns_glwe_len());
     input_dcrt_key_context.encrypt_to(&plaintext, &mut native, &mut rng);
     // The raw switching key retains b-a*s. Cross this legacy boundary explicitly;
     // ordinary BFV encryption/decryption use native [c0,c1] throughout.
-    native.write_raw_glwe_to(&mut input, &glwe_parameters);
+    native.write_raw_glwe_to(&mut input, glwe_parameters);
 
     // Server: bind evaluation resources once, allocating reusable scratch.
     let mut key_switch_evaluator =
@@ -80,10 +83,10 @@ fn main() {
     key_switch_evaluator.key_switch_to(&input, &mut output);
 
     // Client: decrypt under the output secret using its bound parameters and table.
-    let mut decrypt_workspace = BfvDecryptWorkspace::new(&glwe_parameters);
-    let output_dcrt_key_context =
-        BfvSecretKeyContext::try_new(&output_dcrt_key, &glwe_parameters, &q_table).unwrap();
-    native.set_from_raw_glwe(&output, &glwe_parameters);
+    let mut decrypt_workspace = BfvDecryptWorkspace::new(glwe_parameters);
+    let output_dcrt_key_context = BfvSecretKeyContext::try_new(&output_dcrt_key, &context)?;
+    native.set_from_raw_glwe(&output, glwe_parameters);
     let decrypted = output_dcrt_key_context.decrypt(&native, &mut decrypt_workspace);
     assert_eq!(decrypted, plaintext);
+    Ok(())
 }

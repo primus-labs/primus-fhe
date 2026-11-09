@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the four basic BFV/BGV examples as isolated normal-dependency consumers.
+"""Run basic BFV/BGV workflows and advanced key backends as isolated normal-dependency consumers.
 
 No workspace development dependencies or feature selections are inherited. Use
 --output-dir outside this repository to retain source, manifests, lockfiles,
@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = re.compile(r'\b(?:criterion|dashu-int)(?: v[0-9]| feature ")')
+FORBIDDEN = re.compile(r'\bcriterion(?: v[0-9]| feature ")')
 
 
 def dependency(name: str, batching: bool = False) -> str:
@@ -52,18 +52,23 @@ def check_consumers(output_dir: Path) -> None:
     env = os.environ.copy()
     env["CARGO_TARGET_DIR"] = str(ROOT / "target" / "scheme-consumers")
     for scheme in ("bfv", "bgv"):
-        for example in ("coefficients", "slots"):
+        examples = ["coefficients", "slots", "ciphertext_multiplication"]
+        if scheme == "bfv":
+            examples.append("working_basis")
+        for example in examples:
             name = f"{scheme}_{example}"
             directory = output_dir / name
             (directory / "src").mkdir(parents=True, exist_ok=True)
             batching = example == "slots"
             dependencies = [dependency(f"primus_{scheme}", batching)]
-            dependencies.extend(dependency(crate) for crate in (
-                "primus_decompose", "primus_glwe_rns", "primus_modulus",
-                "primus_shape",
-            ))
-            if batching:
+            if example == "working_basis":
                 dependencies.append(dependency("primus_poly"))
+            else:
+                dependencies.extend(dependency(crate) for crate in (
+                    "primus_glwe_rns", "primus_modulus", "primus_shape",
+                ))
+            if example == "ciphertext_multiplication":
+                dependencies.append(dependency("primus_decompose"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")
             manifest = (
                 f'[package]\nname = "primus_scheme_consumer_{name}"\n'
@@ -93,12 +98,24 @@ def check_consumers(output_dir: Path) -> None:
             )
             if FORBIDDEN.search(tree):
                 raise RuntimeError(f"{name}: test/benchmark dependency leaked into normal tree")
+            if scheme == "bgv" and "dashu-int" in tree:
+                raise RuntimeError(f"{name}: independent BGV unexpectedly resolves the BFV parameter planner")
             if not batching and 'feature "batching"' in tree:
                 raise RuntimeError(f"{name}: coefficient consumer unexpectedly enabled batching")
             if batching and 'primus_encoding feature "batching"' not in tree:
                 raise RuntimeError(f"{name}: scheme batching did not enable the shared encoder")
-            run(["cargo", "run", "--offline", "--locked"], directory, "run.log", env)
-            print(f"{name}: normal dependency request passed; no criterion/dashu-int", flush=True)
+            command = ["cargo", "run", "--offline", "--locked"]
+            if example == "working_basis":
+                command.append("--release")
+            run(command, directory, "run.log", env)
+            if example in ("ciphertext_multiplication", "working_basis"):
+                argument = "--radix" if example == "working_basis" else "--hybrid"
+                run([*command, "--", argument], directory, "run-other-backend.log", env)
+                scope = "radix and Hybrid requests"
+            else:
+                (directory / "run-other-backend.log").unlink(missing_ok=True)
+                scope = "two linear requests with one setup"
+            print(f"{name}: {scope} passed; no criterion", flush=True)
 
 
 def main() -> None:

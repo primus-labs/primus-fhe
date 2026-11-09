@@ -547,12 +547,10 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     let moduli = [257u64, 769].map(BarrettModulus::new);
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), PolyLength::new(32)), 2);
-    let parameters = Arc::new(CrtGlweEncryptionParameters::new(
-        size,
-        &base,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    ));
+    let parameters = Arc::new(
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap(),
+    );
     let table = DcrtTable::<U64NttTable>::new(PolyLength::new(32), &moduli).unwrap();
     let secret = GlweSecretKey::new(vec![1; 32], size.glwe_size(), SecretKeyDistr::SparseTernary);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
@@ -586,8 +584,13 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     // must be rejected even when the ephemeral polynomial has the same length.
     let foreign_size =
         RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(32)), 2);
-    let foreign_parameters =
-        CrtGlweEncryptionParameters::new(foreign_size, &base, SecretKeyDistr::SparseTernary, 3.2);
+    let foreign_parameters = CrtGlweEncryptionParameters::try_new(
+        foreign_size,
+        &base,
+        SecretKeyDistr::SparseTernary,
+        3.2,
+    )
+    .unwrap();
     let foreign_secret = GlweSecretKey::new(
         vec![1; 64],
         foreign_size.glwe_size(),

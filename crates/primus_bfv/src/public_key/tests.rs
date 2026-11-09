@@ -1,13 +1,12 @@
 //! Scheme-boundary identities and independent integer/DFT recovery oracles.
 
 use crate::{
-    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
-    BfvSecretKeyContext,
+    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
+    BfvPublicKeyEncryptor, BfvSecretKeyContext,
 };
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -129,7 +128,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
         (1, 254, SecretKeyDistr::UniformBinary),
         (2, 257, SecretKeyDistr::gaussian(3.2)),
     ] {
-        let parameters = BfvParameters::new(
+        let parameters = BfvParameters::try_new(
             PolyLength::new(N),
             BarrettModulus::new(t),
             BarrettModulus::new(2_199_023_190_017),
@@ -140,18 +139,20 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
                 .collect::<Vec<_>>(),
             secret_distribution,
             3.2,
-        );
-        let table =
-            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+        )
+        .unwrap();
+        let owner = BfvContext::try_new(parameters).unwrap();
+        let parameters = owner.parameters();
+        let table = owner.table();
         let key = GlweSecretKey::generate(
             parameters.size().glwe_size(),
             parameters.encryption_parameters().secret_key_sampler(),
             &mut rng,
         );
         let signed_secret = key.iter().next().unwrap().to_vec();
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
+        let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, table);
         let public = BfvPublicKey::new(
-            &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
+            &BfvSecretKeyContext::try_new(&key, &owner).unwrap(),
             &mut rng,
         );
         let pk_phase = phase_oracle(public.ciphertext.as_ref(), &signed_secret, count);
@@ -166,9 +167,9 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             let error = compose(&pk_phase, degree, count);
             assert!(error.min(product - error) <= error_bound);
         }
-        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
-        let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
-        let mut workspace = BfvDecryptWorkspace::new(&parameters);
+        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
+        let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
+        let mut workspace = BfvDecryptWorkspace::new(parameters);
         let message = Polynomial(
             (0..N)
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
@@ -202,8 +203,12 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             } else {
                 encryptor.encrypt(&message, &mut crt_rng)
             };
-            let lifted_ciphertext =
-                encryptor.encrypt_plaintext_lift_crt(&lifted, &mut StdRng::seed_from_u64(509));
+            let mut lifted_ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+            encryptor.encrypt_plaintext_lift_crt_to(
+                &lifted,
+                &mut lifted_ciphertext,
+                &mut StdRng::seed_from_u64(509),
+            );
             assert_eq!(output.as_ref(), lifted_ciphertext.as_ref());
             assert_eq!(output.as_ref(), expected.as_ref());
             assert_eq!(coefficient_rng.next_u64(), crt_rng.next_u64());
@@ -240,21 +245,22 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
 fn noncanonical_coefficients_preserve_randomness_output_and_public_scratch() {
     for count in [1, 2] {
         let parameters = parameters(count, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
-        let table =
-            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+        let owner = BfvContext::try_new(parameters).unwrap();
+        let parameters = owner.parameters();
+        let table = owner.table();
         let mut setup_rng = StdRng::seed_from_u64(0x4246_5682);
         let coefficient_key = GlweSecretKey::generate(
             parameters.size().glwe_size(),
             parameters.encryption_parameters().secret_key_sampler(),
             &mut setup_rng,
         );
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
+        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
         let public = BfvPublicKey::new(
-            &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
+            &BfvSecretKeyContext::try_new(&key, &owner).unwrap(),
             &mut setup_rng,
         );
-        let secret = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
-        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
+        let secret = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
+        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
         for (index, value) in [(0, 257), (N - 1, u64::MAX)] {
             let mut input = Polynomial(vec![1; N]);
             input.as_mut()[index] = value;

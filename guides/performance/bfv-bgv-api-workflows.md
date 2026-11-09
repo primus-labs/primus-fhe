@@ -14,8 +14,9 @@ level，拥有并复用中间 quadratic 与求值 scratch，提供 `multiply_to`
 高级分阶段操作继续可用；独立 schoolbook、raw 阶段和密钥列诊断留在私有测试，
 不为基准提供额外默认 public API。
 
-BFV 的自动 P 只准备计算资源：在 setup 中选择满足 NTT 条件且与 Q 互素的 60-bit
-素数，精确检查 P>NQ；不改变密文、secret 或 key 的模数。下面的对照保留原显式 P，
+BFV 默认 Exact 后端的自动 P 只准备计算资源：在 setup 中选择满足 NTT 条件且与 Q 互素的 60-bit
+素数，精确检查 P>NQ；可选 HPSPOVERQ 的独立辅助基/误差条件见[专题](bfv-hps-over-q.md)。该选择
+不改变密文、secret 或 key 的模数。下面的对照保留原显式 P，
 隔离普通请求组合的变化；不据此声称自动 prime search 的 setup 最优。
 
 ## 完整 fresh 槽请求
@@ -26,7 +27,7 @@ Alice→Bob 换钥、两次 prime drop、恢复与解码。构造、建钥、缓
 在计时外。BFV 和 BGV 使用各自原 Q 链，不作跨方案速度归因。
 
 每方案独立 ABBA 四个进程，每进程 30 samples，warmup1s/measurement3s，
-CPU affinity 0、单 Rayon worker、stable native release、无 SIMD。所有构建和其他
+CPU affinity 0、单 Rayon worker、stable native release、未启用Cargo `simd`（NTT保留运行时intrinsic分派）。所有构建和其他
 验证在采样前结束。每个 artifact 的同负载 smoke 通过，测量前后源码和 binary SHA
 保持不变。
 

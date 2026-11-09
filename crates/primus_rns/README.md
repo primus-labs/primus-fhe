@@ -16,6 +16,9 @@ English | [简体中文](README.zh_CN.md)
 | `RNSBase<T, M>` | A non-empty, pairwise-coprime modulus basis and its CRT precomputations |
 | `BaseConverter<T, M>` | Precomputed fast or corrected conversion between two RNS bases |
 | `CorrectedConversionWorkspace<T>` | Reusable workspace for corrected batched conversion |
+| `CenteredBaseConverter` / `CenteredConversionWorkspace` | Exact u64 centered basis conversion with certified fast correction and integer boundary fallback |
+| `HpsRns` | u64 HPS exact centered expansion, P/Q prescaling and t/P rounding precomputation |
+| `HpsRnsWorkspace` | Reusable HPS batch scratch, including exact boundary fallback |
 | `HybridRNSPartitioning` | Fixed full-`Q` partition rule shared across modulus-chain levels |
 | `HybridRNS<T, M>` | Bases and precomputations for one active hybrid-RNS level |
 | `HybridRNSPartition<T, M>` | One contiguous `Q` partition and its approximate ModUp converter |
@@ -62,6 +65,10 @@ Batched big integers use the opposite grouping: each value occupies one contiguo
 
 Cloning an `RNSBase` shares immutable precomputations without copying buffers. `extend` / `extend_with` create a new base and leave the original unchanged. Reuse a prepared base rather than independently constructing the same basis.
 
+`prefix(count)` derives a nonempty ordered prefix without repeating inherited
+coprimality checks. A shorter prefix prepares its distinct CRT constants; the
+full prefix shares the existing owner. It panics for zero or an excessive count.
+
 Use `compose*` and `decompose*` for CRT conversion. Single-value operations accept borrowed `Residues` / `BigUint` views; obtain these through `view()` or `view_mut()` on owned storage. Single-value decomposition does not impose Q's limb width; the modulus implementation's limb-slice contract still applies. Batched big integers use the fixed width described above. Empty batches perform no writes, with the documented output, factor and scratch lengths still required.
 
 `wrapping_decompose*` performs centered lifting from a smaller modulus `t`: values below `ceil(t / 2)` are nonnegative and the rest are negative representatives. For `t = 2`, both `0` and `1` are preserved, so `1` is not lifted as `-1`.
@@ -70,14 +77,18 @@ The two `add_*decompose_small_values_scaled_assign` operations add weighted resi
 
 ## Base conversion
 
-`BaseConverter::new` shares the prepared input and output bases; `from_owned_bases` takes ownership of their handles. Cloning a multi-modulus converter copies its conversion matrix, so reuse the converter in repeated paths.
+`BaseConverter::new` shares the prepared input and output bases; `from_owned_bases` takes ownership of their handles. Cloning also shares the immutable conversion matrix. A general converter uses a small shared owner for that matrix; a single-input converter stores no matrix.
 
 Conversion is intended for runtime or derived Barrett contexts. Multi-modulus conversion requires cross-modulus dot products accepting source residues even when they exceed the destination modulus; Barrett accepts operands below `2^(T::BITS - 2)`. Custom contexts must satisfy the [converter arithmetic contract](src/converter/fast.rs); `FieldContext` alone does not establish these ranges.
 
-The two conversion families have different mathematical contracts:
+Conversion operations have different mathematical contracts:
 
 - `fast_convert` and `fast_convert_array` compute a SEAL-style approximate CRT lift. With a multi-modulus input basis, the result represents `x + kQ` for some integer `k`; it is not generally the canonical `x mod p_j`. This is suitable only when the surrounding algorithm cancels or accepts the multiple-of-`Q` term. A single-modulus input uses exact direct reduction.
 - `corrected_convert_array` applies a quotient correction, interprets the input through its centered representative in `[-Q/2, Q/2)`, and requires exactly one output modulus. For multi-modulus inputs, correction uses `f64`, so values near the centered boundary may differ by one multiple of `Q` modulo the output modulus; applications requiring exactness there need a higher-precision method. See the [corrected-conversion API](src/converter/corrected.rs).
+
+- `CenteredBaseConverter::try_new(&input,&output)` prepares exact centered conversion for odd u64 bases below 2^62, including multiple output moduli. `workspace(value_count)` and `convert_to` reuse all storage. A conservative floating interval certifies the fast CRT quotient; uncertain half boundaries use exact multiword composition. This is shared by HPS and native Hybrid correction, without preparing unrelated HPS scaling resources.
+
+When a converter already exists, `CenteredBaseConverter::try_from_converter(converter)` retains its prepared bases and matrix, adding only the centered-lift constants. It still checks the centered algorithm's modulus requirements; an approximate converter does not establish them.
 
 Create a `CorrectedConversionWorkspace` through `corrected_conversion_workspace` and reuse it with the same converter and length. Fast conversion accepts a scratch slice sized by `fast_convert_scratch_len` or `fast_convert_array_scratch_len`. Empty batches perform no writes; corrected conversion still requires one output modulus and a workspace of the matching shape. Each concurrent operation needs separate mutable workspace.
 
@@ -93,9 +104,14 @@ The fixed size must produce exactly `dnum` non-empty partitions. For example, fi
 
 Use `HybridRNS::from_partitioning` at shorter, ordered-prefix levels of the same modulus chain so key-compatible partition boundaries remain fixed. The constructor validates the active modulus count; the owner of the modulus chain must preserve the prefix relationship.
 
+`HybridRNS::from_bases` reuses prepared Q/P handles. A partition covering all active Q shares those same bases rather than rebuilding their CRT tables. `mod_down_converter()` borrows the prepared approximate P→Q converter; clone it into `CenteredBaseConverter::try_from_converter` when exact centered correction is needed. The two conversion semantics remain distinct.
+
 Each partition supports approximate ModUp into `Q || P`; streaming ModUp emits only converted complement limbs, leaving the caller to supply unchanged partition limbs. ModDown converts the `P` correction into `Q`, subtracts it, and multiplies by `P^-1 mod q_i`.
 
-For scheme-specific corrections, use `approx_convert_p_to_q_to` followed by `approx_mod_down_from_correction_q_assign`; the caller owns the correction's source, sign and scaling in the same ordered Q basis. This is not automatically a BFV, BGV or CKKS modulus-reduction rule. Zero-length Hybrid operations perform no writes or streaming callbacks. See the [hybrid APIs](src/hybrid).
+For scheme-specific corrections, use `approx_convert_p_to_q_to` followed by `approx_mod_down_from_correction_q_assign`; the caller owns the correction's source, sign and scaling in the same ordered Q basis. This is not automatically a BFV, BGV or CKKS modulus-reduction rule. Zero-length Hybrid operations perform no writes or streaming callbacks. See the [hybrid APIs](src/hybrid). Native BFV/BGV use these partitioned ModUp
+primitives with exact centered P corrections in the separately owned
+[Native Hybrid product](../../guides/development/native-hybrid-keys.md); the approximate ModDown
+entry is not silently changed into that scheme-specific rule.
 
 ## Caller contracts and workspace
 
@@ -119,3 +135,16 @@ cargo bench -p primus_rns --bench decompose
 ## License
 
 Licensed under either the [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) or the [MIT License](../../LICENSE-MIT), at your option.
+
+## HPS coefficient operations
+
+`HpsRns::try_new(&base_q,&base_p,t)` prepares disjoint odd u64 bases below
+`2^62`; its immutable handles share existing CRT precomputation. Prepare one
+`workspace(value_count)` and reuse it for allocation-free modulus-major batches.
+`expand_q_to_p` and `expand_p_to_q` select exact centered representatives, with
+a certified floating point correction and exact multiword boundary fallback.
+`scale_q_to_p` uses HPS's bounded one-sided P/Q residual rule; it is not nearest
+rounding. `scale_and_round` computes exact `nearest(t*z/P) mod Q` from coherent
+Q/P residues. These operations do not certify NTT primes or BFV circuit noise;
+the [BFV contract](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+records the consuming algorithm and auxiliary-basis/error conditions.

@@ -5,9 +5,9 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT and by RNS GLWE implementations.
+`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT, by RNS GLWE implementations, and by native BFV/BGV Hybrid products.
 
-Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), and [`primus_glwe_rns`](../primus_glwe_rns).
+Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), [`primus_glwe_rns`](../primus_glwe_rns), [`primus_bfv`](../primus_bfv), and [`primus_bgv`](../primus_bgv).
 
 ## Ciphertext families
 
@@ -24,6 +24,10 @@ Let `N` be the polynomial length, `k` the GLWE mask dimension, `L` the gadget le
 | `Nlev` / `Ngsw` | `L` NTRU polynomials in decomposition order | Coefficient, NTT |
 
 RLWE, RLev and RGSW use `Glwe`, `Glev` and `Ggsw` with `GlweSize::new(GlweDimension::new(1), PolyLength::new(N))`; their NTT and CRT/DCRT representations follow the same dimension-one layout.
+
+That generic RLWE layout uses mask/body order. Native BFV/BGV `[c0,c1]`
+plus-phase storage follows the scheme and native Hybrid contracts; borrowing a
+view does not convert between those conventions.
 
 Types are exported through their modules, for example `glwe::Glwe`, `ggsw::NttGgsw`, and `ngsw::NttNgsw`. Prefixes identify the representation. `Torus*` aliases name native-torus uses of coefficient wrappers; they do not enforce a modulus or perform encoding.
 
@@ -77,6 +81,23 @@ External products can return coefficients or retain transformed output through `
 NLev `external_product_sum_to` and GGSW/NGSW `cmux_k_to` accept exact-size iterators with matching counts. Pass borrowed gadgets and polynomial/ciphertext views, `output.as_mut_view()` for output, and `default.as_view()` for the CMux default. Candidates may come from `GlweIter` / `NtruIter` or borrowed ciphertext collections, without collecting views. Empty sums write zero; empty CMux copies its default. Fourier rounds the aggregate result, which can differ from summing separately converted coefficient products.
 
 Full GLWE extraction flattens all mask polynomials into an LWE mask; compact extraction requires the omitted secret suffix to be zero. `MultiMsgLwe` represents one shared mask in constant-term extraction order; its extractors rotate that mask negacyclically for each retained body coefficient. Inverse extraction embeds the constant-term LWE sample and zero-fills unused storage; it does not recover every coefficient of the original GLWE plaintext.
+
+## Native Hybrid RNS products
+
+With `rns`, `radix::NativeRadixParameters` shares immutable rank-one signed
+decomposition, checked column geometry and CRT weights across BFV/BGV role
+keys. It binds N and ordered Q, without certifying secret or transform identity.
+Scheme key generators accept it through `EvaluationKeyConfig::PreparedRadix`.
+
+With `rns`, `hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
+provides fixed-u64 rank-one `[c0,c1]` plus-phase arithmetic for BFV/BGV keys.
+Parameters share immutable CRT bases and own only P NTT tables; actual Q NTT
+resources stay with the scheme. A prepared product shares that owner and reuses
+all mutable scratch. `HybridModDown::Centered` and `PlaintextPreserving(p)` keep
+their distinct corrections. This adds no ciphertext family or raw GLWE bridge.
+Scheme owners still generate/sanitize role keys and establish all error/security
+conditions; the shared setup extension recovers one actual supported coefficient
+secret before constructing its P limbs. See the [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
 
 ## Correctness and workspace contracts
 

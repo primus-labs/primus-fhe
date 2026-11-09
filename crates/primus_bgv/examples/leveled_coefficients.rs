@@ -1,4 +1,5 @@
-//! Complete native BGV coefficient evaluation and a switch to another secret.
+//! Advanced: square, automorphism, key switching and two native prime drops.
+//! Run: cargo run -p primus_bgv --example leveled_coefficients
 
 use primus_bgv::{
     BgvAutomorphism, BgvClient, BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,

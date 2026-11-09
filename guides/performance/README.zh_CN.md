@@ -9,6 +9,9 @@
 | 主题 | 正文语言 | 保留价值 |
 | --- | --- | --- |
 | [BFV/BGV 普通工作流](bfv-bgv-api-workflows.md) | 中文 | 组合乘法、私有验证边界、完整请求 ABBA 及分配/存储对照 |
+| [BFV HPSPOVERQ](bfv-hps-over-q.md) | English | Exact对照、有界预缩放/wrap、同参数完整请求和对象资源成本 |
+| [BFV HPSPOVERQLEVELED](bfv-hps-over-q-leveled.md) | 中文 | 临时工作基、同误差条件对照与完整请求/资源取舍 |
+| [Native Hybrid 求值密钥](native-hybrid-keys.md) | English | 同数据参数的 BFV/BGV 完整请求、实际 QP、密钥准备与 scratch 成本 |
 | [BFV 系数输入检查](bfv-coefficient-validation.md) | English | 统一加密入口的 early rejection 及完整请求 ABBA 性能验证 |
 | [BFV 精确密文乘法](bfv-multiplication.md) | English | 精确 RNS NTT/reference 对照、完整 fresh 槽请求与未改系数负载对照 |
 | [BGV 多级槽请求](bgv-leveled.md) | English | 乘法/relin/旋转/换钥/drop 完整流水线及原工作流 ABBA 控制 |

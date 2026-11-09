@@ -1,19 +1,18 @@
-//! Prepared public encryption, gadget encryption and explicit scratch erasure.
+//! Prepared raw public encryption, output reuse and explicit scratch erasure.
 //!
 //! Run: cargo run -p primus_glwe_rns --example public_encryption
 //! The small ring demonstrates API composition, not secure parameters.
 
-use primus_decompose::DecompositionBaseLog;
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey,
-    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey,
+    GlweSecretKey, SecretKeyDistr,
 };
-use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize, ggsw::DcrtGgsw};
+use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial};
-use primus_rns::{RNSBase, Residues};
+use primus_rns::RNSBase;
 use primus_shape::PolyLength;
 use zeroize::Zeroize;
 
@@ -57,13 +56,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     raw.encrypt_zeros_to(&mut output, &mut rng);
     raw.workspace_mut().zeroize(); // Keeps the allocation ready for reuse.
 
-    let gadget = CrtGlevParameters::try_new(size, base, DecompositionBaseLog::new(20), None)?;
-    let mut gadget_encryptor = public.try_bind_gadget(&gadget, &sampling, &table)?;
-    let coefficients = Residues::new(vec![1u64; values.len()]);
-    let mut gadget_output = DcrtGgsw::<Vec<u64>>::zero(gadget.rns_ggsw_len());
-    gadget_encryptor.encrypt_monomial_ggsw_to(&coefficients, 7, &mut gadget_output, &mut rng);
-    gadget_encryptor.encrypt_monomial_ggsw_to(&coefficients, 0, &mut gadget_output, &mut rng);
-    gadget_encryptor.workspace_mut().zeroize();
-    println!("prepared public encryption and gadget output reuse verified");
+    println!("prepared raw public encryption and output reuse verified");
     Ok(())
 }

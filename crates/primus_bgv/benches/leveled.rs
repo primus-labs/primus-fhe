@@ -2,8 +2,8 @@
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
-    BgvParameters,
+    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvKeySwitcher,
+    BgvModulusSwitch, BgvMultiplication, BgvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
@@ -14,6 +14,11 @@ use rand::{SeedableRng, rngs::StdRng};
 use std::hint::black_box;
 
 fn leveled(c: &mut Criterion) {
+    for hybrid in [false, true] {
+        leveled_backend(c, hybrid);
+    }
+}
+fn leveled_backend(c: &mut Criterion, hybrid: bool) {
     const N: usize = 1024;
     const SLOTS: usize = 256;
     const ACTIVE: usize = 113;
@@ -49,11 +54,27 @@ fn leveled(c: &mut Criterion) {
     let mut bob = BgvClient::generate(&context, &mut rng);
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
-    let relin_key = alice.relinearization_key(0, config, &mut rng).unwrap();
+    let config0: BgvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(0, moduli.len(), &[1_152_921_504_606_830_593])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
+    let config1: BgvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(1, moduli.len(), &[1_152_921_504_606_830_593])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
+    let relin_key = alice.relinearization_key(0, config0, &mut rng).unwrap();
     let rotate_key = alice
-        .row_rotation_key(1, &batching, 1, config, &mut rng)
+        .row_rotation_key(1, &batching, 1, config1.clone(), &mut rng)
         .unwrap();
-    let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng).unwrap();
+    let switch_key = bob.key_switching_key(&alice, 1, config1, &mut rng).unwrap();
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key).unwrap();
     let mut rotate = BgvAutomorphism::try_new(&context, &rotate_key).unwrap();
     let mut switch = BgvKeySwitcher::try_new(&context, &switch_key).unwrap();
@@ -75,7 +96,10 @@ fn leveled(c: &mut Criterion) {
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];
 
-    let mut group = c.benchmark_group("bgv_leveled_slots");
+    let mut group = c.benchmark_group(format!(
+        "bgv_leveled_slots/{}",
+        if hybrid { "hybrid" } else { "radix" }
+    ));
     group.throughput(Throughput::Elements(1));
     {
         let mut request = || {

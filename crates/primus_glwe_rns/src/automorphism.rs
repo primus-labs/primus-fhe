@@ -69,7 +69,7 @@ impl<T: FheUint> AutomorphismKeyMetadata<T> {
 /// Scratch allocated from the already bound parameters. Each kernel overwrites it;
 /// only the evaluator owns its compatibility contract.
 pub(crate) struct AutomorphismWorkspace<T: FheUint> {
-    auto_crt_poly: CrtPolynomial<Vec<T>>,
+    polynomial: CrtPolynomial<Vec<T>>,
     glev_workspace: DcrtGlevMulWorkspace<T>,
 }
 
@@ -82,16 +82,16 @@ impl<T: FheUint> AutomorphismWorkspace<T> {
         let glwe_size = size.rns_glwe_size();
         let crt_poly_len = glwe_size.rns_poly_len();
 
-        let auto_crt_poly = CrtPolynomial::zero(crt_poly_len);
+        let polynomial = CrtPolynomial::zero(crt_poly_len);
         let glev_workspace = DcrtGlevMulWorkspace::new(size, parameters.base_q());
 
         Self {
-            auto_crt_poly,
+            polynomial,
             glev_workspace,
         }
     }
 
     pub(crate) fn as_mut(&mut self) -> (&mut CrtPolynomial<Vec<T>>, &mut DcrtGlevMulWorkspace<T>) {
-        (&mut self.auto_crt_poly, &mut self.glev_workspace)
+        (&mut self.polynomial, &mut self.glev_workspace)
     }
 }

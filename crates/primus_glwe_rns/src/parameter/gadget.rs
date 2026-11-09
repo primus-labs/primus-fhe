@@ -34,22 +34,6 @@ where
     T: FheUint,
     M: FieldContext<T>,
 {
-    /// Prepares gadget decomposition for a checked GLWE layout and ordered Q base.
-    /// The radix, retained levels and ordered base obey [`Self::try_new`].
-    ///
-    /// # Panics
-    /// Panics if [`Self::try_new`] rejects the supplied parameters.
-    #[must_use]
-    pub fn new(
-        glwe_size: RnsGlweSize,
-        base_q: RNSBase<T, M>,
-        log_basis: DecompositionBaseLog,
-        level_count: Option<DecompositionLevelCount>,
-    ) -> Self {
-        Self::try_new(glwe_size, base_q, log_basis, level_count)
-            .unwrap_or_else(|error| panic!("failed to construct CRT GLev parameters: {error}"))
-    }
-
     /// Checks layout/base geometry and prepares its decomposition.
     ///
     /// No plaintext codec or sampling state is created. The ordered base is moved.
@@ -243,6 +227,3 @@ where
         self.poly_length().get() * self.big_uint_value_len()
     }
 }
-
-/// CRT GGSW parameters, sharing the GLev decomposition configuration.
-pub type CrtGgswParameters<T, M> = CrtGlevParameters<T, M>;

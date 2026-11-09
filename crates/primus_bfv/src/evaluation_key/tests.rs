@@ -58,7 +58,7 @@ fn multiply(a: u64, b: u64, q: u64) -> u64 {
     (u128::from(a) * u128::from(b) % u128::from(q)) as u64
 }
 
-fn power(mut value: u64, mut exponent: u64, q: u64) -> u64 {
+pub(super) fn power(mut value: u64, mut exponent: u64, q: u64) -> u64 {
     let mut result = 1;
     while exponent != 0 {
         if exponent & 1 != 0 {
@@ -126,7 +126,7 @@ fn dft(coefficients: &[IBig], q: u64) -> Vec<u64> {
         .collect()
 }
 
-fn inverse(values: &[u64], q: u64) -> Vec<u64> {
+pub(super) fn inverse(values: &[u64], q: u64) -> Vec<u64> {
     let points = points(q);
     (0..N)
         .map(|degree| {
@@ -499,6 +499,233 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
 
 fn columns(key: &NativeEvaluationKey) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
     key.columns
-        .chunks_exact(key.size.rns_glwe_size().rns_glwe_len())
+        .chunks_exact(2 * key.key_poly_len())
         .map(BfvCiphertext::new)
+}
+
+#[test]
+fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_bounds() {
+    let source: Vec<i64> = (0..N).map(|i| [-1, 1, 0, 1][i % 4]).collect();
+    let target: Vec<i64> = (0..N).map(|i| [1, 0, -1][i % 3]).collect();
+    let source_big: Vec<_> = source.iter().copied().map(IBig::from).collect();
+    let target_big: Vec<_> = target.iter().copied().map(IBig::from).collect();
+    let context = make_context(P, &Q, N);
+    let source_client = client(&context, &source);
+    let target_client = client(&context, &target);
+    for level in 0..context.level_count() {
+        let count = Q.len() - level;
+        let modulus = total_modulus(count);
+        let components: Vec<Vec<_>> = (0..3)
+            .map(|component| {
+                (0..N)
+                    .map(|i| {
+                        centered(
+                            &(&modulus / 2u64 - IBig::from(i * 19 + component * 37)),
+                            &modulus,
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
+        for auxiliary in [
+            &[1_099_511_626_049u64][..],
+            &[1_152_921_504_606_830_593, 1_152_921_504_606_748_673][..],
+        ] {
+            let parameters = context.hybrid_key_parameters(level, 2, auxiliary).unwrap();
+            let mut rng = StdRng::seed_from_u64(0x24bf0a11 + level as u64);
+            let switch = target_client
+                .key_switching_key(&source_client, level, parameters.clone(), &mut rng)
+                .unwrap();
+            let relin = source_client
+                .relinearization_key(level, parameters.clone(), &mut rng)
+                .unwrap();
+            let auto = source_client
+                .automorphism_key(level, 5, parameters.clone(), &mut rng)
+                .unwrap();
+            let source_square = product(&source_big, &source_big);
+            let transformed = automorphism(&source_big, 5);
+            let p = auxiliary.iter().fold(IBig::ONE, |x, &p| x * p);
+            // Independently derive each column's QP phase and its shared integer
+            // error. The weight is P only in the contiguous alpha=2 partition.
+            for (key, h, secret) in [
+                (&switch.key, &source_big, &target_big),
+                (&relin.key, &source_square, &source_big),
+                (&auto.key, &transformed, &source_big),
+            ] {
+                let moduli = key.key_moduli_values(&context);
+                for (column, values) in key.columns.chunks_exact(2 * key.key_poly_len()).enumerate()
+                {
+                    let mut first_errors = None;
+                    for (index, &q) in moduli.iter().enumerate() {
+                        let length = key.key_poly_len();
+                        let secret = dft(secret, q);
+                        let row: Vec<_> = (0..N)
+                            .map(|i| {
+                                (values[index * N + i]
+                                    + multiply(values[length + index * N + i], secret[i], q))
+                                    % q
+                            })
+                            .collect();
+                        let phase = inverse(&row, q);
+                        let weight = if index < count && index / 2 == column {
+                            &p % q
+                        } else {
+                            0
+                        };
+                        let errors: Vec<_> = phase
+                            .iter()
+                            .zip(h)
+                            .map(|(&x, h)| centered(&(IBig::from(x) - weight * h), &IBig::from(q)))
+                            .collect();
+                        assert!(errors.iter().all(|e| e >= &-IBig::ONE && e <= &IBig::ONE));
+                        if let Some(first) = &first_errors {
+                            assert_eq!(&errors, first, "QP columns use one coherent integer error");
+                        } else {
+                            first_errors = Some(errors);
+                        }
+                    }
+                }
+            }
+            let digit_sum = Q[..count].chunks(2).fold(IBig::ZERO, |sum, part| {
+                sum + part.len() * part.iter().fold(IBig::ONE, |x, &q| x * q)
+            });
+            let check = |actual: Vec<IBig>, before: Vec<IBig>, secret: &[IBig]| {
+                let h = secret.iter().fold(IBig::ZERO, |sum, s| {
+                    sum + if s < &IBig::ZERO { -s } else { s.clone() }
+                });
+                let bound = (IBig::from(N) * &digit_sum + &p - 1u64) / &p + (&h + 2u64) / 2u64;
+                assert!(bound < &modulus / 2u64);
+                for (actual, before) in actual.iter().zip(before) {
+                    let error = centered(&(actual - before), &modulus);
+                    assert!(
+                        error >= -&bound && error <= bound,
+                        "native Hybrid key/decomposition/ModDown residual bound"
+                    );
+                }
+            };
+            let input = BfvCiphertext::new(encode(&components[..2], count));
+            let mut output = context.new_ciphertext(level);
+            BfvKeySwitcher::try_new(&context, &switch)
+                .unwrap()
+                .switch_to(&input, &mut output);
+            check(
+                phase(output.as_ref(), &target_big, count),
+                phase(input.as_ref(), &source_big, count),
+                &target_big,
+            );
+            let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
+            BfvRelinearizer::try_new(&context, &relin)
+                .unwrap()
+                .relinearize_to(&quadratic, &mut output);
+            check(
+                phase(output.as_ref(), &source_big, count),
+                phase(quadratic.as_ref(), &source_big, count),
+                &source_big,
+            );
+            BfvAutomorphism::try_new(&context, &auto)
+                .unwrap()
+                .apply_to(&input, &mut output);
+            check(
+                phase(output.as_ref(), &source_big, count),
+                automorphism(&phase(input.as_ref(), &source_big, count), 5),
+                &source_big,
+            );
+        }
+    }
+}
+
+#[test]
+fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous() {
+    use super::{BfvEvaluationKeyError, NativeHybridError};
+    use rand::Rng;
+    let law = SecretKeyDistr::gaussian(60_000_000_000_000.0);
+    let make = |moduli: &[u64]| {
+        BfvContext::try_with_levels(
+            BfvParameters::try_with_error_distribution(
+                PolyLength::new(N),
+                BarrettModulus::new(2),
+                BarrettModulus::new((1 << 61) - 1),
+                &moduli
+                    .iter()
+                    .copied()
+                    .map(BarrettModulus::new)
+                    .collect::<Vec<_>>(),
+                law,
+                ErrorDistribution::CenteredBinomial { eta: 1 },
+            )
+            .unwrap(),
+            moduli.len(),
+        )
+        .unwrap()
+    };
+    let source_context = make(&Q);
+    let target_context = make(&[Q[0], Q[1], 1_125_899_906_826_241]);
+    let magnitude = (Q[0] / 2 + 7) as i64;
+    let mut coefficients = vec![0i64; N];
+    coefficients[0] = magnitude;
+    coefficients[3] = -magnitude;
+    let expected: Vec<_> = coefficients.iter().copied().map(IBig::from).collect();
+    let secret = GlweSecretKey::new(
+        coefficients,
+        source_context.parameters().size().glwe_size(),
+        law,
+    );
+    let source = BfvClient::try_from_secret_key(
+        &source_context,
+        DcrtGlweSecretKey::from_coeff_secret_key(&secret, source_context.table()),
+    )
+    .unwrap();
+    assert!(
+        source_context
+            .parameters()
+            .encryption_parameters()
+            .secret_key_sampler()
+            .maximum_magnitude()
+            > Q[0] / 2
+    );
+    for level in 0..3 {
+        let target_context = if level == 0 {
+            &source_context
+        } else {
+            &target_context
+        };
+        let params = target_context
+            .hybrid_key_parameters(level, 2, &[1_099_511_626_049])
+            .unwrap();
+        let key = NativeEvaluationKey::prepare_metadata(target_context, level, params).unwrap();
+        let extended = key.secret(&source_context, source.secret_key()).unwrap();
+        for (limb, &q) in extended
+            .as_chunks::<N>()
+            .0
+            .iter()
+            .zip(key.key_moduli_values(target_context))
+        {
+            assert_eq!(limb.as_slice(), dft(&expected, q));
+        }
+    }
+    // This residue has both positive and negative candidates inside the
+    // supported interval, so the original coefficient is ambiguous.
+    let ambiguous = make(&Q[..1]);
+    let small = GlweSecretKey::new(
+        vec![magnitude; N],
+        ambiguous.parameters().size().glwe_size(),
+        law,
+    );
+    let client = BfvClient::try_from_secret_key(
+        &ambiguous,
+        DcrtGlweSecretKey::from_coeff_secret_key(&small, ambiguous.table()),
+    )
+    .unwrap();
+    let params = ambiguous
+        .hybrid_key_parameters(0, 1, &[1_099_511_626_049])
+        .unwrap();
+    let mut rng = StdRng::seed_from_u64(0x24bf5ec);
+    let mut before = StdRng::seed_from_u64(0x24bf5ec);
+    assert!(matches!(
+        client.relinearization_key(0, params, &mut rng),
+        Err(BfvEvaluationKeyError::Hybrid(
+            NativeHybridError::AmbiguousSecret { .. }
+        ))
+    ));
+    assert_eq!(rng.next_u64(), before.next_u64());
 }

@@ -3,7 +3,7 @@ use primus_glwe_rns::RnsDomainError;
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, U64DcrtTable};
 use primus_poly::Polynomial;
-use primus_rns::RNSBase;
+use std::sync::Arc;
 
 use crate::{
     BfvCiphertext, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor, BfvQuadraticCiphertext,
@@ -15,6 +15,9 @@ pub enum BfvContextError {
     /// The ciphertext basis does not support the required NTT.
     #[error(transparent)]
     Transform(#[from] NttError<u64>),
+    /// The supplied shared table differs from the parameter geometry or ordered Q.
+    #[error(transparent)]
+    Binding(#[from] RnsDomainError<u64>),
     /// A requested lower level fails the coefficient codec's recovery bounds.
     #[error(transparent)]
     Encoding(#[from] BfvRnsCodecError<u64>),
@@ -30,7 +33,7 @@ pub enum BfvContextError {
 
 /// Shared immutable BFV resources for one ordered prefix chain.
 ///
-/// Owns the supplied parameters, one NTT table for the full Q basis, and one
+/// Owns the supplied parameters, a shared NTT table for the full Q basis, and one
 /// distinct codec for each requested lower Q. Sampling is prepared only once,
 /// for fresh encryption at level zero. Clients and evaluators borrow this owner;
 /// they do not clone codecs, tables or sampling state.
@@ -41,7 +44,7 @@ pub enum BfvContextError {
 /// the appropriate actual secret. Equal lengths alone do not prove identity.
 pub struct BfvContext {
     parameters: BfvParameters,
-    table: U64DcrtTable,
+    table: Arc<U64DcrtTable>,
     lower_codecs: Vec<BfvRnsCodec<u64, BarrettModulus<u64>>>,
 }
 
@@ -66,24 +69,60 @@ impl BfvContext {
         parameters: BfvParameters,
         level_count: usize,
     ) -> Result<Self, BfvContextError> {
+        Self::validate_level_count(&parameters, level_count)?;
+        let table = Arc::new(U64DcrtTable::new(
+            parameters.poly_length(),
+            parameters.base_q().moduli(),
+        )?);
+        Self::from_bound_table(parameters, level_count, table)
+    }
+
+    /// Consumes parameters and shares an existing immutable full-Q transform table.
+    ///
+    /// This is useful for paired scheme contexts using the same actual transform.
+    /// Lower codecs retain their scheme-specific scaling and recovery constants.
+    ///
+    /// # Errors
+    /// Rejects an invalid level count, a table with different N/ordered Q, or an
+    /// invalid lower codec. Numerical agreement does not establish secret identity.
+    pub fn try_with_table(
+        parameters: BfvParameters,
+        level_count: usize,
+        table: Arc<U64DcrtTable>,
+    ) -> Result<Self, BfvContextError> {
+        Self::validate_level_count(&parameters, level_count)?;
+        parameters.encryption_parameters().validate_table(&table)?;
+        Self::from_bound_table(parameters, level_count, table)
+    }
+
+    fn validate_level_count(
+        parameters: &BfvParameters,
+        requested: usize,
+    ) -> Result<(), BfvContextError> {
         let maximum = parameters.base_q().moduli_count();
-        if level_count == 0 || level_count > maximum {
-            return Err(BfvContextError::LevelCount {
-                requested: level_count,
-                maximum,
-            });
+        if requested == 0 || requested > maximum {
+            return Err(BfvContextError::LevelCount { requested, maximum });
         }
+        Ok(())
+    }
+
+    // Both callers established N/Q/table and level geometry; only genuinely new
+    // prefix codecs remain to be prepared here.
+    fn from_bound_table(
+        parameters: BfvParameters,
+        level_count: usize,
+        table: Arc<U64DcrtTable>,
+    ) -> Result<Self, BfvContextError> {
+        let maximum = parameters.base_q().moduli_count();
         let mut lower_codecs = Vec::with_capacity(level_count - 1);
         for level in 1..level_count {
-            let base = RNSBase::new(&parameters.base_q().moduli()[..maximum - level])
-                .expect("a nonempty prefix of a valid RNS basis is valid");
+            let base = parameters.base_q().prefix(maximum - level);
             lower_codecs.push(BfvRnsCodec::try_new(
                 BarrettModulus::new(parameters.codec().t()),
                 base,
                 BarrettModulus::new(parameters.codec().gamma()),
             )?);
         }
-        let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli())?;
         Ok(Self {
             parameters,
             table,
@@ -101,6 +140,12 @@ impl BfvContext {
     #[must_use]
     pub fn table(&self) -> &U64DcrtTable {
         &self.table
+    }
+
+    /// Shares this context's actual immutable table without copying its roots.
+    #[must_use]
+    pub fn shared_table(&self) -> Arc<U64DcrtTable> {
+        Arc::clone(&self.table)
     }
 
     /// Returns the number of prepared levels, including level zero.
@@ -185,6 +230,6 @@ impl BfvContext {
         &'a self,
         key: &'a BfvPublicKey,
     ) -> Result<BfvPublicKeyEncryptor<'a>, RnsDomainError<u64>> {
-        BfvPublicKeyEncryptor::try_new(key, &self.parameters, &self.table)
+        BfvPublicKeyEncryptor::try_new(key, self)
     }
 }

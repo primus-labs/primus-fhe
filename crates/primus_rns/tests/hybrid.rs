@@ -70,6 +70,23 @@ fn construction_uses_fixed_partitioning_and_precomputes_p() {
 }
 
 #[test]
+fn single_partition_mod_up_preserves_q_and_extends_into_p() {
+    let hybrid = make_hybrid(&[17, 41, 73], &[89, 97], 1);
+    let partition = hybrid.partitions().next().unwrap();
+    let input = [1, 2, 3, 4, 11, 12, 13, 14, 21, 22, 23, 24];
+    let mut output = vec![0; 4 * hybrid.qp_moduli_count()];
+    let mut scratch = vec![ValueT::MAX; partition.mod_up_scratch_len(4)];
+    partition.approx_mod_up_to(&input, &mut output, 4, &mut scratch);
+    // The uncorrected CRT sums are 8416, 59298, 59299 and 59300.
+    assert_eq!(
+        output,
+        [
+            1, 2, 3, 4, 11, 12, 13, 14, 21, 22, 23, 24, 50, 24, 25, 26, 74, 31, 32, 33
+        ]
+    );
+}
+
+#[test]
 fn mod_up_full_and_streaming_outputs_match() {
     let hybrid = make_hybrid(&[17, 41, 73], &[89, 97], 2);
     let poly_length = 4;

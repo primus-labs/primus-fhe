@@ -2,120 +2,125 @@
 
 [English](README.md) | 简体中文
 
-> [!WARNING]
-> 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
-
-有序 RNS 基上的 GLWE 加密与求值，分别使用 CRT 系数表示和 DCRT NTT 表示。提供无 codec 的 phase 加密、gadget 乘法、自同构、trace、展开与密钥切换。BFV 消息缩放、系数加密与恢复归属 [primus_bfv](../primus_bfv/README.zh_CN.md)。
+有序 RNS 基上的 GLWE 加密与求值，分别使用 CRT 系数和 DCRT NTT 值。Raw 密文按
+`[a_0,…,a_(k−1),b]` 存储，phase 为 `b−Σa_i*s_i`。本 crate 提供无 codec 的 phase
+加密、gadget 乘法、自同构、trace、展开和密钥切换。普通系数/slots 消息使用
+[BFV](../primus_bfv/README.zh_CN.md) 或 [BGV](../primus_bgv/README.zh_CN.md)。
+Workspace API 和数值契约仍处于实验阶段。
 
 ## 无 codec 的 raw 流程
 
-调用方自行定义 encoded phase 时使用 raw 加密，无需明文模数、BFV 尺度、辅助解码模数 gamma 或 gadget 基：
+Raw 加密接受已经编码的 phase，不引入明文模数、BFV delta 或 decoder gamma。
+从以下独立示例开始：
 
-1. 准备有序 `RNSBase`、匹配的 `DcrtTable` 和 `RnsGlweSize`。
-2. 构造 `CrtGlweEncryptionParameters`。`try_new` 选择 Gaussian 噪声；`try_with_error_distribution` 还接受 `primus_distr` 的精确 `ErrorDistribution::CenteredBinomial { eta }`。eta=1 是 CBD1，eta=21 是 CBD21；标准差相近的 Gaussian 是另一种分布。
-3. 将有符号 `GlweSecretKey` 转为 DCRT，再调用一次 `key.try_bind_raw(&parameters, &base, &table)`。Encryptor 构造器检查资源配对。
-4. 通过返回的 `DcrtGlweRawSecretKeyContext` 复用调用方的密文及多项式输出。绑定只借用资源，不克隆密钥；raw 操作不分配 scratch。
-
-| 操作 | 结果 |
+| 示例 | 新增概念 |
 | --- | --- |
-| `context.encrypt_encoded_crt_to` | 将规范 CRT 系数直接加入系数噪声，DCRT 输出 phase 为 encoded 输入加噪声，不隐式缩放 |
-| `context.encrypt_zeros_to` | 同一 DCRT 布局下的新鲜零加密 |
-| `key.phase_to(&input, &mut output, base.moduli())` | 完整 DCRT phase `b - sum(a_i*s_i)` |
-| `key.partial_phase_to(&input, &mut output, base.moduli())` | 不含 body b 的 DCRT contribution `-sum(a_i*s_i)` |
-
-Phase 提取只需 DCRT secret 与有序模数，无需采样状态、table、分配或变换。对 additive secret shares 求 partial phase 之和后，b **只加入一次**；也可由一方生成 full phase，其余方生成 partial phase。这里仅提供 raw 算术，opening 隐私噪声、允许公开的输出及一次性/重试规则由协议负责。Phase 输出仍在 NTT 域，逆变换和任何解码均由调用方显式执行。
-
-Encryptor 构造器检查布局和有序模数；独立 phase 提取检查完整布局和传入的模数顺序。Raw 方法在写入或采样前拒绝不完整的缓冲区长度；规范剩余类、变换身份、实际 secret 身份和消息语义仍由调用方保证。[Raw 加密示例](examples/raw_encryption.rs) 展示完整的 u64 流程、存储复用及 body/share 关系：
+| [raw_encryption](examples/raw_encryption.rs) | 私钥 raw 加密、输出复用和 full/partial phase 提取 |
+| [public_encryption](examples/public_encryption.rs) | 公钥绑定、多次 raw 加密和 ephemeral 擦除 |
+| [gadget_encryption](examples/gadget_encryption.rs) | 显式分解参数下的进阶 monomial GGSW 加密 |
 
 ```sh
 cargo run -p primus_glwe_rns --example raw_encryption
+cargo run -p primus_glwe_rns --example public_encryption
+cargo run -p primus_glwe_rns --example gadget_encryption
 ```
 
-方案实现可通过私钥 `encrypt_with_body_to` 或公钥 `encrypt_with_components_to`，将编码融合进已采样的系数噪声。回调在对应 component 唯一一次 NTT 前执行；公钥入口按 mask、body 顺序访问。原语自身不分配缓冲区；回调的开销、规范剩余类以及消息/噪声语义由调用方负责。普通 BFV 使用者直接使用 `primus_bfv`。
-
-## BFV 消息流程
-
-秩一 u64 BFV 参数、unsigned/centered 系数加密、未缩放 CRT 明文加密与解码，使用 [primus_bfv](../primus_bfv/README.zh_CN.md)。本 crate 的 raw 方法接收已编码 phase，不施加 BFV delta；gadget 消息则使用自己的分解权重。
+1. 准备有序 `RNSBase`、匹配的 `DcrtTable` 和 `RnsGlweSize`。
+2. 通过 `CrtGlweEncryptionParameters::try_new` 选择 Gaussian，或使用
+   `try_with_error_distribution` 显式选择分布。CBD1/CBD21 分别是精确的
+   `CenteredBinomial { eta: 1 }` / `{ eta: 21 }`，不能用 Gaussian 近似替换。
+3. 将有符号 `GlweSecretKey` 转为 DCRT，再绑定一次
+   `key.try_bind_raw(&sampling,&base,&table)`。
+4. 通过 `encrypt_encoded_crt_to` 或 `encrypt_zeros_to` 复用输出。私钥绑定借用
+   现有资源，不分配 scratch。
 
 ## 公钥加密与预分配资源
 
-使用无 codec 的采样参数生成一次 `DcrtGlwePublicKey`。下列绑定借用密钥，并各自准备一份拥有型 ephemeral 工作区；加密方法均接收 `&mut self`：
+生成一次 `DcrtGlwePublicKey`，再准备
+`public.try_bind_raw(&sampling,&base,&table)`。可变 encryptor 借用公钥并拥有一份
+ephemeral workspace，通过同一组 `_to` 方法复用调用方输出。Encoded CRT 输入在
+component 原有的一次 NTT 前加入系数噪声，不增加缩放或变换。
 
-| 绑定 | Prepared encryptor | 输入 |
-| --- | --- | --- |
-| `public_key.try_bind_raw(&sampling, &base, &table)` | `DcrtGlweRawPublicKeyEncryptor` | 已编码 CRT phase 或零，不隐式缩放 |
-| `public_key.try_bind_gadget(&gadget, &sampling, &table)` | `DcrtGgswEncryptor` | Monomial 系数剩余类和次数，施加 gadget 权重 |
-
-通过 `encrypt_encoded_crt_to`、`encrypt_zeros_to` 或 `encrypt_monomial_ggsw_to` 复用调用方输出。Prepared `_to` 调用完整覆盖 DCRT 输出，不分配内存；便利方法 `encrypt_monomial_ggsw` 仅分配返回的结果。Encoded CRT phase 或 gadget monomial 与系数噪声融合，在该 component 原有的一次 NTT 前注入；这些输入不是 DCRT 多项式。
-
-`workspace()` 提供保留 scratch 的布局；导入 `zeroize::Zeroize` 后，`workspace_mut().zeroize()` 可显式擦除 ephemeral 值并保留内存供复用，drop 也会擦除。否则最后的值一直保留到下次覆盖。调用方的密文输出独立于工作区，不由工作区清理擦除。输出、系数剩余类数量、次数和工作区形状的检查均在采样与写入前执行；规范剩余类和实际 key/NTT domain 仍由调用方保证。
-
-[公钥加密示例](examples/public_encryption.rs) 组合 raw 和 gadget 模式，复用输出并显式擦除 scratch：
-
-```sh
-cargo run -p primus_glwe_rns --example public_encryption
-```
+导入 `zeroize::Zeroize` 后，`workspace_mut().zeroize()` 擦除 ephemeral 值并保留
+内存；Drop 也会擦除。调用方密文输出独立保存。输出/workspace geometry 在采样或
+写入前检查；canonical 输入与实际 key/NTT provenance 仍由调用方保证。
 
 ## 编码与表示
 
-Raw 加密直接接收规范 CRT 剩余类，不解释明文模数或施加消息缩放；phase 输出为 DCRT，逆变换和消息恢复均为显式操作。GLev 通过不同方法接收 CRT 或 DCRT 输入并施加 gadget 权重。
+m 个模数下，raw 存储包含 `(k+1)*m*N` 个元素，顺序为
+`[component][modulus][coefficient/evaluation]`。CRT 与 DCRT 形状相同，算术含义不同；
+使用 checked sizes 与语义迭代器。见[密文布局](../primus_lattice/README.zh_CN.md#存储与布局)。
 
-m 个模数下，普通 raw 密文包含 `(k+1)*m*N` 个元素，顺序为 `[component][modulus][coefficient/evaluation]`。Component 顺序为 `[a_0, ..., a_(k-1), b]`，phase 为 `b - sum(a_i*s_i)`；gadget 在外层增加 row/level。CRT 与 DCRT 形状相同，算术含义不同。使用 `RnsGlweSize` / `RnsGadgetSize` 及语义迭代器，始终保持模数顺序。见[密文布局](../primus_lattice/README.zh_CN.md#存储与布局)。
+`key.phase_to(input,output,base.moduli())` 写出完整 DCRT phase；
+`partial_phase_to` 只写出 `−Σa_i*s_i`。它们无需 sampler、transform table 或分配。
+对 additive partial shares 求和后，b **只加入一次**。逆 NTT 和恢复为显式步骤；
+这些原语不提供 opening 隐私、授权或重试规则。完整布局/模数顺序在写入前检查，
+但数值相同不能证明实际 secret 或 NTT 身份。
 
-BFV 原生的 `[c0,c1]` 存储与 `c0+c1*s` phase 属于另一种方案表示。在实际 raw 消费边界使用方案层显式的 raw GLWE 导入/导出；相同长度不允许将 BFV 缓冲区直接解释为本 crate 的 mask/body 密文。
+BFV/BGV 原生 `[c0,c1]` 与 `c0+c1*s` phase 有独立方案语义。在真实 raw 消费边界
+使用 BFV 的显式导入/导出；相同长度不允许直接把其缓冲区解释为 mask/body 密文。
 
 ## 参数组合
 
-| 参数 | 用途 |
-| --- | --- |
-| `CrtGlweEncryptionParameters` | 布局、有序模数及采样器；无明文 codec |
-| `CrtGlevParameters` | checked gadget 布局、拥有的有序 RNS 基、Q 下分解基与缓存权重；不含采样器或 BFV 缩放 |
+`CrtGlweEncryptionParameters` 拥有布局和采样预计算，不含 codec。每个噪声系数
+只采样一次有符号整数，再一致提升到所有 RNS limbs；秘密和噪声支持须适用于每个
+q_i。固定秘密重量作用于完整 kN key。构造不认证完整恢复/噪声界、NTT 可用性或安全等级。
 
-维数和环长度使用 `GlweDimension` 与 [PolyLength](../primus_shape/README.zh_CN.md#多项式长度)，分解使用 `DecompositionBaseLog` / `DecompositionLevelCount`，在参数、尺寸和表之间复用这些已验证值。固定秘密重量作用于完整 kN 个有符号系数，不是逐多项式或逐 RNS limb 应用。秘密和噪声幅度须小于每个 q_i。每个噪声系数只采样一次整数，再一致地提升到所有 RNS limbs。`CrtGlweEncryptionParametersError` 报告无 codec 的布局/采样错误；BFV 参数和恢复错误归属 `primus_bfv`。
-
-使用 `CrtGlevParameters::try_new(size, base, log_basis, levels)`，或通过 [`try_from_parts(size, base, basis)`](src/parameter/gadget.rs) 接收已有分解基。这些构造器拥有传入的有序基并准备权重，不携带加密采样器、t 或 gamma。BFV 使用者可通过 `BfvParameters::try_gadget_parameters` 派生同样的算术参数。分解基须匹配 Q 及其定宽 limb 表示，radix 须严格小于每个 q_i。Gadget 加密与密钥生成单独接收采样参数；密钥角色需要不同噪声分布时，分别准备采样状态。
-
-Raw 参数构造建立布局和采样支持条件，不建立消息恢复界、NTT 可用性或安全等级。公钥加密及同态求值仍需完整操作的 phase error 界。
+`CrtGlevParameters::try_new(size,base,log_basis,levels)` 拥有 gadget base、分解及
+weights，不携带 sampler 或 BFV 缩放。`try_from_parts` 接受独立准备的分解基，
+检查其完整配对。Basis 须匹配 Q 和定宽 limbs，radix 严格小于每个 q_i。Gadget
+加密/建钥单独接收采样参数，不同角色可选择独立误差规律。完整契约见
+[采样参数](src/parameter/core.rs)与[gadget 参数](src/parameter/gadget.rs)。
 
 ## 求值资源
 
-Raw 私钥/公钥使用 `try_bind_raw(&sampling, &base, &table)`。Gadget 加密使用 `try_bind_gadget(&gadget, &sampling, &table)`：私钥返回 `DcrtGlevEncryptor`，公钥返回 `DcrtGgswEncryptor`。GLev 的 `encrypt_crt_to` / `encrypt_dcrt_to` 接收系数 / NTT 消息并施加 gadget 权重；GGSW 的 `encrypt_monomial_ggsw` / `encrypt_monomial_ggsw_to` 分别分配 / 复用输出。
+`try_bind_gadget(&gadget,&sampling,&table)` 返回私钥 `DcrtGlevEncryptor` 或公钥
+`DcrtGgswEncryptor`。GLev 分开接受 CRT/DCRT 输入；GGSW monomial 加密施加 gadget
+weights，`_to` 复用输出，分配式便利入口返回新结果。进阶示例只引入这项额外资源。
+方案作者可通过 `encrypt_with_body_to` / `encrypt_with_components_to` 融合编码；
+回调自行承担 canonical 范围、消息/噪声语义及开销，具体条件见方法契约。
 
-Client 生成公钥及求值密钥并交给 server，密钥生成显式接收采样状态。从密钥、算术参数与 table 构造一次 evaluator，在线调用复用其自身 scratch；evaluator 无需采样状态。构造器在分配 scratch 前检查完整资源布局、table 环长度、有序基及相应分解参数。Evaluator 和 prepared 公钥/gadget 加密方法在写入前检查完整输入输出长度；规范剩余类、NTT 根/顺序、秘密身份和足够的噪声余量仍由调用方保证。
+Client 生成密钥；evaluator 借用 key、算术参数和 table，自持可变 scratch。构造器
+在分配前检查完整数值配对，在线调用在写入前检查完整布局；实际 roots/order、秘密
+身份及累计噪声仍由调用方保证。独立 worker 使用独立可变 evaluator。
 
-使用 `DcrtGlweAutoKey::new(&gadget, &sampling, &table, exponent, &key, &mut rng)` 准备自同构密钥，再绑定一次 `DcrtGlweAutoEvaluator::try_new(&auto_key, &gadget, &table)` 并复用输出。上方链接的示例展示 gadget 参数构造及 raw/公钥输出复用。
-
-`CrtGlweAutoEvaluator` 使用系数密文，`DcrtGlweAutoEvaluator` 使用 NTT 密文，两者均返回原秘密下的结果。
-
-| Key-switch evaluator | 输入 → 输出 | 构造器 |
+| Evaluator | 输入 → 输出 | 准备资源 |
 | --- | --- | --- |
-| `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | `try_new(&key, &gadget, &table)`；检查有序 Q、gadget 布局、radix 及保留层数 |
-| `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | `try_new(&key, &hybrid_rns, &qp_table)`；检查 N、有序 QP、Q/P 分界及分区宽度 |
+| `CrtGlweAutoEvaluator` / `DcrtGlweAutoEvaluator` | 原秘密下的 CRT / DCRT | 自同构 key、gadget 和实际 table |
+| `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | `try_new(&key,&gadget,&table)` |
+| `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | `try_new(&key,&hybrid_rns,&qp_table)` |
 
-两者的在线调用均为 `key_switch_to(&input, &mut output)`。Hybrid 密钥生成从输入加密参数取得密钥噪声，检查其支持范围是否适用于每个 QP 模数；两个秘密的幅度也必须小于每个 QP 模数。分区及 ModUp/ModDown 契约见 [`primus_rns`](../primus_rns/README.zh_CN.md#hybrid-rns)。
+Hybrid 建钥按每个 QP 模数检查两份 secret 和误差 sampler 的支持；evaluator 准备
+检查有序 QP/partition。ModUp/ModDown 顺序执行，因此
+conversion scratch 容量取两者最大值；其他同时活跃 buffer 保持独立。数值契约见
+[Hybrid RNS](../primus_rns/README.zh_CN.md#hybrid-rns)和[密钥切换](src/key_switch)。
 
 ## Trace 与系数展开
 
-这些 evaluator 借用密钥、gadget 参数与 table，并拥有可复用 scratch。输入保持不变，输出及 scratch 被覆盖。下表目标消息省略求值误差。
+Prepared evaluator 保留输入，覆盖调用方输出及 scratch。下列目标消息省略求值误差：
 
-| Evaluator 及方法 | 目标消息 |
+| 操作 | 目标消息 |
 | --- | --- |
-| `CrtGlweTraceEvaluator` / `DcrtGlweTraceEvaluator`，`trace_to` | 常数 `N*m[0]` |
-| `DcrtGlweRevTraceEvaluator`，`trace_to` | 常数 `m[0]` |
-| CRT/DCRT 的 `expand_coefficients_to` | 恰好 N 个输出，第 j 个目标为常数 `m[j]` |
-| CRT/DCRT 的 `expand_partial_coefficients_to` | 数量 d 为 `1..=N` 内二次幂，输出 j 目标为 `sum_k m[j+k*d] * X^(k*d)` |
-| CRT/DCRT 的 `expand_supported_coefficients_to` | 任意数量 k 在 `1..=N` 内；明文次数小于 k 时，输出 j 目标为常数 `m[j]` |
+| CRT/DCRT `trace_to` | 常数 `N*m[0]` |
+| DCRT reverse `trace_to` | 常数 `m[0]` |
+| `expand_coefficients_to` | N 个输出，常数 `m[j]` |
+| `expand_partial_coefficients_to` | 二次幂数量 d；`Σ_k m[j+k*d]X^(k*d)` |
+| `expand_supported_coefficients_to` | 任意数量 k；明文次数 < k 时为常数 `m[j]` |
 
-Reverse trace 在每次自同构及相加前乘 `2^-1 mod q_i`，保持 Q 和环长度；这是模除法，不是 modulus switch 或舍入减半。完整序列将输入消息和输入误差投影到常数项，但较晚引入的 key-switch 误差可能留在非常数位置。不能从无舍入推出 native-torus 方差界，详见[相位与误差契约](src/dcrt/rev_trace.rs)。
+Reverse trace 是**模 Q 除2**，不是舍入或 modulus switch；后续 switching error
+不一定只留在常数项。Partial 展开保留对应类中的高位明文系数；supported 展开则
+需要调用方保证次数 < k，无法从密文检查。它按 `next_power_of_two(k)^−1 mod Q`
+归一化，使用 k−1 次自同构，并加倍已是 scalar 叶子的现有误差；操作数不认证噪声或
+安全界。完整条件见[reverse trace](src/dcrt/rev_trace.rs)、
+[CRT 展开](src/crt/expand_coeff/evaluator.rs)和[DCRT 展开](src/dcrt/expand_coeff/evaluator.rs)。
 
-展开没有额外的 count 倍数。Partial 展开将较高的**明文**系数保留在相应剩余类中，Relect 的 block-factor accumulator 需要此行为。Supported 展开则要求协议或调用方保证明文次数小于 k，无法在运行时从密文检查该条件。它按 `next_power_of_two(k)^-1 mod Q` 归一化，只计算 k−1 次自同构；已是 scalar 的叶子直接加倍，避免求值 padding 分支；已有 phase error 也随之加倍，操作次数不代表噪声或安全界。密文和噪声尾部无需为零，环长度仍为 N。完整布局与表示条件见 [CRT](src/crt/expand_coeff/evaluator.rs) 和 [DCRT](src/dcrt/expand_coeff/evaluator.rs) evaluator。
-
-串行展开使用 `*GlweExpandCoeffEvaluator::new(&key, &gadget, &table)`，预分配 scratch 预算使用 `*GlweExpandCoeffParallelEvaluator::new(&key, &gadget, &table, worker_count)`。串行求值只需一份工作区，并行求值保留 `worker_count` 份工作区；重复调用复用算术 scratch。
-
-并行调用使用调用方 Rayon pool，每层最多分成 `worker_count` 个占用 scratch 的作业。此正数预算可小于或大于 pool 线程数，不创建内部线程池。求值前初始化调用方 pool，调用时可变借用 evaluator。完整输入/输出长度和数量均在写入前检查；具体数值及资源契约见 evaluator 方法。
+并行展开使用正的 `worker_count` scratch 预算和调用方 Rayon pool，不创建内部pool。
+预算不必等于线程数；写入前检查完整输入/输出 geometry。
 
 ## Feature 与进一步阅读
 
-默认 features 为空，`simd` 向算术依赖转发 nightly SIMD。本 crate 已启用所需的 RNS features，无需另设 `rns` 开关。
+默认 features 为空；已启用所需 RNS 依赖，无需另设 `rns` 开关。`simd` 转发 nightly
+SIMD feature。Runtime NTT intrinsic dispatch 独立于此 flag，关闭它不表示强制 scalar NTT。
 
-[公开 API 源码](src/lib.rs) · [RNS 基与转换](../primus_rns/README.zh_CN.md) · [库使用导航](../../guides/development/README.zh_CN.md) · [测试指南](../../guides/development/testing.md)
+[公开 API 源码](src/lib.rs) · [库使用导航](../../guides/development/README.zh_CN.md)
+· [测试与 feature 边界](../../guides/development/testing.md)

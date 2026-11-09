@@ -622,3 +622,324 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
 }
+
+fn modulus_product(moduli: &[u64]) -> IBig {
+    moduli.iter().fold(IBig::ONE, |a, &q| a * q)
+}
+fn crt_columns(residues: &[Vec<u64>], moduli: &[u64]) -> Vec<IBig> {
+    let total = modulus_product(moduli);
+    (0..N)
+        .map(|i| {
+            let mut result = IBig::ZERO;
+            for (&q, limb) in moduli.iter().zip(residues) {
+                let hat = &total / q;
+                let inverse = power(&hat % q, q - 2, q);
+                result += &hat * inverse * limb[i];
+            }
+            centered(&result, &total)
+        })
+        .collect()
+}
+fn hybrid_components(ciphertext: &[u64], moduli: &[u64]) -> Vec<Vec<IBig>> {
+    ciphertext
+        .chunks_exact(N * moduli.len())
+        .map(|component| {
+            let residues: Vec<_> = component
+                .as_chunks::<N>()
+                .0
+                .iter()
+                .zip(moduli)
+                .map(|(values, &q)| inverse(values, q))
+                .collect();
+            crt_columns(&residues, moduli)
+        })
+        .collect()
+}
+fn polynomial_phase(components: &[Vec<IBig>], secret: &[IBig], modulus: &IBig) -> Vec<IBig> {
+    add(&components[0], &product(&components[1], secret))
+        .iter()
+        .map(|x| centered(x, modulus))
+        .collect()
+}
+fn projector(count: usize, range: std::ops::Range<usize>) -> IBig {
+    let q = total_modulus(count);
+    let mut result = IBig::ZERO;
+    for &qi in &Q[range] {
+        let hat = &q / qi;
+        result += &hat * power(&hat % qi, qi - 2, qi);
+    }
+    modulo(&result, &q)
+}
+fn hybrid_column_errors(
+    key: &super::NativeEvaluationKey,
+    context: &BgvContext,
+    source: &[IBig],
+    target: &[IBig],
+    error_bound: u64,
+) -> Vec<Vec<IBig>> {
+    let count = Q.len() - key.level;
+    let super::KeyDecomposition::Hybrid(parameters) = &key.decomposition else {
+        panic!("hybrid oracle requires Hybrid");
+    };
+    let moduli = key.base(context).moduli_values();
+    let total = modulus_product(moduli);
+    let p_aux = modulus_product(parameters.hybrid_rns().p_base().moduli_values());
+    let alpha = parameters.hybrid_rns().partition_moduli_count();
+    key.columns
+        .chunks_exact(2 * N * moduli.len())
+        .enumerate()
+        .map(|(digit, column)| {
+            let scalar = &p_aux * projector(count, digit * alpha..((digit + 1) * alpha).min(count));
+            let phase = polynomial_phase(&hybrid_components(column, moduli), target, &total);
+            phase
+                .iter()
+                .zip(source)
+                .map(|(value, s)| {
+                    let e = centered(&(value - &scalar * s), &total);
+                    assert_eq!(&e % P, 0, "QP key phase error must be p-divisible");
+                    let e = e / P;
+                    assert!(e >= -IBig::from(error_bound) && e <= IBig::from(error_bound));
+                    e
+                })
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_integer_oracles() {
+    const AUX: [u64; 2] = [1152921504606830593, 1152921504606748673];
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(N),
+            BarrettModulus::new(P),
+            &Q.map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )
+        .unwrap(),
+        3,
+    )
+    .unwrap();
+    let source: Vec<i64> = (0..N).map(|i| [-1, 0, 1, 1][i % 4]).collect();
+    let target: Vec<i64> = (0..N).map(|i| [0, 1, -1][i % 3]).collect();
+    let a = client(&context, &source);
+    let b = client(&context, &target);
+    let source: Vec<_> = source.into_iter().map(IBig::from).collect();
+    let target: Vec<_> = target.into_iter().map(IBig::from).collect();
+    let mut rng = StdRng::seed_from_u64(0x24b6_9001);
+    for level in 0..3 {
+        let count = Q.len() - level;
+        let q = total_modulus(count);
+        let alpha = 2;
+        for auxiliary in [&AUX[..1], &AUX[..2]] {
+            let parameters = context.hybrid_key_parameters(level, 2, auxiliary).unwrap();
+            let switch = b
+                .key_switching_key(&a, level, parameters.clone(), &mut rng)
+                .unwrap();
+            let errors = hybrid_column_errors(&switch.key, &context, &source, &target, 21);
+            let relin = a
+                .relinearization_key(level, parameters.clone(), &mut rng)
+                .unwrap();
+            hybrid_column_errors(
+                &relin.key,
+                &context,
+                &product(&source, &source),
+                &source,
+                21,
+            );
+            let auto = a
+                .automorphism_key(level, 5, parameters.clone(), &mut rng)
+                .unwrap();
+            hybrid_column_errors(&auto.key, &context, &automorphism(&source, 5), &source, 21);
+            let p_aux = modulus_product(auxiliary);
+            let qp = &q * &p_aux;
+            let x: Vec<_> = (0..N).map(|i| &q / 2u64 - IBig::from(i * 13)).collect();
+            let message: Vec<_> = (0..N).map(|i| IBig::from((i % 5) as i64 - 2)).collect();
+            let mask_phase = product(&x, &source);
+            let body: Vec<_> = message
+                .iter()
+                .zip(mask_phase)
+                .map(|(m, a)| centered(&(m - a), &q))
+                .collect();
+            let input = BgvCiphertext::new(encode(&[body.clone(), x.clone()], count));
+            let moduli = switch.key.base(&context).moduli_values();
+            let mut accumulator = vec![vec![IBig::ZERO; N]; 2];
+            let mut epsilon = vec![IBig::ZERO; N];
+            for (digit, column) in switch
+                .key
+                .columns
+                .chunks_exact(2 * N * moduli.len())
+                .enumerate()
+            {
+                let range = digit * alpha..((digit + 1) * alpha).min(count);
+                let part = modulus_product(&Q[range.clone()]);
+                let values: Vec<_> = x
+                    .iter()
+                    .map(|x| {
+                        let mut d = IBig::ZERO;
+                        for &qi in &Q[range.clone()] {
+                            let hat = &part / qi;
+                            let u = modulo(&(x * power(&hat % qi, qi - 2, qi)), &IBig::from(qi));
+                            d += hat * u;
+                        }
+                        d
+                    })
+                    .collect();
+                let components = hybrid_components(column, moduli);
+                for component in 0..2 {
+                    accumulator[component] = add(
+                        &accumulator[component],
+                        &product(&values, &components[component]),
+                    );
+                }
+                epsilon = add(&epsilon, &product(&values, &errors[digit]));
+            }
+            // Independent p^-1 modulo P from a small-p inverse, rather than
+            // the production per-limb inverse factors or ModDown converter.
+            let inverse_p = (IBig::ONE + &p_aux * (P - power(&p_aux % P, P - 2, P))) / P;
+            assert_eq!(modulo(&(&inverse_p * P), &p_aux), IBig::ONE);
+            let remainders: Vec<Vec<_>> = accumulator
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|z| centered(&(z * &inverse_p), &p_aux))
+                        .collect()
+                })
+                .collect();
+            let mut expected: Vec<Vec<_>> = accumulator
+                .iter()
+                .zip(&remainders)
+                .map(|(row, r)| {
+                    row.iter()
+                        .zip(r)
+                        .map(|(z, r)| {
+                            let numerator = z - r * P;
+                            assert_eq!(&numerator % &p_aux, IBig::ZERO);
+                            centered(&(numerator / &p_aux), &q)
+                        })
+                        .collect()
+                })
+                .collect();
+            expected[0] = expected[0]
+                .iter()
+                .zip(&body)
+                .map(|(a, b)| centered(&(a + b), &q))
+                .collect();
+            let mut output = context.new_ciphertext(level);
+            BgvKeySwitcher::try_new(&context, &switch)
+                .unwrap()
+                .switch_to(&input, &mut output);
+            assert_eq!(hybrid_components(output.as_ref(), &Q[..count]), expected);
+            let r_phase = add(&remainders[0], &product(&remainders[1], &target));
+            let residual: Vec<_> = epsilon
+                .iter()
+                .zip(r_phase)
+                .map(|(e, r)| {
+                    let numerator = e - r;
+                    assert_eq!(&numerator % &p_aux, IBig::ZERO);
+                    numerator / &p_aux
+                })
+                .collect();
+            let expected_phase: Vec<_> = message
+                .iter()
+                .zip(&residual)
+                .map(|(m, e)| centered(&(m + e * P), &q))
+                .collect();
+            assert_eq!(polynomial_phase(&expected, &target, &q), expected_phase);
+            for (m, actual) in message.iter().zip(expected_phase) {
+                let e = centered(&(actual - m), &q);
+                assert_eq!(e % P, 0);
+            }
+            assert_eq!(modulus_product(moduli), qp);
+        }
+    }
+}
+
+#[test]
+fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
+    use crate::{
+        BgvCollectiveAutomorphismKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey,
+    };
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(N),
+            BarrettModulus::new(P),
+            &Q.map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )
+        .unwrap(),
+        3,
+    )
+    .unwrap();
+    let shares: Vec<Vec<i64>> = (0..3)
+        .map(|party| {
+            (0..N)
+                .map(|i| match (i + party * 3) % 5 {
+                    0 => -1,
+                    1 | 2 => 1,
+                    _ => 0,
+                })
+                .collect()
+        })
+        .collect();
+    let clients: Vec<_> = shares.iter().map(|s| client(&context, s)).collect();
+    let source: Vec<_> = (0..N)
+        .map(|i| IBig::from(shares.iter().map(|s| s[i]).sum::<i64>()))
+        .collect();
+    let mut rng = StdRng::seed_from_u64(0x24b6_9002);
+    for level in 0..3 {
+        let parameters = context
+            .hybrid_key_parameters(level, 2, &[1152921504606830593])
+            .unwrap();
+        let plan =
+            BgvCollectiveSwitchingKey::try_new(&context, level, parameters.clone(), &mut rng)
+                .unwrap();
+        let mut sum = plan.aggregate();
+        for c in &clients {
+            sum.add(
+                &plan
+                    .contribute(c.secret_key(), c.secret_key(), &mut rng)
+                    .unwrap(),
+            )
+            .unwrap();
+        }
+        let key = plan.finalize(sum).unwrap();
+        hybrid_column_errors(&key.key, &context, &source, &source, 63);
+        let plan =
+            BgvCollectiveAutomorphismKey::try_new(&context, level, 5, parameters.clone(), &mut rng)
+                .unwrap();
+        let mut sum = plan.aggregate();
+        for c in &clients {
+            sum.add(&plan.contribute(c.secret_key(), &mut rng).unwrap())
+                .unwrap();
+        }
+        let key = plan.finalize(sum).unwrap();
+        hybrid_column_errors(&key.key, &context, &automorphism(&source, 5), &source, 63);
+        let plan =
+            BgvCollectiveRelinearization::try_new(&context, level, parameters, &mut rng).unwrap();
+        let mut first = plan.round_one_aggregate();
+        let mut states = Vec::new();
+        for c in &clients {
+            let (m, s) = plan.start(c.secret_key(), &mut rng).unwrap();
+            first.add(&m).unwrap();
+            states.push(s);
+        }
+        let frozen = plan.freeze_round_one(first).unwrap();
+        let mut second = plan.round_two_aggregate(&frozen).unwrap();
+        for state in states {
+            second
+                .add(&state.round2(&frozen, &mut rng).unwrap())
+                .unwrap();
+        }
+        let key = plan.finalize(&frozen, second).unwrap();
+        hybrid_column_errors(
+            &key.key,
+            &context,
+            &product(&source, &source),
+            &source,
+            21 * 3 * (2 * 3 * N as u64 + 1),
+        );
+    }
+}

@@ -239,6 +239,18 @@ where
     pub fn inv_p_mod_q(&self) -> &[T] {
         &self.inv_p_mod_q
     }
+
+    /// Borrows the prepared approximate converter from P to Q.
+    ///
+    /// Its fast conversion selects an uncorrected CRT lift, as documented by
+    /// [`BaseConverter`]. A clone shares the bases and conversion matrix; callers
+    /// needing an exact centered lift can reuse it through
+    /// [`crate::CenteredBaseConverter::try_from_converter`].
+    #[must_use]
+    #[inline]
+    pub fn mod_down_converter(&self) -> &BaseConverter<T, M> {
+        &self.mod_down_converter
+    }
 }
 
 impl<T, M> HybridRNSPartition<T, M>

@@ -1,6 +1,6 @@
 use primus_bfv::{BfvParameters, BfvParametersError};
 use primus_distr::ErrorDistribution;
-use primus_encoding::BfvRnsCodecError;
+use primus_encoding::{BfvRnsCodecError, PlaintextEmbedding};
 use primus_glwe_rns::{CrtGlweEncryptionParametersError, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_rns::RnsError;
@@ -79,4 +79,34 @@ fn explicit_cbd_law_is_preserved() {
             .maximum_magnitude(),
         21
     );
+}
+
+#[test]
+fn constructors_check_complete_private_noise_recovery() {
+    let moduli = [BarrettModulus::new(97u64)];
+    for (gamma, sigma, magnitude, valid) in [
+        (13, 1.0, 12, true),
+        (13, 1.25, 15, false),
+        (101, 1.25, 15, true),
+        (101, 1.375, 16, false),
+    ] {
+        let result = BfvParameters::try_new(
+            PolyLength::new(32),
+            BarrettModulus::new(3),
+            BarrettModulus::new(gamma),
+            &moduli,
+            SecretKeyDistr::UniformBinary,
+            sigma,
+        );
+        if valid {
+            assert!(result.is_ok());
+        } else {
+            assert!(matches!(result, Err(BfvParametersError::Encoding(
+                BfvRnsCodecError::InsufficientNoiseRecovery {
+                    maximum_noise_magnitude,
+                    embedding: PlaintextEmbedding::Unsigned,
+                }
+            )) if maximum_noise_magnitude == magnitude));
+        }
+    }
 }

@@ -31,6 +31,25 @@ pub struct BgvPublicKey {
     p: u64,
 }
 impl BgvPublicKey {
+    /// Borrows the public native ciphertext for authenticated serialization.
+    /// The payload alone does not identify its NTT/context or recipient secret.
+    #[must_use]
+    pub fn as_ciphertext(&self) -> BgvCiphertext<&[u64]> {
+        BgvCiphertext::new(self.ciphertext.as_ref())
+    }
+
+    pub(crate) fn from_collective(
+        context: &BgvContext,
+        ciphertext: BgvCiphertext<Vec<u64>>,
+    ) -> Self {
+        Self {
+            ciphertext,
+            size: context.parameters().size(),
+            moduli: context.parameters().base_q().moduli_values().to_vec(),
+            p: context.parameters().plain_modulus().value(),
+        }
+    }
+
     pub(crate) fn generate<R: rand::Rng + rand::CryptoRng>(
         client: &BgvClient<'_>,
         context: &BgvContext,
@@ -45,7 +64,12 @@ impl BgvPublicKey {
             p: context.parameters().plain_modulus().value(),
         }
     }
-    fn validate(&self, context: &BgvContext) -> Result<(), BgvPublicKeyError> {
+    /// Checks public-key polynomial geometry, p and the complete ordered Q basis.
+    /// This metadata-only check allocates nothing. Actual recipient identity and
+    /// NTT roots/evaluation order remain caller contracts.
+    /// # Errors
+    /// Rejects different geometry, plaintext modulus or ordered ciphertext basis.
+    pub fn validate_context(&self, context: &BgvContext) -> Result<(), BgvPublicKeyError> {
         let parameters = context.parameters();
         let expected = parameters.poly_length().get();
         let actual = self.size.poly_length().get();
@@ -100,7 +124,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         key: &'a BgvPublicKey,
         context: &'a BgvContext,
     ) -> Result<Self, BgvPublicKeyError> {
-        key.validate(context)?;
+        key.validate_context(context)?;
         Ok(Self {
             key,
             context,

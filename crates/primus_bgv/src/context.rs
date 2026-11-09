@@ -2,12 +2,14 @@ use crate::{
     BgvCiphertext, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError,
     BgvQuadraticCiphertext,
 };
+use primus_glwe_rns::RnsDomainError;
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, U64DcrtTable};
 use primus_poly::Polynomial;
 use primus_reduce::Reduce;
 use primus_rns::RNSBase;
+use std::sync::Arc;
 
 /// Unsupported transforms or number of requested ordered-prefix levels.
 #[derive(Debug, thiserror::Error)]
@@ -15,6 +17,9 @@ pub enum BgvContextError {
     /// A ciphertext modulus does not support the full-ring transform.
     #[error(transparent)]
     Transform(#[from] NttError<u64>),
+    /// The supplied shared table differs from the parameter geometry or ordered Q.
+    #[error(transparent)]
+    Binding(#[from] RnsDomainError<u64>),
     /// At least one level and at most one per ciphertext prime are supported.
     #[error("BGV level count {requested} is outside 1..={maximum}")]
     LevelCount {
@@ -31,11 +36,11 @@ struct LowerLevel {
     q_mod_p: u64,
 }
 
-/// One immutable owner of full-ring BGV parameters and their DCRT NTT table.
+/// One immutable owner of full-ring BGV parameters and a shared DCRT NTT table.
 /// Clients, evaluators and public encryptors borrow this owner without cloning.
 pub struct BgvContext {
     parameters: BgvParameters,
-    table: U64DcrtTable,
+    table: Arc<U64DcrtTable>,
     lower_levels: Vec<LowerLevel>,
 }
 
@@ -67,17 +72,49 @@ impl BgvContext {
         parameters: BgvParameters,
         level_count: usize,
     ) -> Result<Self, BgvContextError> {
+        Self::validate_level_count(&parameters, level_count)?;
+        let table = Arc::new(U64DcrtTable::new(
+            parameters.poly_length(),
+            parameters.base_q().moduli(),
+        )?);
+        Ok(Self::from_bound_table(parameters, level_count, table))
+    }
+
+    /// Shares a prepared full-Q transform table while keeping BGV recovery data.
+    ///
+    /// # Errors
+    /// Rejects an invalid level count or a different table N/ordered Q. The table
+    /// defines this context's actual transform; no secret identity is inferred.
+    pub fn try_with_table(
+        parameters: BgvParameters,
+        level_count: usize,
+        table: Arc<U64DcrtTable>,
+    ) -> Result<Self, BgvContextError> {
+        Self::validate_level_count(&parameters, level_count)?;
+        parameters.encryption_parameters().validate_table(&table)?;
+        Ok(Self::from_bound_table(parameters, level_count, table))
+    }
+
+    fn validate_level_count(
+        parameters: &BgvParameters,
+        requested: usize,
+    ) -> Result<(), BgvContextError> {
         let maximum = parameters.base_q().moduli_count();
-        if level_count == 0 || level_count > maximum {
-            return Err(BgvContextError::LevelCount {
-                requested: level_count,
-                maximum,
-            });
+        if requested == 0 || requested > maximum {
+            return Err(BgvContextError::LevelCount { requested, maximum });
         }
+        Ok(())
+    }
+
+    fn from_bound_table(
+        parameters: BgvParameters,
+        level_count: usize,
+        table: Arc<U64DcrtTable>,
+    ) -> Self {
+        let maximum = parameters.base_q().moduli_count();
         let mut lower_levels = Vec::with_capacity(level_count - 1);
         for level in 1..level_count {
-            let base = RNSBase::new(&parameters.base_q().moduli()[..maximum - level])
-                .expect("a nonempty prefix of a valid RNS basis is valid");
+            let base = parameters.base_q().prefix(maximum - level);
             let mut half_q = base.moduli_product().0.to_vec();
             BigUint(&mut half_q[..]).right_shift_assign(1);
             let q_mod_p = parameters.plain_modulus().reduce(base.moduli_product().0);
@@ -87,12 +124,11 @@ impl BgvContext {
                 q_mod_p,
             });
         }
-        let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli())?;
-        Ok(Self {
+        Self {
             parameters,
             table,
             lower_levels,
-        })
+        }
     }
 
     /// Borrows the unique parameters and sampler state.
@@ -105,6 +141,42 @@ impl BgvContext {
     #[must_use]
     pub fn table(&self) -> &U64DcrtTable {
         &self.table
+    }
+
+    /// Shares this context's actual immutable table without copying its roots.
+    #[must_use]
+    pub fn shared_table(&self) -> Arc<U64DcrtTable> {
+        Arc::clone(&self.table)
+    }
+
+    /// Prepares one native Hybrid key domain using this context's actual prefix.
+    ///
+    /// The auxiliary QP basis is for evaluation keys, not ciphertext encryption.
+    /// Construction establishes arithmetic geometry, not a security or noise budget.
+    /// # Correctness
+    /// Auxiliary moduli must be actual NTT primes; transform preparation does not
+    /// certify primality. See [`primus_lattice::hybrid::NativeHybridParameters::try_new`].
+    /// # Errors
+    /// Rejects an unprepared level or invalid Hybrid bases/partition/transforms.
+    pub fn hybrid_key_parameters(
+        &self,
+        level: usize,
+        decomposition_count: usize,
+        auxiliary_moduli: &[u64],
+    ) -> Result<
+        std::sync::Arc<primus_lattice::hybrid::NativeHybridParameters>,
+        crate::BgvEvaluationKeyError,
+    > {
+        super::evaluation_key::validate_level(self, level)?;
+        Ok(std::sync::Arc::new(
+            primus_lattice::hybrid::NativeHybridParameters::try_new(
+                self.parameters().poly_length(),
+                self.base_q(level),
+                self.parameters().base_q().moduli_count(),
+                auxiliary_moduli,
+                decomposition_count,
+            )?,
+        ))
     }
 
     /// Returns the number of prepared levels, including level zero.

@@ -3,7 +3,10 @@ use primus_poly::DcrtPolynomial;
 
 /// Scaled native BFV tensor `[c0,c1,c2]` with phase `c0+c1*s+c2*s²`.
 ///
-/// Each component has already undergone exact BFV `round(t*T/Q)` scaling.
+/// Each component has undergone the selected ordinary BFV backend's scaling:
+/// the exact backend uses `round(t*T/Q)` on its integer tensor, whereas
+/// [`crate::BfvMultiplicationBackend::HpsPOverQ`] uses one-sided P/Q scaling
+/// before tensoring and exact `round(t*T/P)` afterward.
 /// This is a degree-two ciphertext under one secret, not rank-two GLWE.
 /// The unscaled integer tensor is private to the multiplication owner; only
 /// this scaled stage can be supplied to a relinearizer.

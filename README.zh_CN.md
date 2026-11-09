@@ -47,7 +47,7 @@ Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN
 | BFV/BGV 系数与槽流程 | [primus_bfv](crates/primus_bfv/README.zh_CN.md)：BFV 参数、消息缩放与恢复；[primus_bgv](crates/primus_bgv/README.zh_CN.md)：p 倍误差与精确 centered 恢复；两者消费共享 batching |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.zh_CN.md)：共享外部 LWE 客户端、LUT、PBS trait 和 Boolean 求值；上方两个家族 crate 与三个后端负责绑定参数、密钥和执行过程 |
 
-BFV 已支持系数/槽线性与明文求值、精确 RNS 整数密文乘法/square、原生 relin/换钥/密文旋转及精确舍入降模；BGV 已支持 q_i≡1 mod p 下的系数/槽私钥与公钥加密、乘法/square、p-preserving relin/换钥/密文旋转、前缀层级及精确 centered 恢复。CKKS 尚待实现。
+BFV 已支持系数/槽线性与明文求值、RNS 密文乘法/square、原生 relin/换钥/密文旋转及精确舍入降模；BGV 已支持 q_i≡1 mod p 下的系数/槽私钥与公钥加密、乘法/square、p-preserving relin/换钥/密文旋转、前缀层级及精确 centered 恢复。CKKS 尚待实现。BFV 乘法可显式选择 Exact/HPSPOVERQ，并提供使用临时工作基的有限 ordinary BFV HPSPOVERQLEVELED 参数工厂，见[算术与密钥前提](guides/development/bfv-working-basis.md)。两方案的求值密钥可选 Radix/Native Hybrid，后者显式扩大 key modulus 到 QP，见[原生密钥契约](guides/development/native-hybrid-keys.md)。
 
 应用库位于同级独立仓库：[primus_omr](../primus_omr/README.zh_CN.md) 提供 clue 检测、board 编码和消息恢复；[primus_high_prec_lut](../primus_high_prec_lut/README.zh_CN.md) 对多个独立加密的 chunk 执行高精度查表。它们不是本 workspace 的成员，示例、测试和基准请在各自仓库根目录运行。
 

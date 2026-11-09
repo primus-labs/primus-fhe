@@ -76,8 +76,93 @@ Advanced callers can explicitly choose the auxiliary basis with
 `try_with_auxiliary_moduli(context,key,&primes)`, or retain the separate
 `BfvMultiplier` → scaled quadratic → `BfvRelinearizer` flow.
 The [multiplication benchmark](../../crates/primus_bfv/benches/multiplication.rs)
-uses the combined public request and explicit historical P to keep its full fresh
-request comparable. It does not expose internal oracles solely for measurement.
+uses the combined public request for both backends. Its exact branch retains
+explicit historical P for comparison; the HPSPOVERQ branch uses its own prepared basis. It does not expose internal oracles solely for measurement.
+
+## HPSPOVERQ backend
+
+Select `BfvMultiplication::try_with_backend(context,key,
+BfvMultiplicationBackend::HpsPOverQ)`. The existing `try_new` selects `Exact`;
+changing the backend is an explicit arithmetic choice. Only the selected
+backend's P tables, constants and scratch are prepared. `backend()` and
+`auxiliary_moduli()` describe that actual computation resource. Encryption,
+key modulus, level and native plus phase stay the same. This backend does not
+enter the raw mixed BFV/BGV tensor used by four-round Flexilect.
+
+The one-sided prescaling follows the fixed [OpenFHE implementation](https://github.com/openfheorg/openfhe-development/blob/b59e1f291965f14fbee5172cd83a20f5b856204f/src/core/include/lattice/hal/default/dcrtpoly-impl.h).
+Let `L=#Q`, `hatQ_i=Q/q_i`, and x be a centered component coefficient. Compute
+
+```text
+d_i = [-P*x_i*hatQ_i^-1] mod q_i
+y mod p_j = sum_i d_i*(q_i^-1 mod p_j) mod p_j
+epsilon = sum_i d_i/q_i,                        0 <= epsilon < L
+y = center_P(P*x/Q + epsilon) = P*x/Q + epsilon - P*kappa.
+```
+
+`P*x/Q+epsilon` is an integer. This is a bounded one-sided residual rule,
+rather than nearest P/Q rounding. Explicit HPS bases require `P>2L`, which
+ensures `kappa` is 0 or 1 for every centered x, including the positive boundary.
+The lhs is expanded exactly from Q to P. The rhs is prescaled from Q to P,
+then its centered P representative is expanded exactly back to Q. Both copies
+are tensored in QP, adding the two middle products before scaling.
+
+For each tensor coefficient z, the final operation is exactly
+
+```text
+rP = center_P(t*z mod P)
+u_Q = (t*z_Q - lift_P_to_Q(rP))*P^-1 mod Q = nearest(t*z/P) mod Q.
+```
+
+Replacing z by `z+kQP` changes the integer result by `k*t*Q`, so this operation
+does not need to recover the full integer tensor or impose `P>NQ`. Odd P rules
+out half ties. Centered base expansion uses the fast CRT dot only when a
+conservative floating point interval certifies its correction. At uncertain
+half boundaries it reconstructs and compares exact multiword integers in
+preallocated scratch. The final scale is exact even for those boundary inputs.
+`primus_rns::HpsRns` owns this coefficient-domain contract.
+
+For an additional error bound relative to the exact backend, let `H=||s||1`,
+`r=Q mod t`, and the lhs phase be `Delta*m+e mod Q`, with message infinity norm
+at most M and **current evaluated** error at most E. Write `eps=eps0+eps1*s`
+and `K=kappa0+kappa1*s`. The phase difference before component rounding is
+`(t/P)*C(s)*eps - t*C(s)*K`. The integer wrap term satisfies
+`-t*C(s)*K = (r*m-t*e)*K mod Q`. Thus one conservative extra bound is
+
+```text
+B_eps   < t*N*L*Q/(2P)*(1+H)^2
+B_wrap <= N*(r*M+t*E)*(1+H)
+B_round <= 1+H+H^2.
+```
+
+`B_round` bounds the difference of two sets of component roundings. Add these
+terms to the exact multiplication error and one actual relinearization error;
+do not count either term twice. A tighter bound may use actual polynomial norms.
+This also explains why dropping the wrap term or demanding byte equality with
+the exact tensor would be incorrect.
+
+Automatic HPS P is an exact-integer product of 60-bit NTT primes at least
+`4*t^2*N*L*(1+N*B)^2`, where B is the secret sampler's maximum supported
+magnitude (including the hard cutoff for Gaussian sampling). For actual secrets
+with `H<=N*B`, this bounds `B_eps` by `Q/(8t)`. Imported secret metadata does
+not prove that magnitude bound. This choice **does not** certify `B_wrap`,
+input noise, key noise, message growth, depth or security.
+Explicit P can use another checked circuit budget via
+`try_with_backend_and_auxiliary_moduli`. The full codec inequality is still
+required. Automatic parameter/noise management is a separate facility.
+
+HPSPOVERQ square applies the asymmetric transform to a separate right copy;
+it shares multiplication's residual semantics and does not assume the two
+middle terms are equal. All prepared online methods allocate nothing. See the
+[performance comparison](../performance/bfv-hps-over-q.md) for complete requests,
+resource costs and the current selection policy.
+
+## Temporary working-basis HPSPOVERQLEVELED
+
+The [working-basis contract](bfv-working-basis.md) specifies exact temporary reduction,
+scaled restoration into unchanged external Q, actual lower-level keys, finite
+depth-aware ordinary parameters and complete deterministic error accounting.
+It also covers the selected-component working-key relin/rotation/switch paths.
+These are opt-in ordinary BFV operations; raw mixed SSLE does not use them.
 
 ## Phase error and fixed Delta
 
@@ -101,8 +186,8 @@ demonstration/benchmark parameters do not certify security or arbitrary depth.
 
 ## Native unscaled gadget keys
 
-At each actual modulus level, role-specific keys encrypt `g_j*h+e_j` under the
-destination secret. Here h is s² for relinearization, the source secret for
+At each actual modulus level, the signed-radix backend's role-specific keys
+encrypt `g_j*h+e_j` under the destination secret. Here h is s² for relinearization, the source secret for
 key switching, or the transformed secret for automorphisms. BFV uses ordinary
 unscaled key noise. There is no BGV p^-1 preprocessing or p-scaled key column.
 
@@ -126,6 +211,21 @@ as does `BfvMultiplication`. The context must have prepared that level and match
 the key's N, t and ordered Q. Key generation, ordinary linear evaluation,
 decryption and prime drop still select their levels explicitly; ciphertext
 storage does not carry the metadata needed to infer them.
+
+For Hybrid keys, prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)`
+and pass its shared `Arc` to the same role-key constructors. QP columns have
+phase `P*projector_j*h+e_j`; the native product divides by key P with exact
+centered coefficient corrections. This removes the Hybrid decomposition's P,
+not BFV's Delta, and applies no ordinary multiplication t/Q scale. Relinearization
+still returns `[t0+P0,t1+P1]` under s. Key P changes the evaluation-key RLWE domain
+and is independent of Exact/HPS multiplication's computation-only basis.
+
+The [native Hybrid contract](native-hybrid-keys.md) gives the actual weights,
+ModUp digits, exact correction/error identity, source-highest-Q secret extension
+and QP collective S² contributions. Fresh lookup uses its separately sampled,
+consuming raw-key role and one unscaled relin; ordinary multiplication backends
+remain separate. Full lookup/noise/flood/security conditions must be renewed
+when changing the key domain or its error budget.
 
 ## Levels, slots and resources
 

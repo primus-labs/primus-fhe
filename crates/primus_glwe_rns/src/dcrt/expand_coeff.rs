@@ -1,10 +1,10 @@
 use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_factor::ShoupFactor;
-use primus_integer::{AsInto, BigUint, FheUint};
+use primus_integer::FheUint;
 use primus_ntt::{DcrtTable, MonomialNttTable, NttTable};
 use primus_reduce::FieldContext;
-use primus_rns::{RNSBase, ResidueFactors};
+use primus_rns::ResidueFactors;
 use rayon::prelude::*;
 
 use crate::{CrtGlevParameters, DcrtGlweCiphertext, DcrtGlweSecretKey};
@@ -12,6 +12,7 @@ use crate::{CrtGlevParameters, DcrtGlweCiphertext, DcrtGlweSecretKey};
 use super::automorphism::DcrtGlweAutoKeyData;
 use super::trace::DcrtGlweTraceWorkspace;
 use crate::automorphism::{AutomorphismKeyMetadata, AutomorphismWorkspace};
+use crate::expansion::normalization_factors;
 use crate::workspace_pool::WorkspacePool;
 
 mod evaluator;
@@ -62,8 +63,7 @@ impl<T: FheUint> DcrtGlweExpandCoeffKey<T> {
         );
 
         let ntt_monomial_factors = Self::precompute_monomial_factors(params, table);
-        let inv_count_residues_by_level =
-            Self::precompute_inv_count_residues(params, parameters.base_q());
+        let inv_count_residues_by_level = normalization_factors(parameters);
 
         Self {
             metadata: AutomorphismKeyMetadata::new(parameters),
@@ -101,35 +101,6 @@ impl<T: FheUint> DcrtGlweExpandCoeffKey<T> {
                             .map(move |&value| ShoupFactor::new(value, modulus))
                     })
                     .collect()
-            })
-            .collect()
-    }
-
-    /// Normalizes the tree by its leaf count, including the no-tree count of one.
-    fn precompute_inv_count_residues<M>(
-        params: &CrtGlevParameters<T, M>,
-        rns_base: &RNSBase<T, M>,
-    ) -> Vec<ResidueFactors<Vec<ShoupFactor<T>>>>
-    where
-        M: FieldContext<T>,
-    {
-        let big_uint_value_len = params.big_uint_value_len();
-        let log_n = params.poly_length().log_n();
-
-        (0..=log_n)
-            .map(|log_count| {
-                let count = 1usize << log_count;
-                let mut n = vec![T::ZERO; big_uint_value_len];
-                n[0] = count.as_into();
-                let n_residue = rns_base.decompose(BigUint(&n));
-
-                ResidueFactors(
-                    n_residue
-                        .iter()
-                        .zip(rns_base.moduli())
-                        .map(|(&n, m)| ShoupFactor::new(m.reduce_inv(n), m.value()))
-                        .collect(),
-                )
             })
             .collect()
     }
@@ -325,22 +296,4 @@ impl<T: FheUint> DcrtGlweExpandCoeffKey<T> {
             }
         }
     }
-}
-
-/// Validate the entire batch before normalization can write its first output.
-fn assert_expansion_layout<T: FheUint, B: Data<Elem = T>>(
-    input_length: usize,
-    output: &[DcrtGlweCiphertext<B>],
-    expected_length: usize,
-) {
-    assert_eq!(
-        input_length, expected_length,
-        "expansion input layout mismatch"
-    );
-    assert!(
-        output
-            .iter()
-            .all(|ciphertext| ciphertext.as_ref().len() == expected_length),
-        "expansion output layout mismatch",
-    );
 }

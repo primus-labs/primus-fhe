@@ -1,3 +1,5 @@
+pub(crate) mod hps;
+
 #[cfg(test)]
 mod reference;
 
@@ -12,7 +14,7 @@ use primus_rns::{RNSBase, Residues, RnsError};
 
 use crate::{BfvCiphertext, BfvContext, BfvQuadraticCiphertext};
 
-/// Invalid level or computation-only basis for exact BFV multiplication.
+/// Invalid level or computation-only basis for ordinary BFV multiplication.
 #[derive(Debug, thiserror::Error)]
 pub enum BfvMultiplyError {
     /// The requested ciphertext level was not prepared.
@@ -42,6 +44,9 @@ pub enum BfvMultiplyError {
     /// The auxiliary product must be strictly greater than NQ.
     #[error("BFV multiplication auxiliary product must be greater than NQ")]
     InsufficientAuxiliaryProduct,
+    /// HPS's auxiliary product must exceed twice the ciphertext-prime count.
+    #[error("BFV HPS multiplication auxiliary product must exceed twice the Q prime count")]
+    InsufficientHpsAuxiliaryProduct,
     /// No further NTT primes were found in the automatic 60-bit search range.
     #[error("BFV multiplication could not prepare a sufficient automatic auxiliary basis")]
     AuxiliarySearchExhausted,
@@ -94,11 +99,10 @@ struct LiftParameters {
 }
 
 struct MultiplyWorkspace {
-    lhs_coeff: Vec<u64>,
-    rhs_coeff: Vec<u64>,
+    // Each input is lifted into P before the next input overwrites these coefficients.
+    coefficients: Vec<u64>,
     lhs_p: Vec<u64>,
     rhs_p: Vec<u64>,
-    raw_coeff: Vec<u64>,
     residues: Vec<u64>,
     value_q: Vec<u64>,
     value_p: Vec<u64>,
@@ -202,11 +206,9 @@ impl<'a> BfvMultiplier<'a> {
             .collect();
         let p_mod_q = base_q.decompose(base_p.moduli_product()).0;
         let workspace = MultiplyWorkspace {
-            lhs_coeff: vec![0; q_input_length],
-            rhs_coeff: vec![0; q_input_length],
+            coefficients: vec![0; q_input_length],
             lhs_p: vec![0; p_input_length],
             rhs_p: vec![0; p_input_length],
-            raw_coeff: vec![0; raw_length],
             residues: vec![0; base_q.moduli_count().max(base_p.moduli_count())],
             value_q: vec![0; base_q.big_uint_value_len()],
             value_p: vec![0; base_p.big_uint_value_len()],
@@ -273,7 +275,7 @@ impl<'a> BfvMultiplier<'a> {
             self.context,
             self.level,
             &self.lift,
-            &self.raw,
+            &mut self.raw,
             output.as_mut(),
         );
     }
@@ -304,7 +306,7 @@ impl<'a> BfvMultiplier<'a> {
             self.context,
             self.level,
             &self.lift,
-            &self.raw,
+            &mut self.raw,
             output.as_mut(),
         );
     }
@@ -335,7 +337,7 @@ impl MultiplyWorkspace {
             level,
             lift,
             lhs,
-            &mut self.lhs_coeff,
+            &mut self.coefficients,
             &mut self.lhs_p,
             &mut self.residues,
             &mut self.value_q,
@@ -346,7 +348,7 @@ impl MultiplyWorkspace {
                 level,
                 lift,
                 rhs,
-                &mut self.rhs_coeff,
+                &mut self.coefficients,
                 &mut self.rhs_p,
                 &mut self.residues,
                 &mut self.value_q,
@@ -403,7 +405,7 @@ impl MultiplyWorkspace {
         context: &BfvContext,
         level: usize,
         lift: &LiftParameters,
-        input: &[u64],
+        input: &mut [u64],
         output: &mut [u64],
     ) {
         let n = context.parameters().poly_length().get();
@@ -413,8 +415,9 @@ impl MultiplyWorkspace {
         let p_count = lift.base_p.moduli_count();
         let q_length = n * q_count;
         let combined_length = n * (q_count + p_count);
-        self.raw_coeff.copy_from_slice(input);
-        for component in self.raw_coeff.chunks_exact_mut(combined_length) {
+        // The completed tensor is consumed here: no later stage needs its NTT
+        // form. Transform in place instead of retaining a second QP tensor.
+        for component in input.chunks_exact_mut(combined_length) {
             for (table, values) in context
                 .table()
                 .iter()
@@ -425,8 +428,7 @@ impl MultiplyWorkspace {
                 table.inverse_transform_slice(values);
             }
         }
-        for (raw, scaled) in self
-            .raw_coeff
+        for (raw, scaled) in input
             .chunks_exact(combined_length)
             .zip(output.chunks_exact_mut(q_length))
         {
@@ -622,7 +624,7 @@ fn default_auxiliary_moduli(
 // bases cover n<2^64 (also used in SymPy's deterministic isprime branch):
 // https://github.com/sympy/sympy/blob/master/sympy/ntheory/primetest.py
 // This helper is private to setup; no new public number-theory API is needed.
-fn is_prime(n: u64) -> bool {
+pub(crate) fn is_prime(n: u64) -> bool {
     if n < 2 || n.is_multiple_of(2) {
         return n == 2;
     }

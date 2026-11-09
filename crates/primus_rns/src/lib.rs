@@ -31,10 +31,14 @@ pub use residues::Residues;
 
 mod base;
 mod converter;
+pub mod hps;
 pub mod hybrid;
+pub use hps::{HpsRns, HpsRnsWorkspace};
 
 pub use error::RnsError;
 
 pub use base::RNSBase;
-pub use converter::{BaseConverter, CorrectedConversionWorkspace};
+pub use converter::{
+    BaseConverter, CenteredBaseConverter, CenteredConversionWorkspace, CorrectedConversionWorkspace,
+};
 pub use hybrid::{HybridRNS, HybridRNSPartition, HybridRNSPartitioning};

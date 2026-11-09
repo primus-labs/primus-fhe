@@ -2,17 +2,28 @@
 
 use crate::{BgvCiphertext, BgvClient, BgvContext, BgvQuadraticCiphertext};
 use primus_data::{Data, DataMut};
-use primus_decompose::{
-    ApproxSignedBasisError, DecompositionConfig, big_integer::BigUintApproxSignedBasis,
+#[cfg(test)]
+use primus_decompose::big_integer::BigUintApproxSignedBasis;
+use primus_decompose::{ApproxSignedBasisError, DecompositionConfig};
+use primus_glwe_rns::DcrtGlweSecretKey;
+use primus_lattice::hybrid::{
+    EvaluationKeyConfig, HybridModDown, NativeHybridError, NativeHybridParameters,
+    NativeHybridProduct,
 };
+use primus_lattice::radix::{NativeRadixError, NativeRadixParameters};
 use primus_lattice::{
-    GlweSizeError, RnsGadgetSize, RnsGlweSize, glev::DcrtGlev, glwe::DcrtGlwe,
-    workspace::DcrtGlevMulWorkspace,
+    GlweSizeError, glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace,
 };
+use primus_modulus::BarrettModulus;
 use primus_ntt::{NttAutomorphismPermutation, NttTable};
 use primus_poly::{CrtPolynomial, DcrtPolynomial};
+use primus_reduce::Reduce;
 use primus_reduce::{ReduceInv, ReduceMul};
-use primus_rns::Residues;
+use primus_rns::RNSBase;
+use std::sync::Arc;
+
+/// Scheme key decomposition selection; radix and native Hybrid retain distinct error contracts.
+pub use primus_lattice::hybrid::EvaluationKeyConfig as BgvEvaluationKeyConfig;
 use zeroize::Zeroizing;
 
 /// Invalid BGV evaluation-key parameters or numerical binding.
@@ -88,19 +99,66 @@ pub enum BgvEvaluationKeyError {
     /// The radix or retained digit count is incompatible with Q.
     #[error(transparent)]
     Decomposition(#[from] ApproxSignedBasisError),
+    /// Native Hybrid basis, transform or geometry is unsupported.
+    #[error(transparent)]
+    Hybrid(#[from] NativeHybridError),
+    /// A key modulus cannot carry the configured coherent integer error sample.
+    #[error("BGV Hybrid noise magnitude {bound} is not below key modulus {modulus}")]
+    NoiseSupport {
+        /// Configured error support.
+        bound: u64,
+        /// Incompatible QP modulus.
+        modulus: u64,
+    },
     /// Complete evaluation-key storage would overflow.
     #[error(transparent)]
     Layout(#[from] GlweSizeError),
 }
 
-/// One native BGV gadget's actual basis, layout and public evaluation columns.
-/// The RNS base and transform table remain borrowed from the context.
+impl From<NativeRadixError> for BgvEvaluationKeyError {
+    fn from(error: NativeRadixError) -> Self {
+        match error {
+            NativeRadixError::Decomposition(error) => Self::Decomposition(error),
+            NativeRadixError::Layout(error) => Self::Layout(error),
+            NativeRadixError::Radix { radix, modulus } => Self::Radix { radix, modulus },
+        }
+    }
+}
+
+impl BgvContext {
+    /// Prepares shared signed-radix metadata for role keys at one active Q level.
+    /// The owner binds numerical geometry, not secret or NTT provenance.
+    /// # Errors
+    /// Rejects an unknown level, unsupported decomposition or overflowing shape.
+    pub fn radix_key_parameters(
+        &self,
+        level: usize,
+        config: DecompositionConfig,
+    ) -> Result<Arc<NativeRadixParameters>, BgvEvaluationKeyError> {
+        validate_level(self, level)?;
+        Ok(Arc::new(NativeRadixParameters::try_new(
+            self.parameters().poly_length(),
+            self.base_q(level),
+            config,
+        )?))
+    }
+}
+
+type KeyBase = RNSBase<u64, BarrettModulus<u64>>;
+
+#[derive(Clone)]
+enum KeyDecomposition {
+    Radix(Arc<NativeRadixParameters>),
+    Hybrid(Arc<NativeHybridParameters>),
+}
+
+/// Native key columns with exactly one chosen decomposition owner.
 struct NativeEvaluationKey {
+    n: usize,
     level: usize,
     p: u64,
     moduli: Vec<u64>,
-    size: RnsGadgetSize,
-    basis: BigUintApproxSignedBasis<u64>,
+    decomposition: KeyDecomposition,
     columns: Vec<u64>,
 }
 
@@ -108,87 +166,259 @@ impl NativeEvaluationKey {
     fn prepare(
         context: &BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
+    ) -> Result<Self, BgvEvaluationKeyError> {
+        let mut key = Self::prepare_metadata(context, level, config)?;
+        key.columns.resize(key.key_len(context), 0);
+        Ok(key)
+    }
+
+    fn prepare_metadata(
+        context: &BgvContext,
+        level: usize,
+        config: impl Into<EvaluationKeyConfig>,
     ) -> Result<Self, BgvEvaluationKeyError> {
         validate_level(context, level)?;
         let base = context.base_q(level);
-        let basis = BigUintApproxSignedBasis::try_new(
-            base.moduli_product(),
-            config.log_basis,
-            config.level_count,
-        )?;
-        for q in base.moduli() {
-            if basis.basis_value() >= q.value() {
-                return Err(BgvEvaluationKeyError::Radix {
-                    radix: basis.basis_value(),
-                    modulus: q.value(),
-                });
+        let decomposition = match config.into() {
+            EvaluationKeyConfig::Radix(config) => {
+                KeyDecomposition::Radix(context.radix_key_parameters(level, config)?)
             }
-        }
-        let size = RnsGadgetSize::try_new(
-            RnsGlweSize::try_new(context.parameters().size().glwe_size(), base.moduli_count())?,
-            basis.level_count(),
-        )?;
+            EvaluationKeyConfig::PreparedRadix(parameters) => {
+                validate_numeric_context(
+                    parameters.poly_length().get(),
+                    context.parameters().plain_modulus().value(),
+                    parameters.base_q().moduli_values(),
+                    context,
+                    level,
+                )?;
+                KeyDecomposition::Radix(parameters)
+            }
+            EvaluationKeyConfig::Hybrid(parameters) => {
+                validate_numeric_context(
+                    parameters.poly_length().get(),
+                    context.parameters().plain_modulus().value(),
+                    parameters.hybrid_rns().q_base().moduli_values(),
+                    context,
+                    level,
+                )?;
+                // This check is also performed when preparing the product, before
+                // RNG consumption here, so unsupported t/P never creates a key.
+                parameters.validate_mod_down(HybridModDown::PlaintextPreserving(
+                    context.parameters().plain_modulus().value(),
+                ))?;
+                let sampling = context.parameters().encryption_parameters();
+                let error_bound = sampling.noise_distribution().maximum_magnitude();
+                for &q in parameters.hybrid_rns().qp_base().moduli_values() {
+                    if error_bound >= q {
+                        return Err(BgvEvaluationKeyError::NoiseSupport {
+                            bound: error_bound,
+                            modulus: q,
+                        });
+                    }
+                }
+
+                KeyDecomposition::Hybrid(parameters)
+            }
+        };
         Ok(Self {
+            n: context.parameters().poly_length().get(),
             level,
             p: context.parameters().plain_modulus().value(),
             moduli: base.moduli_values().to_vec(),
-            size,
-            basis,
-            columns: vec![0; size.rns_glev_len()],
+            decomposition,
+            columns: Vec::new(),
         })
     }
 
-    /// Native private encryption supplies p*e; only c0 receives p*g_j*h.
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+    fn base<'a>(&'a self, context: &'a BgvContext) -> &'a KeyBase {
+        match &self.decomposition {
+            KeyDecomposition::Radix(_) => context.base_q(self.level),
+            KeyDecomposition::Hybrid(p) => p.hybrid_rns().qp_base(),
+        }
+    }
+    fn poly_len(&self, context: &BgvContext) -> usize {
+        self.base(context).moduli_count() * context.parameters().poly_length().get()
+    }
+    fn digit_count(&self) -> usize {
+        match &self.decomposition {
+            KeyDecomposition::Radix(p) => p.basis().level_count().get(),
+            KeyDecomposition::Hybrid(p) => p.partition_count(),
+        }
+    }
+    fn key_len(&self, context: &BgvContext) -> usize {
+        2 * self.poly_len(context) * self.digit_count()
+    }
+    fn is_hybrid(&self) -> bool {
+        matches!(self.decomposition, KeyDecomposition::Hybrid(_))
+    }
+    fn weights(&self, index: usize) -> &[u64] {
+        match &self.decomposition {
+            KeyDecomposition::Radix(p) => p.key_weights(index),
+            KeyDecomposition::Hybrid(p) => p.key_weights(index),
+        }
+    }
+    fn transform(&self, context: &BgvContext, values: &mut [u64]) {
+        match &self.decomposition {
+            KeyDecomposition::Radix(_) => {
+                for (table, limb) in context
+                    .table()
+                    .iter()
+                    .zip(values.chunks_exact_mut(context.parameters().poly_length().get()))
+                {
+                    table.transform_slice(limb);
+                }
+            }
+            KeyDecomposition::Hybrid(p) => p.transform_qp_assign(context.table(), values),
+        }
+    }
+    fn noise(&self, context: &BgvContext, output: &mut [u64], rng: &mut impl rand::CryptoRng) {
+        context
+            .parameters()
+            .encryption_parameters()
+            .sample_noise_to(output, self.base(context).moduli_values(), rng);
+        if self.is_hybrid() {
+            scale_with_p(
+                self.p,
+                context.parameters().poly_length().get(),
+                self.base(context),
+                output,
+            );
+        }
+        self.transform(context, output);
+    }
+    fn uniform(&self, context: &BgvContext, output: &mut [u64], rng: &mut impl rand::CryptoRng) {
+        if !self.is_hybrid() {
+            let count = self.base(context).moduli_count();
+            primus_distr::sample_crt_uniform_values_to(
+                output,
+                context.parameters().poly_length().get(),
+                &context
+                    .parameters()
+                    .encryption_parameters()
+                    .cipher_moduli_uniform_distr()[..count],
+                rng,
+            );
+            return;
+        }
+        let distributions: Vec<_> = self
+            .base(context)
+            .moduli()
+            .iter()
+            .map(|q| rand::distr::Uniform::new(0, q.value()).expect("positive modulus"))
+            .collect();
+        primus_distr::sample_crt_uniform_values_to(
+            output,
+            context.parameters().poly_length().get(),
+            &distributions,
+            rng,
+        );
+    }
+    fn secret(
+        &self,
+        context: &BgvContext,
+        key: &DcrtGlweSecretKey<u64>,
+    ) -> Result<Zeroizing<Vec<u64>>, BgvEvaluationKeyError> {
+        let input = key.iter_dcrt_poly().next().expect("rank-one secret");
+        match &self.decomposition {
+            KeyDecomposition::Radix(_) => Ok(Zeroizing::new(
+                input.as_ref()[..context.rns_poly_len(self.level)].to_vec(),
+            )),
+            KeyDecomposition::Hybrid(parameters) => Ok(parameters.extend_bounded_secret_to_qp(
+                input.as_ref(),
+                context.parameters().base_q(),
+                context.table(),
+                context
+                    .parameters()
+                    .encryption_parameters()
+                    .secret_key_sampler()
+                    .maximum_magnitude(),
+            )?),
+        }
+    }
+
+    fn encrypt(
         mut self,
         client: &BgvClient<'_>,
         source: &[u64],
-        rng: &mut R,
-    ) -> Self {
+        rng: &mut impl rand::CryptoRng,
+    ) -> Result<Self, BgvEvaluationKeyError> {
         let context = client.context;
         let n = context.parameters().poly_length().get();
-        let base = context.base_q(self.level);
-        let poly_len = context.rns_poly_len(self.level);
+        let len = self.poly_len(context);
+        let target = self.secret(client.context, client.secret_key())?;
+        let base = self.base(context).clone();
         let mut weights = vec![0; base.moduli_count()];
-        for (scalar, column) in self
-            .basis
-            .scalar_iter()
-            .zip(self.columns.chunks_exact_mut(2 * poly_len))
-        {
-            base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
-            for (weight, q) in weights.iter_mut().zip(base.moduli()) {
-                *weight = q.reduce_mul(*weight, self.p);
+        let mut columns = std::mem::take(&mut self.columns);
+        for (digit, column) in columns.chunks_exact_mut(2 * len).enumerate() {
+            weights.copy_from_slice(self.weights(digit));
+            if !self.is_hybrid() {
+                for (weight, q) in weights.iter_mut().zip(base.moduli()) {
+                    *weight = q.reduce_mul(*weight, self.p);
+                }
             }
-            let mut output = BgvCiphertext::new(column);
-            client.encrypt_zeros_at_level_to(&mut output, self.level, rng);
-            let (mut c0, _) = output.c0_c1_mut(poly_len);
-            c0.add_mul_scalar_assign(&DcrtPolynomial(source), &weights, n, base.moduli());
+            let (c0, c1) = column.split_at_mut(len);
+            self.noise(context, c0, rng);
+            if !self.is_hybrid() {
+                scale_with_p(self.p, n, &base, c0);
+            }
+            self.uniform(context, c1, rng);
+            DcrtPolynomial(&mut *c0).add_mul_scalar_assign(
+                &DcrtPolynomial(source),
+                &weights,
+                n,
+                base.moduli(),
+            );
+            DcrtPolynomial(c0).sub_mul_assign(
+                &DcrtPolynomial(&*c1),
+                &DcrtPolynomial(target.as_slice()),
+                n,
+                base.moduli(),
+            );
         }
-        self
+        self.columns = columns;
+        Ok(self)
     }
-
     fn validate(&self, context: &BgvContext) -> Result<(), BgvEvaluationKeyError> {
-        let level = self.level;
-        validate_level(context, level)?;
-        validate_numeric_context(
-            self.size.rns_glwe_size().poly_length().get(),
-            self.p,
-            &self.moduli,
-            context,
-            level,
-        )
+        validate_level(context, self.level)?;
+        validate_numeric_context(self.n, self.p, &self.moduli, context, self.level)
     }
-
+    fn clone_metadata(&self, columns: Vec<u64>) -> Self {
+        Self {
+            n: self.n,
+            level: self.level,
+            p: self.p,
+            moduli: self.moduli.clone(),
+            decomposition: self.decomposition.clone(),
+            columns,
+        }
+    }
+    #[cfg(test)]
+    fn radix_basis(&self) -> &BigUintApproxSignedBasis<u64> {
+        match &self.decomposition {
+            KeyDecomposition::Radix(p) => p.basis(),
+            _ => panic!("radix oracle requires radix key"),
+        }
+    }
     #[cfg(test)]
     fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
-        self.columns
-            .chunks_exact(self.size.rns_glwe_size().rns_glwe_len())
-            .map(BgvCiphertext::new)
+        let len = self.columns.len() / self.digit_count();
+        self.columns.chunks_exact(len).map(BgvCiphertext::new)
     }
 }
 
-/// Public p-scaled columns encrypting gadget multiples of s² under s.
+fn scale_with_p(p: u64, n: usize, base: &KeyBase, values: &mut [u64]) {
+    for (i, limb) in values.chunks_exact_mut(n).enumerate() {
+        let q = base.moduli()[i % base.moduli_count()];
+        let scalar = q.reduce(p);
+        for value in limb {
+            *value = q.reduce_mul(*value, scalar);
+        }
+    }
+}
+
+/// Public native columns switching s² back to s. Radix encrypts p-scaled
+/// gadget weights; Hybrid encrypts P times the actual CRT-projector weights.
 /// Construction reveals correlated evaluation keys; their security assumption
 /// is additional to the fresh-ciphertext RLWE assumption.
 pub struct BgvRelinearizationKey {
@@ -198,24 +428,43 @@ pub struct BgvRelinearizationKey {
 impl BgvRelinearizationKey {
     /// Returns the level for which these columns were generated.
     #[must_use]
-    pub(crate) fn level(&self) -> usize {
+    pub fn level(&self) -> usize {
         self.key.level
     }
 }
 
-/// Public p-scaled columns encrypting the source secret under a target secret.
+/// Public native columns encrypting source-secret weights under a target secret.
+/// The selected radix/Hybrid representation determines its Q or QP key domain.
 pub struct BgvKeySwitchingKey {
     key: NativeEvaluationKey,
 }
 
-/// Public p-scaled columns encrypting σ(s) under s for one odd automorphism.
+/// Public native columns switching σ(s) back to s for one odd automorphism.
 pub struct BgvAutomorphismKey {
     key: NativeEvaluationKey,
+    exponent: usize,
     permutation: NttAutomorphismPermutation,
 }
 
+impl BgvAutomorphismKey {
+    /// Returns the native level (the number of removed tail primes).
+    #[must_use]
+    pub fn level(&self) -> usize {
+        self.key.level
+    }
+
+    /// Returns the odd exponent in `X -> X^exponent`.
+    #[must_use]
+    pub fn exponent(&self) -> usize {
+        self.exponent
+    }
+}
+
 impl BgvClient<'_> {
-    /// Generates p*g_j*s²+p*e_j columns under this client's actual secret.
+    /// Generates native s²-to-s columns under the selected radix/Hybrid basis.
+    ///
+    /// Radix phases are p*g_j*s²+p*e_j in Q; Hybrid phases are
+    /// P*projector_j*s²+p*e_j in QP. Key modulus/noise are caller budget inputs.
     ///
     /// Temporary secret-square storage is erased on return or unwind.
     /// # Errors
@@ -223,28 +472,24 @@ impl BgvClient<'_> {
     pub fn relinearization_key<R: rand::Rng + rand::CryptoRng>(
         &self,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BgvRelinearizationKey, BgvEvaluationKeyError> {
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
-        let len = self.context.rns_poly_len(level);
-        let secret = self
-            .secret_key()
-            .iter_dcrt_poly()
-            .next()
-            .expect("rank-one secret");
-        let mut square = Zeroizing::new(secret.as_ref()[..len].to_vec());
+        let secret = key.secret(self.context, self.secret_key())?;
+        let mut square = Zeroizing::new(secret.to_vec());
         DcrtPolynomial(square.as_mut_slice()).mul_assign(
-            &DcrtPolynomial(&secret.as_ref()[..len]),
+            &DcrtPolynomial(secret.as_slice()),
             self.context.parameters().poly_length().get(),
-            self.context.base_q(level).moduli(),
+            key.base(self.context).moduli(),
         );
         Ok(BgvRelinearizationKey {
-            key: key.encrypt(self, &square, rng),
+            key: key.encrypt(self, &square, rng)?,
         })
     }
 
-    /// Generates p*g_j*σ(s)+p*e_j columns for X -> X^exponent under s.
+    /// Generates native σ(s)-to-s columns for X -> X^exponent.
+    /// The selected key representation follows [`Self::relinearization_key`].
     ///
     /// Temporary transformed-secret storage is erased on return or unwind.
     /// # Errors
@@ -253,7 +498,7 @@ impl BgvClient<'_> {
         &self,
         level: usize,
         exponent: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BgvAutomorphismKey, BgvEvaluationKeyError> {
         let n = self.context.parameters().poly_length().get();
@@ -266,21 +511,14 @@ impl BgvClient<'_> {
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
         let permutation =
             NttAutomorphismPermutation::new(exponent, self.context.parameters().poly_length());
-        let secret = self
-            .secret_key()
-            .iter_dcrt_poly()
-            .next()
-            .expect("rank-one secret");
-        let mut transformed = Zeroizing::new(vec![0; self.context.rns_poly_len(level)]);
-        for (input, output) in secret
-            .as_ref()
-            .chunks_exact(n)
-            .zip(transformed.chunks_exact_mut(n))
-        {
+        let secret = key.secret(self.context, self.secret_key())?;
+        let mut transformed = Zeroizing::new(vec![0; secret.len()]);
+        for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
             permutation.apply_to(input, output);
         }
         Ok(BgvAutomorphismKey {
-            key: key.encrypt(self, &transformed, rng),
+            key: key.encrypt(self, &transformed, rng)?,
+            exponent,
             permutation,
         })
     }
@@ -301,7 +539,7 @@ impl BgvClient<'_> {
         level: usize,
         encoder: &primus_encoding::BatchingEncoder,
         steps: isize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BgvAutomorphismKey, BgvEvaluationKeyError> {
         self.validate_batching_encoder(encoder)?;
@@ -317,7 +555,7 @@ impl BgvClient<'_> {
         &self,
         level: usize,
         encoder: &primus_encoding::BatchingEncoder,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BgvAutomorphismKey, BgvEvaluationKeyError> {
         self.validate_batching_encoder(encoder)?;
@@ -354,7 +592,7 @@ impl BgvClient<'_> {
         &self,
         source: &BgvClient<'_>,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BgvKeySwitchingKey, BgvEvaluationKeyError> {
         validate_level(self.context, level)?;
@@ -367,17 +605,9 @@ impl BgvClient<'_> {
             level,
         )?;
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
-        let secret = source
-            .secret_key()
-            .iter_dcrt_poly()
-            .next()
-            .expect("rank-one secret");
+        let secret = key.secret(source.context, source.secret_key())?;
         Ok(BgvKeySwitchingKey {
-            key: key.encrypt(
-                self,
-                &secret.as_ref()[..self.context.rns_poly_len(level)],
-                rng,
-            ),
+            key: key.encrypt(self, &secret, rng)?,
         })
     }
 }
@@ -385,42 +615,61 @@ impl BgvClient<'_> {
 /// Prepared native p-preserving product. The low-level GLev kernel is only a
 /// componentwise linear sum: its temporary views do not invoke raw b-a*s phase,
 /// mask/body combination, or a ciphertext sign conversion.
+enum ProductWorkspace<'a> {
+    Radix {
+        p_inverse: Vec<u64>,
+        workspace: DcrtGlevMulWorkspace<u64>,
+    },
+    Hybrid(NativeHybridProduct<'a>),
+}
 struct NativeGadgetProduct<'a> {
     context: &'a BgvContext,
     key: &'a NativeEvaluationKey,
-    p_inverse: Vec<u64>,
     coefficient: Vec<u64>,
-    workspace: DcrtGlevMulWorkspace<u64>,
+    workspace: ProductWorkspace<'a>,
 }
-
 impl<'a> NativeGadgetProduct<'a> {
     fn try_new(
         context: &'a BgvContext,
         key: &'a NativeEvaluationKey,
     ) -> Result<Self, BgvEvaluationKeyError> {
         key.validate(context)?;
-        let level = key.level;
-        let base = context.base_q(level);
+        let base = context.base_q(key.level);
+        let workspace = match &key.decomposition {
+            KeyDecomposition::Radix(p) => ProductWorkspace::Radix {
+                p_inverse: base.moduli().iter().map(|q| q.reduce_inv(key.p)).collect(),
+                workspace: DcrtGlevMulWorkspace::new(p.size(), base),
+            },
+            KeyDecomposition::Hybrid(parameters) => {
+                ProductWorkspace::Hybrid(NativeHybridProduct::try_new(
+                    parameters,
+                    context.table(),
+                    HybridModDown::PlaintextPreserving(key.p),
+                )?)
+            }
+        };
         Ok(Self {
             context,
             key,
-            p_inverse: base.moduli().iter().map(|q| q.reduce_inv(key.p)).collect(),
-            coefficient: vec![0; context.rns_poly_len(level)],
-            workspace: DcrtGlevMulWorkspace::new(key.size, base),
+            coefficient: vec![0; context.rns_poly_len(key.level)],
+            workspace,
         })
     }
-
     fn poly_len(&self) -> usize {
         self.coefficient.len()
     }
-
-    /// Established caller layouts precede this private kernel's first write.
     fn product_to<B: DataMut<Elem = u64>>(
         &mut self,
         input: &[u64],
         permutation: Option<&NttAutomorphismPermutation>,
         output: &mut BgvCiphertext<B>,
     ) {
+        if permutation.is_none()
+            && let ProductWorkspace::Hybrid(product) = &mut self.workspace
+        {
+            product.product_to(input, &self.key.columns, output.as_mut());
+            return;
+        }
         let n = self.context.parameters().poly_length().get();
         if let Some(permutation) = permutation {
             for (input, output) in input
@@ -432,29 +681,41 @@ impl<'a> NativeGadgetProduct<'a> {
         } else {
             self.coefficient.copy_from_slice(input);
         }
-        let base = self.context.base_q(self.key.level);
-        DcrtPolynomial(self.coefficient.as_mut_slice()).mul_scalar_assign(
-            &self.p_inverse,
-            n,
-            base.moduli(),
-        );
-        for (table, limb) in self
-            .context
-            .table()
-            .ntt_tables()
-            .iter()
-            .zip(self.coefficient.chunks_exact_mut(n))
-        {
-            table.inverse_transform_slice(limb);
+        match &mut self.workspace {
+            ProductWorkspace::Radix {
+                p_inverse,
+                workspace,
+            } => {
+                let base = self.context.base_q(self.key.level);
+                DcrtPolynomial(self.coefficient.as_mut_slice()).mul_scalar_assign(
+                    p_inverse,
+                    n,
+                    base.moduli(),
+                );
+                for (table, limb) in self
+                    .context
+                    .table()
+                    .iter()
+                    .zip(self.coefficient.chunks_exact_mut(n))
+                {
+                    table.inverse_transform_slice(limb);
+                }
+                let KeyDecomposition::Radix(p) = &self.key.decomposition else {
+                    unreachable!("bound radix workspace")
+                };
+                DcrtGlev(self.key.columns.as_slice()).mul_crt_polynomial_to(
+                    &CrtPolynomial(self.coefficient.as_slice()),
+                    &mut DcrtGlwe(output.as_mut()),
+                    p.basis(),
+                    self.context.table(),
+                    base,
+                    workspace,
+                );
+            }
+            ProductWorkspace::Hybrid(product) => {
+                product.product_to(&self.coefficient, &self.key.columns, output.as_mut())
+            }
         }
-        DcrtGlev(self.key.columns.as_slice()).mul_crt_polynomial_to(
-            &CrtPolynomial(self.coefficient.as_slice()),
-            &mut DcrtGlwe(output.as_mut()),
-            &self.key.basis,
-            self.context.table(),
-            base,
-            &mut self.workspace,
-        );
     }
 }
 
@@ -481,7 +742,8 @@ impl<'a> BgvRelinearizer<'a> {
     /// # Correctness
     /// Input components are canonical residues using this actual secret,
     /// ordered level basis and NTT convention.
-    /// Both decomposition residual and key noise contribute p-scaled error;
+    /// Radix residual/key noise or Hybrid key/ModDown corrections contribute
+    /// p-scaled error;
     /// the intended output phase must stay in the centered Q interval.
     /// # Panics
     /// Rejects incomplete input/output lengths before writes. Prepared calls
@@ -612,7 +874,10 @@ impl<'a> BgvAutomorphism<'a> {
     }
 }
 
-fn validate_level(context: &BgvContext, level: usize) -> Result<(), BgvEvaluationKeyError> {
+pub(crate) fn validate_level(
+    context: &BgvContext,
+    level: usize,
+) -> Result<(), BgvEvaluationKeyError> {
     if level >= context.level_count() {
         Err(BgvEvaluationKeyError::Level {
             requested: level,
@@ -665,3 +930,6 @@ fn validate_numeric_context(
 
 #[cfg(test)]
 mod tests;
+
+mod collective;
+pub use collective::*;

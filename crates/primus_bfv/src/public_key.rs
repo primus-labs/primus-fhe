@@ -6,7 +6,7 @@ use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
 use zeroize::Zeroize;
 
-use crate::{BfvCiphertext, BfvParameters, BfvSecretKeyContext};
+use crate::{BfvCiphertext, BfvContext, BfvParameters, BfvSecretKeyContext};
 
 /// A native BFV public key, represented by a zero encryption `[c0,c1]`.
 /// Its phase under the generating secret is `c0+c1*s=e`.
@@ -18,6 +18,18 @@ pub struct BfvPublicKey {
 }
 
 impl BfvPublicKey {
+    /// Canonical native public zero-encryption payload `[c0,c1]` for authenticated transport or binding.
+    #[must_use]
+    pub fn as_residues(&self) -> &[u64] {
+        self.ciphertext.as_ref()
+    }
+
+    /// Borrows the public native zero encryption, with no private secret or evaluation columns.
+    #[must_use]
+    pub fn as_ciphertext(&self) -> BfvCiphertext<&[u64]> {
+        BfvCiphertext::new(self.ciphertext.as_ref())
+    }
+
     /// Generates a native public key using an already checked private binding.
     /// Allocation is confined to persistent key storage and its basis metadata.
     #[must_use]
@@ -32,6 +44,14 @@ impl BfvPublicKey {
             ciphertext,
             size: parameters.size(),
             moduli: parameters.codec().moduli_values().to_vec(),
+        }
+    }
+
+    pub(crate) fn from_collective(context: &crate::BfvContext, coefficients: Vec<u64>) -> Self {
+        Self {
+            ciphertext: BfvCiphertext::new(coefficients),
+            size: context.parameters().size(),
+            moduli: context.parameters().codec().moduli_values().to_vec(),
         }
     }
 
@@ -79,22 +99,21 @@ pub struct BfvPublicKeyEncryptor<'a> {
 }
 
 impl<'a> BfvPublicKeyEncryptor<'a> {
-    /// Checks key/table geometry and numerical basis once, then allocates one ephemeral.
+    /// Checks a key against the prepared context, then allocates one ephemeral.
     ///
     /// # Errors
-    /// Rejects a different key layout or ordered parameter/table basis. Actual
+    /// Rejects a different key layout or ordered context basis. Actual
     /// secret and NTT root/evaluation identity remain caller contracts.
     pub fn try_new(
         key: &'a BfvPublicKey,
-        parameters: &'a BfvParameters,
-        table: &'a U64DcrtTable,
+        context: &'a BfvContext,
     ) -> Result<Self, RnsDomainError<u64>> {
-        parameters.validate_table(table)?;
+        let parameters = context.parameters();
         key.validate(parameters)?;
         Ok(Self {
             key,
             parameters,
-            table,
+            table: context.table(),
             workspace: DcrtGlwePublicKeyWorkspace::new(parameters.size()),
         })
     }
@@ -126,23 +145,6 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     {
         let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
         self.encrypt_centered_to(input, &mut output, rng);
-        output
-    }
-
-    /// Encrypts unscaled CRT plaintext lifts, allocating only the returned ciphertext.
-    /// Scaling and input conditions follow [`Self::encrypt_plaintext_lift_crt_to`].
-    #[must_use]
-    pub fn encrypt_plaintext_lift_crt<R, A>(
-        &mut self,
-        input: &CrtPolynomial<A>,
-        rng: &mut R,
-    ) -> BfvCiphertext<Vec<u64>>
-    where
-        R: rand::Rng + rand::CryptoRng,
-        A: Data<Elem = u64>,
-    {
-        let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
-        self.encrypt_plaintext_lift_crt_to(input, &mut output, rng);
         output
     }
 

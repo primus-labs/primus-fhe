@@ -41,12 +41,10 @@ fn test_external_product() {
         GlweSize::new(GlweDimension::new(dimension), table.poly_length()),
         base_q.moduli_count(),
     );
-    let inner = Arc::new(CrtGlweEncryptionParameters::new(
-        size,
-        &base_q,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    ));
+    let inner = Arc::new(
+        CrtGlweEncryptionParameters::try_new(size, &base_q, SecretKeyDistr::SparseTernary, 3.20)
+            .unwrap(),
+    );
     let basis =
         BigUintApproxSignedBasis::new(base_q.moduli_product(), DecompositionBaseLog::new(20), None);
     let glev_params = CrtGlevParameters::try_from_parts(inner.size(), base_q, basis).unwrap();

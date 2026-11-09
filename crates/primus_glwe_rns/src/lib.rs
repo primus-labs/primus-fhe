@@ -10,6 +10,7 @@
 mod automorphism;
 mod crt;
 mod dcrt;
+mod expansion;
 mod key_switch;
 mod parameter;
 mod public_key;
@@ -36,7 +37,7 @@ pub use key_switch::{
     HybridRnsGlweKeySwitchingKey,
 };
 pub use parameter::{
-    CrtGgswParameters, CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
+    CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
     CrtGlweEncryptionParametersError, RnsDomainError,
 };
 pub use primus_glwe::{GlweSecretKey, SecretKeyDistr};
