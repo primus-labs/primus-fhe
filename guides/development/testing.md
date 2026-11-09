@@ -18,7 +18,7 @@
 | `just parallel` | stable 的可选 limb 并行：NTT、lattice、BFV/BGV 的 all-targets lint 和普通测试，选择 `rns,batching,parallel`，每个测试进程的Rayon pool为4线程 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | 在 `just` 之上执行 doctest、BFV/BGV batching 流程、stable parallel、可选依赖隔离编译和 Barrett derive 回归 |
+| `just ci` | Stable 工作区主套件统一启用 batching，并运行 doctest、方案示例和独立消费者、定向并行测试、无 batching 的分配测试、依赖隔离编译和 Barrett derive 回归 |
 | `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -47,17 +47,18 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 稳定工具链上的其他可选功能包括 `primus_data/aligned-vec`、integer/lattice 的 `serde`、`primus_modulus/derive`、`primus_distr/high_precision` 及 lattice/encoding 的 `rns`。独立包验证须显式选择需要的功能，不能依赖其他 workspace 消费者合并 features。
 
 `primus_ntt/parallel`显式启用有界limb调度，经lattice、raw RNS GLWE与BFV/BGV转发，
-默认关闭。`just parallel`在stable上独立验证，不能用nightly的all-features结果代替。
+默认关闭。`just parallel` 可在 Stable 上跑完整的并行特性矩阵。`just ci` 定向执行
+`dcrt_prefix` 和 BFV `leveled_parameters`，分别覆盖并行变换和实际进入该路径的大环求值。
 N4096的prefix测试比较T1/T2/T4正逆变换、坏geometry写前拒绝，以及pool准备后的
 跨线程零分配；任务借用互不重叠的limbs，不各自复制整套密码scratch。该测试不是完整算法的并行性能保证，
 总线程仍须由`RAYON_NUM_THREADS`或调用方既有pool约束。
 
 `just ci` 对 `primus_modulus --features derive` 做 all-targets 编译，并单独运行
 `derives` 测试目标；不启用 Cargo `simd`，与 nightly 的 portable-SIMD 派生路径分开覆盖。
-该过滤不会重跑 modulus 的其他数值测试。只复现这项回归时使用：
+该命令只构建并运行 `derives` 测试目标。单独复现命令如下。
 
 ```sh
-cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
+cargo nextest run -p primus_modulus --test derives --features derive
 ```
 
 workspace 的普通 `just` 已因 raw `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`，

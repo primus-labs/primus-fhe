@@ -1,10 +1,12 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 export RUSTDOCFLAGS := "-D warnings"
 
+stable_ci_features := "ntt,fourier,rustfft,tfhe-fft,rns,batching"
+
 default: fmt-check (lint "*" "ntt,fourier,rustfft,tfhe-fft") (test "*" "ntt,fourier,rustfft,tfhe-fft")
 
 # CI selects stable; local commands use the active toolchain.
-ci: default test-doc schemes parallel
+ci: fmt-check (lint "*" stable_ci_features) (test "*" stable_ci_features) test-doc scheme-smoke (parallel "--test dcrt_prefix --test leveled_parameters")
   cargo check -p primus_data --lib --no-default-features
   cargo check -p primus_fft -p primus_lwe -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
@@ -13,8 +15,9 @@ ci: default test-doc schemes parallel
   cargo check -p primus_encoding --lib --no-default-features --features batching
   cargo check -p primus_bgv --lib --no-default-features
   cargo check -p primus_bfv --lib --no-default-features
+  cargo nextest run -p primus_bfv -p primus_bgv --test allocation --no-default-features
   cargo check -p primus_modulus --all-targets --features derive
-  cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
+  cargo nextest run -p primus_modulus --test derives --features derive
   cargo check -p primus_distr --lib --features high_precision
 
 # Separate toolchain/job. Build strict rustdoc only once, with all features.
@@ -53,34 +56,27 @@ tfhe: (lint "primus_tfhe*" "rustfft,tfhe-fft") (test "primus_tfhe*" "rustfft,tfh
 tfhe-simd: (simd "primus_tfhe*")
 
 # BFV/BGV ordinary requests, advanced batching, and normal external consumers.
-schemes:
+schemes: && scheme-smoke
   cargo clippy -p primus_encoding -p primus_bfv -p primus_bgv --all-targets --features rns,batching -- -D warnings
   cargo nextest run -p primus_encoding -p primus_bfv -p primus_bgv --lib --tests --features rns,batching
-  cargo run -p primus_bgv --example coefficients
-  cargo run -p primus_bgv --example slots --features batching
-  cargo run -p primus_bgv --example leveled_coefficients
+
+# The standalone consumers also run the ordinary examples and both key backends.
+[private]
+scheme-smoke:
   cargo run -p primus_bgv --example leveled_slots --features batching
-  cargo run -p primus_bfv --example coefficients
   cargo run -p primus_bfv --example explicit_coefficients
-  cargo run -p primus_bfv --example slots --features batching
   cargo run -p primus_bfv --example subring_slots --features batching
   cargo run -p primus_bfv --example leveled_coefficients
   cargo run -p primus_bfv --example leveled_slots --features batching
-  cargo run -p primus_bfv --example working_basis
-  cargo run -p primus_bfv --example working_basis -- --radix
-  cargo run -p primus_bgv --example ciphertext_multiplication
-  cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
-  cargo run -p primus_bfv --example ciphertext_multiplication
-  cargo run -p primus_bfv --example ciphertext_multiplication -- --hybrid
   cargo run -p primus_glwe_rns --example raw_encryption
   cargo run -p primus_glwe_rns --example public_encryption
   cargo run -p primus_glwe_rns --example gadget_encryption
   python3 scripts/check_scheme_consumers.py
 
-# Optional stable scheduling; exercise actual prefix sizes, not SIMD-only paths.
-parallel:
+# CI selects the transform and large-ring BFV targets. Run without arguments for the full matrix.
+parallel targets="--lib --tests":
   cargo clippy -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv --all-targets --features rns,batching,parallel -- -D warnings
-  env RAYON_NUM_THREADS=4 cargo nextest run -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv --lib --tests --features rns,batching,parallel
+  env RAYON_NUM_THREADS=4 cargo nextest run -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv {{targets}} --features rns,batching,parallel
 
 # Explicit crate-local workload.
 bench package target *cargo-args:
