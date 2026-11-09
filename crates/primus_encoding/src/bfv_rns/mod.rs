@@ -208,6 +208,12 @@ where
         self.t
     }
 
+    /// Returns the auxiliary modulus used by the bounded fast decoder.
+    #[must_use]
+    pub fn gamma(&self) -> T {
+        self.gamma
+    }
+
     /// Returns the ordered ciphertext RNS basis whose product is `Q`.
     #[must_use]
     pub fn base_q(&self) -> &RNSBase<T, M> {

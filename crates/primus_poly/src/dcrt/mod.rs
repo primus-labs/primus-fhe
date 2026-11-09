@@ -129,6 +129,36 @@ where
         )
         .for_each(|(acc, a, b, &modulus)| modulus.reduce_add_mul_slice_assign(acc, a, b))
     }
+
+    /// Performs `self -= lhs * rhs` pointwise without temporary storage.
+    ///
+    /// # Correctness
+    /// All polynomials contain exactly `poly_length * moduli.len()` values in
+    /// the same NTT order. Operands satisfy each modulus's canonical input
+    /// contract; complete geometry and basis checks belong to the binding.
+    ///
+    /// # Panics
+    /// Panics if `poly_length` is zero.
+    #[inline]
+    pub fn sub_mul_assign<M, A, B>(
+        &mut self,
+        lhs: &DcrtPolynomial<A>,
+        rhs: &DcrtPolynomial<B>,
+        poly_length: usize,
+        moduli: &[M],
+    ) where
+        M: Copy + ReduceMulAddSlice<T>,
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
+    {
+        izip!(
+            self.iter_each_modulus_mut(poly_length),
+            lhs.iter_each_modulus(poly_length),
+            rhs.iter_each_modulus(poly_length),
+            moduli
+        )
+        .for_each(|(acc, a, b, &modulus)| modulus.reduce_sub_mul_slice_assign(acc, a, b))
+    }
 }
 
 impl<S, T> DcrtPolynomial<S>

@@ -1,4 +1,4 @@
-//! Integer SIMD for canonical Barrett multiply-add slices.
+//! Integer SIMD for canonical Barrett multiply-add/subtract slices.
 //!
 //! Kernels use or derive their reciprocal from the scalar two-limb reciprocal.
 //! There is no key-dependent precomputation or change to residue representation.
@@ -12,7 +12,17 @@ pub(super) fn try_add_mul<T: FheUint, const FIXED_MODULUS: bool>(
     lhs: &[T],
     rhs: &[T],
 ) -> bool {
-    try_mul_add::<T, FIXED_MODULUS, false>(modulus, acc, lhs, rhs, None)
+    try_mul_add::<T, FIXED_MODULUS, false, false>(modulus, acc, lhs, rhs, None)
+}
+
+#[inline]
+pub(super) fn try_sub_mul<T: FheUint>(
+    modulus: BarrettModulus<T>,
+    acc: &mut [T],
+    lhs: &[T],
+    rhs: &[T],
+) -> bool {
+    try_mul_add::<T, false, false, true>(modulus, acc, lhs, rhs, None)
 }
 
 #[inline]
@@ -23,7 +33,7 @@ pub(super) fn try_mul_add_to<T: FheUint, const FIXED_MODULUS: bool>(
     addend: &[T],
     output: &mut [T],
 ) -> bool {
-    try_mul_add::<T, FIXED_MODULUS, true>(modulus, output, lhs, rhs, Some(addend))
+    try_mul_add::<T, FIXED_MODULUS, true, false>(modulus, output, lhs, rhs, Some(addend))
 }
 
 // The optional addend preserves disjoint slice borrows for overwrite operations.
@@ -31,7 +41,12 @@ pub(super) fn try_mul_add_to<T: FheUint, const FIXED_MODULUS: bool>(
 // No shared reference to acc is constructed alongside its mutable borrow.
 // Expose eligibility to constant-modulus callers before considering a kernel.
 #[inline(always)]
-fn try_mul_add<T: FheUint, const FIXED_MODULUS: bool, const OVERWRITE: bool>(
+fn try_mul_add<
+    T: FheUint,
+    const FIXED_MODULUS: bool,
+    const OVERWRITE: bool,
+    const SUBTRACT: bool,
+>(
     modulus: BarrettModulus<T>,
     acc: &mut [T],
     lhs: &[T],
@@ -66,7 +81,7 @@ fn try_mul_add<T: FheUint, const FIXED_MODULUS: bool, const OVERWRITE: bool>(
                     let q: $t = modulus.value().as_into();
                     let ratio = modulus.ratio().map(|x| x.as_into());
                     let modulus = BarrettModulus::<$t>::from_parts(q, ratio);
-                    return avx512::$entry::<FIXED_MODULUS, OVERWRITE>(
+                    return avx512::$entry::<FIXED_MODULUS, OVERWRITE, SUBTRACT>(
                         modulus, acc, lhs, rhs, addend,
                     );
                 }
@@ -95,13 +110,21 @@ mod avx512 {
     pub(super) const IFMA_MODULUS_LIMIT: u64 = 1 << 50;
 
     #[inline(always)]
-    pub(super) fn try_add_mul_u32<const FIXED_MODULUS: bool, const OVERWRITE: bool>(
+    pub(super) fn try_add_mul_u32<
+        const FIXED_MODULUS: bool,
+        const OVERWRITE: bool,
+        const SUBTRACT: bool,
+    >(
         modulus: BarrettModulus<u32>,
         acc: &mut [u32],
         lhs: &[u32],
         rhs: &[u32],
         addend: Option<&[u32]>,
     ) -> bool {
+        // The native subtraction path currently serves the u64 scheme backend.
+        if SUBTRACT {
+            return false;
+        }
         // Fixed-modulus eligibility precedes length checks so an ineligible
         // derive folds directly to its original constant-modulus fallback.
         if FIXED_MODULUS && modulus.value().is_power_of_two() {
@@ -123,12 +146,16 @@ mod avx512 {
             return false;
         }
         // SAFETY: AVX-512F is available and the slices have equal lengths.
-        unsafe { add_mul_u32::<OVERWRITE>(modulus, acc, lhs, rhs, addend) };
+        unsafe { add_mul_u32::<OVERWRITE, false>(modulus, acc, lhs, rhs, addend) };
         true
     }
 
     #[inline(always)]
-    pub(super) fn try_add_mul_u64<const FIXED_MODULUS: bool, const OVERWRITE: bool>(
+    pub(super) fn try_add_mul_u64<
+        const FIXED_MODULUS: bool,
+        const OVERWRITE: bool,
+        const SUBTRACT: bool,
+    >(
         modulus: BarrettModulus<u64>,
         acc: &mut [u64],
         lhs: &[u64],
@@ -158,13 +185,13 @@ mod avx512 {
         }
         if q < IFMA_MODULUS_LIMIT && is_x86_feature_detected!("avx512ifma") {
             // SAFETY: F/DQ/IFMA, the modulus bound and equal lengths are checked.
-            unsafe { add_mul_u64_ifma::<OVERWRITE>(modulus, acc, lhs, rhs, addend) };
+            unsafe { add_mul_u64_ifma::<OVERWRITE, SUBTRACT>(modulus, acc, lhs, rhs, addend) };
         } else if FIXED_MODULUS {
             // Without IFMA, derives retain their scalar/portable constant loop.
             return false;
         } else {
             // SAFETY: AVX-512F/DQ and equal slice lengths are checked above.
-            unsafe { add_mul_u64_dq::<OVERWRITE>(modulus, acc, lhs, rhs, addend) };
+            unsafe { add_mul_u64_dq::<OVERWRITE, SUBTRACT>(modulus, acc, lhs, rhs, addend) };
         }
         true
     }
@@ -181,7 +208,7 @@ mod avx512 {
     // large loop inside each PBS caller.
     #[inline(never)]
     #[target_feature(enable = "avx512f,avx512dq,avx512ifma")]
-    pub(super) unsafe fn add_mul_u64_ifma<const OVERWRITE: bool>(
+    pub(super) unsafe fn add_mul_u64_ifma<const OVERWRITE: bool, const SUBTRACT: bool>(
         modulus: BarrettModulus<u64>,
         acc: &mut [u64],
         lhs: &[u64],
@@ -200,6 +227,7 @@ mod avx512 {
         let mu = _mm512_set1_epi64(reciprocal as i64);
         let vq = _mm512_set1_epi64(q as i64);
         let twice_q = _mm512_set1_epi64((2 * q) as i64);
+        let thrice_q = _mm512_set1_epi64((3 * q) as i64);
         let neg_q = _mm512_set1_epi64(-(q as i64));
         let low_mask = _mm512_set1_epi64((1 << 52) - 1);
         let right_shift = _mm512_set1_epi64(i64::from(k - 2));
@@ -227,7 +255,15 @@ mod avx512 {
                 let quotient = _mm512_madd52hi_epu64(zero, truncated, mu);
                 let residue =
                     _mm512_and_si512(_mm512_madd52lo_epu64(lo, quotient, neg_q), low_mask);
-                let value = normalize(normalize(_mm512_add_epi64(residue, c), twice_q), vq);
+                // residue is in [0,3q). For subtraction, 3q+c-residue is
+                // nonnegative and below 4q, congruent to c-a*b. The same
+                // two corrections apply; no coefficient negation pass is added.
+                let value = if SUBTRACT {
+                    _mm512_sub_epi64(_mm512_add_epi64(thrice_q, c), residue)
+                } else {
+                    _mm512_add_epi64(residue, c)
+                };
+                let value = normalize(normalize(value, twice_q), vq);
                 _mm512_storeu_si512(acc.as_mut_ptr().add(i).cast(), value);
             }
         }
@@ -237,7 +273,7 @@ mod avx512 {
             // tail with lane extraction and a large stack frame for this kernel.
             // SAFETY: DQ is enabled above; the remaining slices are equal in length.
             unsafe {
-                add_mul_u64_dq::<OVERWRITE>(
+                add_mul_u64_dq::<OVERWRITE, SUBTRACT>(
                     modulus,
                     &mut acc[end..],
                     &lhs[end..],
@@ -293,7 +329,7 @@ mod avx512 {
     // Keep 32-bit partial products in the target-feature loop so LLVM can
     // vectorize them without scalar u128 multiplication or lane extraction.
     #[target_feature(enable = "avx512f,avx512dq")]
-    pub(super) unsafe fn add_mul_u64_dq<const OVERWRITE: bool>(
+    pub(super) unsafe fn add_mul_u64_dq<const OVERWRITE: bool, const SUBTRACT: bool>(
         modulus: BarrettModulus<u64>,
         acc: &mut [u64],
         lhs: &[u64],
@@ -320,24 +356,35 @@ mod avx512 {
             } else {
                 acc[i]
             };
+            // c-a*b = -(a*b+(q-c)) mod q. Even when c=0, the
+            // intermediate is at most (q-1)^2+q < q^2, preserving
+            // the existing quotient/error bound of this DQ kernel.
+            let addend = if SUBTRACT { q - addend } else { addend };
             let (lo, hi) = carrying_mul(lhs[i], rhs[i], addend);
             // When k=2, the left shift count wraps to zero; hi is zero as well.
             let truncated = (lo >> (k - 2)) | hi.wrapping_shl(66 - k);
             let quotient = mul_hi_approx(truncated, reciprocal);
             let value = lo.wrapping_sub(quotient.wrapping_mul(q));
             let value = value.min(value.wrapping_sub(2 * q));
-            acc[i] = value.min(value.wrapping_sub(q));
+            let value = value.min(value.wrapping_sub(q));
+            acc[i] = if SUBTRACT {
+                let negated = q - value;
+                negated.min(negated.wrapping_sub(q))
+            } else {
+                value
+            };
         }
     }
 
     #[target_feature(enable = "avx512f")]
-    pub(super) unsafe fn add_mul_u32<const OVERWRITE: bool>(
+    pub(super) unsafe fn add_mul_u32<const OVERWRITE: bool, const SUBTRACT: bool>(
         modulus: BarrettModulus<u32>,
         acc: &mut [u32],
         lhs: &[u32],
         rhs: &[u32],
         addend: Option<&[u32]>,
     ) {
+        debug_assert!(!SUBTRACT);
         debug_assert_eq!(acc.len(), lhs.len());
         debug_assert_eq!(acc.len(), rhs.len());
         // For k=bit_width(q)<=30, x=a*b+c<q^2. Truncated Barrett:
@@ -417,6 +464,69 @@ mod tests {
     use super::*;
     use primus_reduce::ReduceMulAddSlice;
 
+    #[test]
+    fn native_subtract_matches_wide_remainders() {
+        type Kernel = unsafe fn(BarrettModulus<u64>, &mut [u64], &[u64], &[u64], Option<&[u64]>);
+        for q in (2..=61)
+            .flat_map(|bits| [(1u64 << bits) - 1, 1u64 << bits, (1u64 << bits) + 1])
+            .chain([2, 97, 1_125_899_906_826_241, (1 << 62) - 1])
+        {
+            let modulus = BarrettModulus::new(q);
+            let mut kernels: Vec<Kernel> = vec![|m, out, a, b, _| {
+                m.reduce_sub_mul_slice_assign(out, a, b);
+            }];
+            if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512dq") {
+                kernels.push(avx512::add_mul_u64_dq::<false, true>);
+                if q < avx512::IFMA_MODULUS_LIMIT && is_x86_feature_detected!("avx512ifma") {
+                    kernels.push(avx512::add_mul_u64_ifma::<false, true>);
+                }
+            }
+            for len in [0, 1, 7, 8, 15, 31, 32, 33, 63, 64, 65] {
+                let mut state = 0x6789_abcd_1234_5678u64;
+                let mut sample = || {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    state % q
+                };
+                let left: Vec<_> = (0..len)
+                    .map(|i| if i % 4 == 0 { q - 1 } else { sample() })
+                    .collect();
+                let right: Vec<_> = (0..len)
+                    .map(|i| match i % 4 {
+                        0 => q - 1,
+                        1 => 0,
+                        _ => sample(),
+                    })
+                    .collect();
+                let initial: Vec<_> = (0..len)
+                    .map(|i| match i % 3 {
+                        0 => 0,
+                        1 => q - 1,
+                        _ => sample(),
+                    })
+                    .collect();
+                for kernel in &kernels {
+                    let mut actual = vec![u64::MAX; len + 2];
+                    actual[1..len + 1].copy_from_slice(&initial);
+                    let mut expected = initial.clone();
+                    for _ in 0..2 {
+                        for ((c, &a), &b) in expected.iter_mut().zip(&left).zip(&right) {
+                            let product = u128::from(a) * u128::from(b) % u128::from(q);
+                            *c =
+                                ((u128::from(*c) + u128::from(q) - product) % u128::from(q)) as u64;
+                        }
+                        // SAFETY: checked target features, canonical operands, equal disjoint slices.
+                        unsafe { kernel(modulus, &mut actual[1..len + 1], &left, &right, None) };
+                        assert_eq!(&actual[1..len + 1], expected, "q={q}, len={len}");
+                        assert_eq!(actual[0], u64::MAX);
+                        assert_eq!(actual[len + 1], u64::MAX);
+                    }
+                }
+            }
+        }
+    }
+
     /// Native dispatch must validate all three sources before exposing a writable output.
     #[test]
     fn overwrite_dispatch_checks_each_input_length_before_writing() {
@@ -464,7 +574,7 @@ mod tests {
                         |m, out, a, b, c| m.reduce_mul_add_slice_to(a, b, c.unwrap(), out),
                     )];
                     $(if $available && ($valid)(q) {
-                        kernels.push((avx512::$kernel::<false>, avx512::$kernel::<true>));
+                        kernels.push((avx512::$kernel::<false, false>, avx512::$kernel::<true, false>));
                     })*
                     // Cover empty/scalar, vector tails, and the 32-element dispatch boundary.
                     // Larger lengths repeat the same kernels; modulus bit boundaries below

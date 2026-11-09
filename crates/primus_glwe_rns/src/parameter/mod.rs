@@ -1,15 +1,13 @@
-//! RNS GLWE parameters and transform domains.
+//! RNS GLWE sampling, gadget precomputation and compatibility checks.
 
 mod core;
 mod domain;
 mod error;
 mod gadget;
-mod ordinary;
 
 pub use core::CrtGlweEncryptionParameters;
-pub use domain::{DcrtGadgetDomain, DcrtGlweDomain, HybridRnsKeySwitchDomain, RnsDomainError};
-pub use error::{CrtGlevParametersError, CrtGlweEncryptionParametersError, CrtGlweParametersError};
+pub use domain::RnsDomainError;
+pub use error::{CrtGlevParametersError, CrtGlweEncryptionParametersError};
 pub use gadget::{CrtGgswParameters, CrtGlevParameters};
-pub use ordinary::CrtGlweParameters;
 
 pub(crate) use domain::{validate_dcrt_table, validate_glwe_size, validate_moduli};

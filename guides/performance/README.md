@@ -10,8 +10,14 @@ and [benchmark guide](../development/testing.md#tfhe-benchmarks).
 
 | Topic | Language | What remains useful |
 | --- | --- | --- |
+| [BFV/BGV ordinary workflows](bfv-bgv-api-workflows.md) | 中文 | Combined prepared multiplication, private diagnostics, same-request ABBA and allocation/storage comparison |
+| [BFV coefficient input checks](bfv-coefficient-validation.md) | English | Early rejection at encryption boundaries and complete-request ABBA guard |
+| [Exact BFV multiplication](bfv-multiplication.md) | English | Exact RNS NTT/reference comparison, complete fresh slot requests and unchanged coefficient control |
+| [BGV leveled slot requests](bgv-leveled.md) | English | Multiplication/relin/rotation/key-change/drop pipeline and equivalent previous-workflow ABBA control |
+| [BGV coefficient and subring slots](bgv-basic.md) | English | Exact centered recovery resources and complete packed-request baseline |
+| [BFV coefficient workflow](bfv-leveled-coefficients.md) | English | Exact rounded prime-drop resources and complete coefficient-request costs |
 | [Sparse arithmetic and scheduling](sparse-arithmetic.md) | English | Current grouping, canonical NTT boundaries, 16 KiB tiles, 4/2/1 ownership and retained negative controls |
-| [NTRU projection](ntru-projection-fusion.md) | English | Four NTT strategies and historical binary complete-request results |
+| [NTRU projection](ntru-projection-fusion.md) | English | Four NTT strategies, Fourier paired/sharing costs and historical binary full-request failure gate |
 | [Fourier GLWE key generation](fourier-glwe-keygen.md) | 中文 | Exact native-row repair, key replacement, setup/storage costs and floating-point limits |
 | [GLWE square SS](glwe-square-ss.md) | 中文 | Rank-one NTT material savings, complete CBS/CMux gains and regressions |
 | [PBS/CBS/EBS references](bootstrap-functional-comparison.md) | 中文 | Historical algorithms, parameter differences and process means; unrepaired Primus GLWE Fourier times retired |

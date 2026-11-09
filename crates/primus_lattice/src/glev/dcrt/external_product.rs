@@ -28,6 +28,8 @@ where
     /// smaller than every RNS modulus for the fast centered digit lift.
     /// `workspace` must support the GLev layout and the current RNS limb
     /// width; the table must match its polynomial length and ordered RNS base.
+    /// The table may contain additional higher limbs; only its prefix matching
+    /// `rns_base` is used. The caller establishes that prefix's modulus order.
     /// The output is overwritten; scratch does not require a manual reset.
     ///
     /// Let `size = workspace.size()`, `N = table.poly_length().get()`,
@@ -74,6 +76,8 @@ where
     /// smaller than every RNS modulus for the fast centered digit lift.
     /// `workspace` must support the GLev layout and the current RNS limb
     /// width; the table must match its polynomial length and ordered RNS base.
+    /// The table may contain additional higher limbs; only its prefix matching
+    /// `rns_base` is used. The caller establishes that prefix's modulus order.
     /// The output is overwritten; scratch does not require a manual reset.
     ///
     /// Let `size = workspace.size()`, `N = table.poly_length().get()`,
@@ -289,7 +293,15 @@ impl<T: FheUint> DcrtGlwe<&mut [T]> {
                 basis_value,
             );
 
-            table.transform_slice(multi_residues);
+            // A leveled caller may borrow one full-basis table while using a
+            // shorter ordered RNS prefix. Transform only the retained limbs.
+            for (table, limb) in table
+                .ntt_tables()
+                .iter()
+                .zip(multi_residues.chunks_exact_mut(poly_length))
+            {
+                table.transform_slice(limb);
+            }
 
             self.add_mul_dcrt_polynomial_assign(
                 &dcrt_glwe,

@@ -1,7 +1,9 @@
+mod support;
+
 use primus_decompose::{DecompositionBaseLog, big_integer::BigUintApproxSignedBasis};
 use primus_glwe_rns::{
-    BfvRnsCodec, CrtGlevParameters, CrtGlweEncryptionParameters, CrtGlweParameters,
-    DcrtGadgetDomain, DcrtGlweDecryptWorkspace, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey,
+    RnsDomainError, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_lattice::{glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
@@ -16,14 +18,8 @@ use std::{
     sync::Arc,
 };
 
-/// Test GLev–BigUint multiplication correctness.
-///
-/// Given two plaintexts m₁(X), m₂(X), the test verifies that:
-///   GLev(m₁) ⊡ CRT(δ·m₂)  decrypts to  m₁ · m₂ mod t
-///
-/// m₁ is encrypted as a GLev gadget (key-switching key format).
-/// m₂ is CRT-encoded with delta scaling and composed into a BigUint polynomial.
-/// The GLev–BigUint product is a single GLWE ciphertext encrypting the product.
+/// Raw GLev–BigUint multiplication matches an integer negacyclic convolution.
+/// The phase probe uses an arbitrary power-of-two multiplier, with no t or codec.
 #[test]
 fn test_rns_glev() {
     type ValueT = u64;
@@ -32,19 +28,13 @@ fn test_rns_glev() {
     let poly_length: usize = 32;
     let log_n = poly_length.trailing_zeros();
 
-    let t: ValueT = 12289;
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
     let moduli_values: [ValueT; 2] = [1125899906826241, 1125899906629633];
     let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
     let table = UintDcrtTable::new(PolyLength::new(1usize << log_n), &moduli).unwrap();
 
     let mut rng = StdRng::seed_from_u64(42);
 
-    // Prepare sampling, the gadget basis and keys before choosing BFV encoding.
+    // Prepare codec-free sampling, the gadget basis and keys.
     let base_q = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(
         GlweSize::new(GlweDimension::new(dimension), table.poly_length()),
@@ -58,38 +48,69 @@ fn test_rns_glev() {
     ));
     let basis =
         BigUintApproxSignedBasis::new(base_q.moduli_product(), DecompositionBaseLog::new(20), None);
-    let glev_params = CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q, basis).unwrap();
+    let glev_params = CrtGlevParameters::try_from_parts(size, base_q, basis).unwrap();
     let sk = GlweSecretKey::generate(size.glwe_size(), inner.secret_key_sampler(), &mut rng);
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
-    // Only the ordinary input/output encoding needs t and gamma.
-    let codec = BfvRnsCodec::new(mod_t, glev_params.base_q().clone(), mod_gamma);
-    let glwe_params = CrtGlweParameters::try_from_parts(inner, codec).unwrap();
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-    let base_q = glwe_params.base_q();
-    let rns_poly_len = glwe_params.rns_poly_len();
-    let big_uint_poly_len = glwe_params.big_uint_poly_len();
+    let parameters = support::RawParameters {
+        core: Arc::clone(&inner),
+        base: glev_params.base_q().clone(),
+    };
+    let rns_glwe_len = size.rns_glwe_len();
+    let rns_poly_len = size.rns_poly_len();
+    let base_q = glev_params.base_q();
+    let big_uint_poly_len = glev_params.big_uint_poly_len();
 
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
     let rns_glev_len = glev_params.rns_glev_len();
 
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
     let mut glev_workspace = DcrtGlevMulWorkspace::new(glev_params.size(), glev_params.base_q());
 
     let mut dcrt_glev: DcrtGlev<Vec<ValueT>> = DcrtGlev::zero(rns_glev_len);
 
-    let mut desired: Polynomial<Vec<ValueT>> = Polynomial::zero(poly_length);
+    let input1 = Polynomial::new(
+        (0..poly_length)
+            .map(|i| (i % 5 + 1) as u64)
+            .collect::<Vec<_>>(),
+    );
+    let input2 = Polynomial::new(
+        (0..poly_length)
+            .map(|i| (i % 3 + 1) as u64)
+            .collect::<Vec<_>>(),
+    );
+    let message1: Vec<_> = input1.iter().map(|&value| i128::from(value)).collect();
+    let message2: Vec<_> = input2.iter().map(|&value| i128::from(value)).collect();
+    let desired = support::convolution(&message1, &message2);
+    let msg1 = CrtPolynomial::new(
+        moduli_values
+            .iter()
+            .flat_map(|_| input1.iter().copied())
+            .collect::<Vec<_>>(),
+    );
 
-    let input1: Polynomial<Vec<ValueT>> = Polynomial::random(poly_length, mod_t, &mut rng);
-    let input2: Polynomial<Vec<ValueT>> = Polynomial::random(poly_length, mod_t, &mut rng);
+    // Sampling is an independent encryption input, not gadget arithmetic state.
+    // Reject an otherwise valid sampler from a different layout or basis.
+    let foreign_size = RnsGlweSize::new(
+        GlweSize::new(GlweDimension::new(dimension + 1), table.poly_length()),
+        size.moduli_count(),
+    );
+    let foreign_sampling =
+        CrtGlweEncryptionParameters::new(foreign_size, base_q, SecretKeyDistr::SparseTernary, 3.2);
+    assert!(matches!(
+        dcrt_sk.try_bind_gadget(&glev_params, &foreign_sampling, &table),
+        Err(RnsDomainError::DimensionMismatch { .. })
+    ));
+    let reversed_moduli = [moduli[1], moduli[0]];
+    let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
+    let reversed_sampling =
+        CrtGlweEncryptionParameters::new(size, &reversed_base, SecretKeyDistr::SparseTernary, 3.2);
+    assert!(matches!(
+        dcrt_sk.try_bind_gadget(&glev_params, &reversed_sampling, &table),
+        Err(RnsDomainError::ModulusOrderMismatch { .. })
+    ));
 
-    input1.naive_mul_to(&input2, &mut desired, mod_t);
-
-    // input1 is decomposed into CRT form and encrypted as a GLev structure.
-    let mut msg1: CrtPolynomial<Vec<ValueT>> = CrtPolynomial::zero(rns_poly_len);
-    base_q.wrapping_decompose_small_values_to(input1.as_ref(), msg1.as_mut(), t);
-
-    let encryptor = dcrt_sk.try_bind_gadget(&domain).unwrap();
+    let encryptor = dcrt_sk
+        .try_bind_gadget(&glev_params, &inner, &table)
+        .unwrap();
 
     // Both representations reject incomplete or oversized layouts before they
     // consume coins or touch even a borrowed, dirty destination.
@@ -157,20 +178,9 @@ fn test_rns_glev() {
         assert_eq!(dcrt_storage[rns_glev_len + 1], ValueT::MAX - 1);
     }
 
-    // m₂ is decomposed into CRT, then scaled by δ (so it represents
-    // δ·m₂ mod Q in the RNS basis), then composed into BigUint form.
-    let mut msg2_big_uint_poly: BigUintPolynomial<Vec<ValueT>> =
-        BigUintPolynomial::zero(big_uint_poly_len);
-
-    let mut msg2: CrtPolynomial<Vec<ValueT>> = CrtPolynomial::zero(rns_poly_len);
-
-    base_q.wrapping_decompose_small_values_to(input2.as_ref(), msg2.as_mut(), t);
-
-    msg2.mul_factor_assign(
-        glwe_params.delta_factor_mod_q().as_ref(),
-        poly_length,
-        glwe_params.cipher_moduli_value(),
-    );
+    // The second operand is an independently encoded integer phase probe.
+    let mut msg2_big_uint_poly = BigUintPolynomial::<Vec<ValueT>>::zero(big_uint_poly_len);
+    let msg2 = support::unsigned_probe(input2.as_ref(), &parameters);
 
     let mut compose_scratch = vec![0; base_q.moduli_count()];
     base_q.compose_big_uint_values_to(
@@ -191,10 +201,12 @@ fn test_rns_glev() {
         &mut glev_workspace,
     );
 
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    let m_dec = dcrt_sk_context.decrypt(&c1, &mut decrypt_workspace);
-
-    assert_eq!(m_dec, desired);
+    let bound = support::switch_error_bound(
+        &glev_params,
+        &inner,
+        message1.iter().map(|value| value.abs()).sum(),
+    );
+    support::assert_probe_phase(&dcrt_sk, &parameters, &table, &c1, &desired, bound);
 
     // Reuse the dirty workspace. A zero product must overwrite scratch data
     // without changing the accumulator or requiring a separate workspace reset.

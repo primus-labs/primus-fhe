@@ -7,7 +7,7 @@ use primus_reduce::FieldContext;
 use primus_rns::Residues;
 
 use super::{DcrtGlwePublicKeyWorkspace, encryption::PublicEncryptionResources};
-use crate::DcrtGadgetDomain;
+use crate::CrtGlevParameters;
 
 /// Prepared public monomial GGSW encryption with reusable ephemeral storage.
 ///
@@ -21,7 +21,7 @@ where
     Table: NttTable<ValueT = T>,
 {
     pub(super) resources: PublicEncryptionResources<'a, T, M, Table>,
-    pub(super) domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    pub(super) parameters: &'a CrtGlevParameters<T, M>,
     pub(super) workspace: DcrtGlwePublicKeyWorkspace<T>,
 }
 
@@ -57,7 +57,7 @@ where
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let mut output = DcrtGgsw::zero(self.domain.parameters().rns_ggsw_len());
+        let mut output = DcrtGgsw::zero(self.parameters.rns_ggsw_len());
         self.encrypt_monomial_ggsw_to(coeff_residues, degree, &mut output, rng);
         output
     }
@@ -87,7 +87,7 @@ where
         R: rand::Rng + rand::CryptoRng,
         A: DataMut<Elem = T>,
     {
-        let parameters = self.domain.parameters();
+        let parameters = self.parameters;
         let size = self.resources.size();
         assert_eq!(
             coeff_residues.len(),

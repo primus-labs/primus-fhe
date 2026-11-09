@@ -5,9 +5,8 @@ use primus_decompose::{
 };
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    BfvRnsCodec, CrtGlevParameters, CrtGlweEncryptionParameters, CrtGlweParameters,
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlwePublicKey, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey,
+    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::{AsFrom, FheUint};
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize, ggsw::DcrtGgsw};
@@ -310,7 +309,7 @@ where
         )
         .unwrap(),
     );
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
+
     let secret: Vec<i64> = (0..64).map(|i| (i % 3) as i64 - 1).collect();
     let coefficient_key = GlweSecretKey::<T>::new(
         secret
@@ -339,7 +338,7 @@ where
             })
             .collect::<Vec<_>>(),
     );
-    let mut raw = public.try_bind_raw(&domain).unwrap();
+    let mut raw = public.try_bind_raw(&parameters, &base, &table).unwrap();
     let mut zero = DcrtGlweCiphertext::new(vec![T::MAX; size.rns_glwe_len()]);
     let mut output = zero.clone();
     raw.encrypt_zeros_to(&mut zero, &mut StdRng::seed_from_u64(52));
@@ -395,51 +394,15 @@ where
         assert!(centered_crt(error[i], error[32 + i], &values).abs() <= i128::from(bound));
     }
 
-    let bfv = CrtGlweParameters::try_from_parts(
-        Arc::clone(&parameters),
-        BfvRnsCodec::new(
-            BarrettModulus::new(T::as_from(17u64)),
-            base.clone(),
-            BarrettModulus::new(T::as_from(65_537u64)),
-        ),
-    )
-    .unwrap();
-    let mut ordinary = public.try_bind(&bfv, &table).unwrap();
     let product = u128::from(values[0]) * u128::from(values[1]);
-    let scaled = CrtPolynomial::new(
-        encoded
-            .as_ref()
-            .as_chunks::<32>()
-            .0
-            .iter()
-            .zip(&values)
-            .flat_map(|(limb, &q)| {
-                limb.iter().map(move |&value| {
-                    let value: u64 = value.as_into();
-                    T::as_from(
-                        (u128::from(value) * (product / 17 % u128::from(q)) % u128::from(q)) as u64,
-                    )
-                })
-            })
-            .collect::<Vec<_>>(),
-    );
-    ordinary.encrypt_plaintext_crt_to(&encoded, &mut output, &mut StdRng::seed_from_u64(53));
-    raw.encrypt_encoded_crt_to(&scaled, &mut zero, &mut StdRng::seed_from_u64(53));
-    assert_eq!(
-        output.as_ref(),
-        zero.as_ref(),
-        "BFV convenience must apply one independently computed delta"
-    );
-    ordinary.workspace_mut().zeroize();
-    let allocating = ordinary.encrypt_plaintext_crt(&encoded, &mut StdRng::seed_from_u64(53));
-    assert_eq!(allocating.as_ref(), output.as_ref());
-
     let log_basis = DecompositionBaseLog::new(8);
     let levels = DecompositionLevelCount::new(2);
     let basis = BigUintApproxSignedBasis::new(base.moduli_product(), log_basis, Some(levels));
-    let gadget = CrtGlevParameters::try_from_parts(parameters, base, basis).unwrap();
-    let gadget_domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
-    let mut encryptor = public.try_bind_gadget(&gadget_domain).unwrap();
+    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+
+    let mut encryptor = public
+        .try_bind_gadget(&gadget, &parameters, &table)
+        .unwrap();
     let ones = Residues::new(vec![T::ONE; 2]);
     let zeros = Residues::new(vec![T::ZERO; 2]);
     let mut encrypted = DcrtGgsw::new(vec![T::MAX; gadget.rns_ggsw_len()]);
@@ -541,8 +504,8 @@ fn prepared_public_and_gadget_calls_reuse_outputs_without_allocating_or_extra_nt
         &table,
         &mut StdRng::seed_from_u64(71),
     );
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
-    let mut raw = public.try_bind_raw(&domain).unwrap();
+
+    let mut raw = public.try_bind_raw(&parameters, &base, &table).unwrap();
     let message = CrtPolynomial::new(vec![3; size.rns_poly_len()]);
     let mut output = DcrtGlweCiphertext::new(vec![7; size.rns_glwe_len()]);
     let mut rng = StdRng::seed_from_u64(72);
@@ -557,31 +520,16 @@ fn prepared_public_and_gadget_calls_reuse_outputs_without_allocating_or_extra_nt
     let (_, allocations, transforms) =
         observe(|| raw.encrypt_encoded_crt_to(&message, &mut output, &mut rng));
     assert_eq!((allocations, transforms), (0, budget));
-    let bfv = CrtGlweParameters::try_from_parts(
-        Arc::clone(&parameters),
-        BfvRnsCodec::new(
-            BarrettModulus::new(17),
-            base.clone(),
-            BarrettModulus::new(65_537),
-        ),
-    )
-    .unwrap();
-    let mut ordinary = public.try_bind(&bfv, &table).unwrap();
-    let (_, allocations, transforms) =
-        observe(|| ordinary.encrypt_plaintext_crt_to(&message, &mut output, &mut rng));
-    assert_eq!((allocations, transforms), (0, budget));
-    let (allocated, allocations, transforms) =
-        observe(|| ordinary.encrypt_plaintext_crt(&message, &mut rng));
-    assert_eq!((allocations, transforms), (1, budget));
-    drop(allocated);
     let basis = BigUintApproxSignedBasis::new(
         base.moduli_product(),
         DecompositionBaseLog::new(8),
         Some(DecompositionLevelCount::new(2)),
     );
-    let gadget = CrtGlevParameters::try_from_parts(parameters, base, basis).unwrap();
-    let gadget_domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
-    let mut gadget_encryptor = public.try_bind_gadget(&gadget_domain).unwrap();
+    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+
+    let mut gadget_encryptor = public
+        .try_bind_gadget(&gadget, &parameters, &table)
+        .unwrap();
     let coeff = Residues::new(vec![1u64; 2]);
     let mut gadget_output = DcrtGgsw::new(vec![7; gadget.rns_ggsw_len()]);
     let (_, allocations, transforms) = observe(|| {
@@ -615,40 +563,24 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
         &table,
         &mut StdRng::seed_from_u64(81),
     );
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
-    let mut raw = public.try_bind_raw(&domain).unwrap();
-    let bfv = CrtGlweParameters::try_from_parts(
-        Arc::clone(&parameters),
-        BfvRnsCodec::new(
-            BarrettModulus::new(17),
-            base.clone(),
-            BarrettModulus::new(65_537),
-        ),
-    )
-    .unwrap();
-    let mut ordinary = public.try_bind(&bfv, &table).unwrap();
+
+    let mut raw = public.try_bind_raw(&parameters, &base, &table).unwrap();
     for (message_len, output_len) in [
         (size.rns_poly_len() - 1, size.rns_glwe_len()),
         (size.rns_poly_len(), size.rns_glwe_len() + 1),
     ] {
-        for bfv_message in [false, true] {
-            let message = CrtPolynomial::new(vec![1; message_len]);
-            let mut output = DcrtGlweCiphertext::new(vec![7; output_len]);
-            let mut rng = StdRng::seed_from_u64(82);
-            let mut untouched = StdRng::seed_from_u64(82);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if bfv_message {
-                        ordinary.encrypt_plaintext_crt_to(&message, &mut output, &mut rng);
-                    } else {
-                        raw.encrypt_encoded_crt_to(&message, &mut output, &mut rng);
-                    }
-                }))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&value| value == 7));
-            assert_eq!(rng.next_u64(), untouched.next_u64());
-        }
+        let message = CrtPolynomial::new(vec![1; message_len]);
+        let mut output = DcrtGlweCiphertext::new(vec![7; output_len]);
+        let mut rng = StdRng::seed_from_u64(82);
+        let mut untouched = StdRng::seed_from_u64(82);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                raw.encrypt_encoded_crt_to(&message, &mut output, &mut rng);
+            }))
+            .is_err()
+        );
+        assert!(output.as_ref().iter().all(|&value| value == 7));
+        assert_eq!(rng.next_u64(), untouched.next_u64());
     }
     // Workspace access permits explicit erasure and swaps, so foreign geometry
     // must be rejected even when the ephemeral polynomial has the same length.
@@ -669,8 +601,9 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
         &table,
         &mut StdRng::seed_from_u64(84),
     );
-    let foreign_domain = DcrtGlweDomain::try_new(&foreign_parameters, &base, &table).unwrap();
-    let mut foreign_raw = foreign_public.try_bind_raw(&foreign_domain).unwrap();
+    let mut foreign_raw = foreign_public
+        .try_bind_raw(&foreign_parameters, &base, &table)
+        .unwrap();
     std::mem::swap(raw.workspace_mut(), foreign_raw.workspace_mut());
     let mut output = DcrtGlweCiphertext::new(vec![7; size.rns_glwe_len()]);
     let mut rng = StdRng::seed_from_u64(85);
@@ -689,9 +622,11 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
         DecompositionBaseLog::new(8),
         Some(DecompositionLevelCount::new(2)),
     );
-    let gadget = CrtGlevParameters::try_from_parts(parameters, base, basis).unwrap();
-    let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
-    let mut encryptor = public.try_bind_gadget(&domain).unwrap();
+    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+
+    let mut encryptor = public
+        .try_bind_gadget(&gadget, &parameters, &table)
+        .unwrap();
     for (residue_count, degree, output_len) in [
         (1, 0, gadget.rns_ggsw_len()),
         (2, 32, gadget.rns_ggsw_len()),

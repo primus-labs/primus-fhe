@@ -5,7 +5,8 @@
 //! The optional `rns` feature provides BFV coefficient scaling and decoding over
 //! an RNS ciphertext basis. [`MessageDecoder`] reuses either single-modulus
 //! codec's prepared q-to-t decoding. Public types are available at the crate root.
-//! These codecs do not implement integer slot packing or CKKS canonical embedding.
+//! The optional `batching` feature adds fixed-`u64` integer slot packing shared
+//! by BFV and BGV. CKKS canonical embedding is not implemented.
 //! [`phase_error_magnitude`] measures an extracted phase against an explicitly
 //! expected encoded phase, independently of decoding or secret keys.
 //!
@@ -24,6 +25,11 @@ pub use decode::MessageDecoder;
 pub use phase_error::{phase_error_magnitude, phase_error_magnitude_slice_to};
 pub use rounded::RoundedCodec;
 pub use scaled::ScaledCodec;
+
+#[cfg(feature = "batching")]
+mod batching;
+#[cfg(feature = "batching")]
+pub use batching::BatchingEncoder;
 
 /// Invalid plaintext/ciphertext domain or fixed-scale recovery bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

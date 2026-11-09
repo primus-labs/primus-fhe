@@ -3,12 +3,12 @@
 use primus_decompose::DecompositionBaseLog;
 use primus_integer::FheUint;
 use primus_lattice::{RnsGadgetSize, workspace::DcrtGlevMulWorkspace};
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_poly::CrtPolynomial;
 use primus_reduce::FieldContext;
 
-use crate::parameter::{validate_glwe_size, validate_moduli};
-use crate::{CrtGlevParameters, DcrtGadgetDomain, RnsDomainError};
+use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
+use crate::{CrtGlevParameters, RnsDomainError};
 
 /// One numerical metadata record per standalone key or complete automorphism key set.
 /// Ordered Q determines the product and big-integer limb width; together with
@@ -22,50 +22,51 @@ pub(crate) struct AutomorphismKeyMetadata<T: FheUint> {
 }
 
 impl<T: FheUint> AutomorphismKeyMetadata<T> {
-    pub(crate) fn new<M, Table>(domain: &DcrtGadgetDomain<'_, T, M, Table>) -> Self
+    pub(crate) fn new<M>(parameters: &CrtGlevParameters<T, M>) -> Self
     where
         M: FieldContext<T>,
-        Table: NttTable<ValueT = T>,
     {
         Self {
-            size: domain.size(),
-            moduli: domain.parameters().cipher_moduli_value().into(),
-            log_basis: domain.basis().log_basis(),
+            size: parameters.size(),
+            moduli: parameters.cipher_moduli_value().into(),
+            log_basis: parameters.basis().log_basis(),
         }
     }
 
     /// Checks the complete numerical binding before allocating evaluator scratch.
-    /// The constructors never accept individual key entries from another domain,
+    /// The constructors never accept individual key entries with different parameters,
     /// so validating the set's single record also covers all its entries.
     pub(crate) fn validate<M, Table>(
         &self,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
     ) -> Result<(), RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        validate_glwe_size(self.size.rns_glwe_size(), domain.size().rns_glwe_size())?;
+        validate_dcrt_table(parameters.poly_length(), parameters.cipher_moduli(), table)?;
+        validate_glwe_size(self.size.rns_glwe_size(), parameters.size().rns_glwe_size())?;
         let expected = self.size.level_count().get();
-        let actual = domain.size().level_count().get();
+        let actual = parameters.size().level_count().get();
         if expected != actual {
             return Err(RnsDomainError::DecompositionLevelCountMismatch { expected, actual });
         }
         validate_moduli(
             self.moduli.iter().copied(),
-            domain.parameters().cipher_moduli_value().iter().copied(),
+            parameters.cipher_moduli_value().iter().copied(),
         )?;
-        if self.log_basis != domain.basis().log_basis() {
+        if self.log_basis != parameters.basis().log_basis() {
             return Err(RnsDomainError::DecompositionBaseLogMismatch {
                 expected: self.log_basis.get(),
-                actual: domain.basis().log_basis().get(),
+                actual: parameters.basis().log_basis().get(),
             });
         }
         Ok(())
     }
 }
 
-/// Scratch allocated from the already bound domain. Each kernel overwrites it;
+/// Scratch allocated from the already bound parameters. Each kernel overwrites it;
 /// only the evaluator owns its compatibility contract.
 pub(crate) struct AutomorphismWorkspace<T: FheUint> {
     auto_crt_poly: CrtPolynomial<Vec<T>>,

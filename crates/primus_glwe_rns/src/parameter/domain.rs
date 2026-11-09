@@ -1,12 +1,8 @@
-use primus_decompose::big_integer::BigUintApproxSignedBasis;
 use primus_integer::FheUint;
-use primus_lattice::{RnsGadgetSize, RnsGlweSize};
+use primus_lattice::RnsGlweSize;
 use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
-use primus_rns::{HybridRNS, RNSBase};
 use primus_shape::PolyLength;
-
-use super::{CrtGlevParameters, CrtGlweEncryptionParameters};
 
 /// An incompatibility between RNS parameters, keys, layouts or transform tables.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -45,231 +41,30 @@ pub enum RnsDomainError<T: FheUint> {
         /// Supplied mask-polynomial count.
         actual: usize,
     },
-    /// A key and its domain retain different numbers of gadget levels.
+    /// A key and its parameters retain different numbers of gadget levels.
     #[error("decomposition level count mismatch: expected {expected}, got {actual}")]
     DecompositionLevelCountMismatch {
         /// Retained count used at key generation.
         expected: usize,
-        /// Retained count supplied by the domain.
+        /// Retained count supplied by the parameters.
         actual: usize,
     },
-    /// A key and its domain use different signed-decomposition radices.
+    /// A key and its parameters use different signed-decomposition radices.
     #[error("decomposition base log mismatch: expected {expected}, got {actual}")]
     DecompositionBaseLogMismatch {
         /// Base log used at key generation.
         expected: u32,
-        /// Base log supplied by the domain.
+        /// Base log supplied by the parameters.
         actual: u32,
     },
-    /// A hybrid key and its domain partition Q differently.
+    /// A hybrid key and its parameters partition Q differently.
     #[error("hybrid partition width mismatch: expected {expected}, got {actual}")]
     PartitionWidthMismatch {
         /// Maximum Q moduli per partition used at key generation.
         expected: usize,
-        /// Maximum Q moduli per partition supplied by the domain.
+        /// Maximum Q moduli per partition supplied by the parameters.
         actual: usize,
     },
-}
-
-/// A codec-free binding of GLWE sampling state, an ordered basis and NTT tables.
-///
-/// Construction checks geometry and numerical modulus order. It does not prove
-/// primality, matching NTT roots/evaluation conventions, actual secret identity
-/// or a scheme's noise/recovery condition.
-pub struct DcrtGlweDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    parameters: &'a CrtGlweEncryptionParameters<T>,
-    rns_base: &'a RNSBase<T, M>,
-    table: &'a DcrtTable<Table>,
-}
-
-impl<'a, T, M, Table> DcrtGlweDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    /// Binds compatible sampling, basis and transform resources without a codec.
-    ///
-    /// # Errors
-    /// Rejects a different polynomial length, modulus count or ordered basis.
-    pub fn try_new(
-        parameters: &'a CrtGlweEncryptionParameters<T>,
-        rns_base: &'a RNSBase<T, M>,
-        table: &'a DcrtTable<Table>,
-    ) -> Result<Self, RnsDomainError<T>> {
-        parameters.validate_base(rns_base)?;
-        validate_dcrt_table(parameters.size().poly_length(), rns_base.moduli(), table)?;
-        Ok(Self {
-            parameters,
-            rns_base,
-            table,
-        })
-    }
-
-    /// Returns the prepared codec-free encryption sampling state.
-    #[must_use]
-    pub fn parameters(&self) -> &'a CrtGlweEncryptionParameters<T> {
-        self.parameters
-    }
-
-    /// Returns the complete GLWE geometry and RNS storage lengths.
-    #[must_use]
-    pub fn size(&self) -> RnsGlweSize {
-        self.parameters.size()
-    }
-
-    /// Returns the bound ordered coefficient basis.
-    #[must_use]
-    pub fn rns_base(&self) -> &'a RNSBase<T, M> {
-        self.rns_base
-    }
-
-    /// Returns the matching ordered transform tables.
-    #[must_use]
-    pub fn table(&self) -> &'a DcrtTable<Table> {
-        self.table
-    }
-}
-
-/// A checked, read-only binding of RNS gadget parameters and a DCRT table.
-pub struct DcrtGadgetDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    parameters: &'a CrtGlevParameters<T, M>,
-    table: &'a DcrtTable<Table>,
-}
-
-impl<'a, T, M, Table> DcrtGadgetDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    /// Binds compatible RNS gadget parameters and a DCRT table.
-    ///
-    /// # Errors
-    /// Returns [`RnsDomainError`] for a polynomial-length, modulus-count or order mismatch.
-    pub fn try_new(
-        parameters: &'a CrtGlevParameters<T, M>,
-        table: &'a DcrtTable<Table>,
-    ) -> Result<Self, RnsDomainError<T>> {
-        validate_dcrt_table(parameters.poly_length(), parameters.cipher_moduli(), table)?;
-
-        Ok(Self { parameters, table })
-    }
-
-    /// Returns the bound RNS gadget parameters.
-    #[must_use]
-    #[inline]
-    pub fn parameters(&self) -> &'a CrtGlevParameters<T, M> {
-        self.parameters
-    }
-
-    /// Returns the bound RNS gadget layout.
-    #[must_use]
-    #[inline]
-    pub fn size(&self) -> RnsGadgetSize {
-        self.parameters.size()
-    }
-
-    /// Returns the bound decomposition basis.
-    #[must_use]
-    #[inline]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<T> {
-        self.parameters.basis()
-    }
-
-    /// Returns the bound DCRT table.
-    #[must_use]
-    #[inline]
-    pub fn table(&self) -> &'a DcrtTable<Table> {
-        self.table
-    }
-
-    /// Returns the RNS basis used by the bound parameters.
-    #[must_use]
-    #[inline]
-    pub fn rns_base(&self) -> &'a RNSBase<T, M> {
-        self.parameters.base_q()
-    }
-}
-
-/// A checked binding of hybrid-RNS bases and converters to their DCRT table.
-pub struct HybridRnsKeySwitchDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    hybrid_rns: &'a HybridRNS<T, M>,
-    table: &'a DcrtTable<Table>,
-}
-
-impl<'a, T, M, Table> HybridRnsKeySwitchDomain<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    /// Binds a complete ordered `Q/P` basis to a matching DCRT table.
-    ///
-    /// # Errors
-    /// Returns [`RnsDomainError`] for a modulus-count or order mismatch.
-    pub fn try_new(
-        hybrid_rns: &'a HybridRNS<T, M>,
-        table: &'a DcrtTable<Table>,
-    ) -> Result<Self, RnsDomainError<T>> {
-        // DcrtTable construction establishes one shared N. The evaluator later
-        // compares it with the key's N; this binding owns the ordered QP basis.
-        validate_moduli(
-            hybrid_rns.qp_base().moduli().iter().map(|m| m.value()),
-            table.iter().map(NttTable::modulus),
-        )?;
-        Ok(Self { hybrid_rns, table })
-    }
-
-    /// Returns the bound hybrid-RNS bases and converters.
-    #[must_use]
-    #[inline]
-    pub fn hybrid_rns(&self) -> &'a HybridRNS<T, M> {
-        self.hybrid_rns
-    }
-
-    /// Returns the bound DCRT table.
-    #[must_use]
-    #[inline]
-    pub fn table(&self) -> &'a DcrtTable<Table> {
-        self.table
-    }
-
-    /// Returns the ordered `Q` basis.
-    #[must_use]
-    #[inline]
-    pub fn q_base(&self) -> &'a RNSBase<T, M> {
-        self.hybrid_rns.q_base()
-    }
-
-    /// Returns the ordered auxiliary `P` basis.
-    #[must_use]
-    #[inline]
-    pub fn p_base(&self) -> &'a RNSBase<T, M> {
-        self.hybrid_rns.p_base()
-    }
-
-    /// Returns the complete ordered `Q || P` basis.
-    #[must_use]
-    #[inline]
-    pub fn qp_base(&self) -> &'a RNSBase<T, M> {
-        self.hybrid_rns.qp_base()
-    }
 }
 
 /// Validates the numerical table binding once; transform identity remains a caller contract.
