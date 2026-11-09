@@ -7,7 +7,7 @@
 
 `primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE NTT、GLWE Fourier、NTRU NTT 路径以及 RNS GLWE 实现共同使用。
 
-密钥生成、加密参数、编码策略、噪声管理和完整同态计算由更高层负责。
+密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns) 等更高层负责。
 
 ## 密文类型
 

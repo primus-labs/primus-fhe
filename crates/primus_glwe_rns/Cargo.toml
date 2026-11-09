@@ -1,0 +1,61 @@
+[package]
+name = "primus_glwe_rns"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_encoding = { path = "../primus_encoding", features = ["rns"] }
+primus_data = { path = "../primus_data" }
+primus_decompose = { path = "../primus_decompose" }
+primus_distr = { path = "../primus_distr" }
+primus_factor = { path = "../primus_factor" }
+primus_glwe = { path = "../primus_glwe" }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice", features = ["rns"] }
+primus_modulus = { path = "../primus_modulus" }
+primus_ntt = { path = "../primus_ntt" }
+primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
+primus_rns = { path = "../primus_rns" }
+
+itertools = { workspace = true }
+num-traits = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "automorphism"
+harness = false
+
+[[bench]]
+name = "trace"
+harness = false
+
+[[bench]]
+name = "expand_coeff"
+harness = false
+
+[[bench]]
+name = "key_switching"
+harness = false
+
+[features]
+default = []
+simd = [
+    "primus_encoding/simd",
+    "primus_glwe/simd",
+    "primus_integer/simd",
+    "primus_modulus/simd",
+    "primus_factor/simd",
+    "primus_poly/simd",
+    "primus_ntt/simd",
+    "primus_rns/simd",
+    "primus_decompose/simd",
+    "primus_lattice/simd",
+]
