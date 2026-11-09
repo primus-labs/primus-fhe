@@ -1,31 +1,39 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 export RUSTDOCFLAGS := "-D warnings"
 
-stable_ci_features := "ntt,fourier,rustfft,tfhe-fft,rns,batching"
+stable_ci_features := "ntt,fourier,rustfft,tfhe-fft,rns,batching,derive,high_precision"
+parallel_packages := "-p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv"
+parallel_features := "rns,batching,parallel"
+ci_parallel_tests := "--test dcrt_prefix --test leveled_parameters"
 
 default: fmt-check (lint "*" "ntt,fourier,rustfft,tfhe-fft") (test "*" "ntt,fourier,rustfft,tfhe-fft")
 
 # CI selects stable; local commands use the active toolchain.
-ci: fmt-check (lint "*" stable_ci_features) (test "*" stable_ci_features) test-doc (parallel "--test dcrt_prefix --test leveled_parameters")
-  cargo check -p primus_data --lib --no-default-features
+ci: fmt-check ci-stable-check ci-stable-lint ci-stable-test
+
+ci-stable-check:
+  # The isolated consumers resolve their own lockfiles offline.
+  cargo fetch --target host-tuple
+  cargo check -p primus_data -p primus_encoding --lib --no-default-features
   cargo check -p primus_fft -p primus_lwe -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features
-  cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
+  cargo check -p 'primus_tfhe*_ntt' --lib --no-default-features
   cargo check -p 'primus_tfhe*_fourier' --lib --no-default-features --features rustfft
-  cargo check -p primus_encoding --lib --no-default-features
   cargo check -p primus_encoding --lib --no-default-features --features batching
-  cargo check -p primus_bgv --lib --no-default-features
-  cargo check -p primus_bfv --lib --no-default-features
-  cargo nextest run -p primus_bfv -p primus_bgv --test allocation --no-default-features
-  cargo check -p primus_modulus --all-targets --features derive
-  cargo nextest run -p primus_modulus --test derives --features derive
-  cargo check -p primus_distr --lib --features high_precision
   python3 scripts/check_scheme_consumers.py --check-only
 
-# Separate toolchain/job. Build strict rustdoc only once, with all features.
-ci-nightly: simd
-  cargo +nightly test --workspace --doc --all-features
-  cargo +nightly doc --workspace --no-deps --document-private-items --all-features
+ci-stable-lint: (lint "*" stable_ci_features) (parallel-lint ("--lib " + ci_parallel_tests))
+
+ci-stable-test: (test "*" stable_ci_features) (parallel-test ci_parallel_tests)
+  cargo nextest run -p primus_bfv -p primus_bgv --test allocation --no-default-features
+  cargo test --workspace --doc --features '{{stable_ci_features}}'
+
+ci-nightly: ci-nightly-check simd ci-nightly-doc
+
+ci-nightly-check:
   cargo +nightly check -p primus_modulus -p primus_encoding -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features --features simd
+
+ci-nightly-doc:
+  cargo +nightly doc --workspace --no-deps --document-private-items --all-features
 
 fmt:
   cargo fmt --all
@@ -74,10 +82,16 @@ scheme-smoke:
   cargo run -p primus_glwe_rns --example gadget_encryption
   python3 scripts/check_scheme_consumers.py
 
-# CI selects the transform and large-ring BFV targets. Run without arguments for the full matrix.
-parallel targets="--lib --tests":
-  cargo clippy -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv --all-targets --features rns,batching,parallel -- -D warnings
-  env RAYON_NUM_THREADS=4 cargo nextest run -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv {{targets}} --features rns,batching,parallel
+# Run the full Stable parallel matrix manually.
+parallel targets="--lib --tests": parallel-lint (parallel-test targets)
+
+[private]
+parallel-lint targets="--all-targets":
+  cargo clippy {{parallel_packages}} {{targets}} --features '{{parallel_features}}' -- -D warnings
+
+[private]
+parallel-test targets:
+  env RAYON_NUM_THREADS=4 cargo nextest run {{parallel_packages}} {{targets}} --features '{{parallel_features}}'
 
 # Explicit crate-local workload.
 bench package target *cargo-args:

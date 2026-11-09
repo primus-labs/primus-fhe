@@ -18,8 +18,8 @@
 | `just parallel` | stable 的可选 limb 并行：NTT、lattice、BFV/BGV 的 all-targets lint 和普通测试，选择 `rns,batching,parallel`，每个测试进程的Rayon pool为4线程 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | Stable 工作区主套件统一启用 batching，覆盖 doctest、定向并行测试、无 batching 的分配测试、独立消费者的编译和依赖检查以及 Barrett derive 回归 |
-| `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
+| `just ci` | 格式、最小特性和独立消费者编译、Stable Clippy、普通测试和 doctest。主套件启用 batching、Barrett derive 和高精度采样，另跑定向并行和无 batching 分配测试 |
+| `just ci-nightly` | 最小 SIMD 编译、workspace 全 features 的 Clippy 和普通测试、严格 private rustdoc |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
 
@@ -31,7 +31,7 @@ just tfhe
 
 all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执行 doctest；`test-doc` recipe 使用默认 features，需选其他 features 时直接调用 `cargo test -p <package> --doc --features <features>`。普通测试保持 `--lib --tests`，避免混入 Criterion target。
 
-[开发 profile](../../Cargo.toml) 设置 `opt-level=1`，test profile 继承它；release/bench 使用默认配置。需要验证 release 下的检查或数值行为时，对相关普通测试另加 `--release`。[GitHub CI](../../.github/workflows/ci.yml) 分 Stable 和 Nightly 两个作业。示例和基准由 CI 做编译与 lint 检查，实际执行按需手动触发。
+[开发 profile](../../Cargo.toml) 设置 `opt-level=1`，test profile 继承它；release/bench 使用默认配置。需要验证 release 下的检查或数值行为时，对相关普通测试另加 `--release`。[GitHub CI](../../.github/workflows/ci.yml) 先检查独立特性组合，再 lint 和测试主配置。Stable 的 doctest 与普通测试共用 feature 配置，Nightly 另检查全特性文档的链接与警告。示例和基准由 CI 做编译与 lint 检查，实际执行按需手动触发。
 
 ## Features 与独立消费者
 
@@ -53,9 +53,8 @@ N4096的prefix测试比较T1/T2/T4正逆变换、坏geometry写前拒绝，以�
 跨线程零分配；任务借用互不重叠的limbs，不各自复制整套密码scratch。该测试不是完整算法的并行性能保证，
 总线程仍须由`RAYON_NUM_THREADS`或调用方既有pool约束。
 
-`just ci` 对 `primus_modulus --features derive` 做 all-targets 编译，并单独运行
-`derives` 测试目标；不启用 Cargo `simd`，与 nightly 的 portable-SIMD 派生路径分开覆盖。
-该命令只构建并运行 `derives` 测试目标。单独复现命令如下。
+`just ci` 在 Stable 主套件中编译并运行 Barrett derive 的普通测试，其中包括 `derives` 目标。
+这个组合不启用 Cargo `simd`，与 Nightly 的 portable-SIMD 派生路径分开覆盖。单独复现 `derives` 目标的命令如下。
 
 ```sh
 cargo nextest run -p primus_modulus --test derives --features derive
@@ -143,7 +142,7 @@ schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配�
 验证 `_to` 的复用契约。
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
 `just ci` 用 `scripts/check_scheme_consumers.py --check-only` 编译检查 8 个独立包，
-并核对普通依赖与 feature 边界。`just schemes` 还执行这些示例，覆盖四个基础流程、
+并核对普通依赖与 feature 边界。系数消费者分别覆盖不启用 batching 的 BFV、BGV 及其 raw RNS 依赖。`just schemes` 还执行这些示例，覆盖四个基础流程、
 两方案的密文乘法双后端、BFV working-basis 双后端，以及 BGV 三层预算系数流程的
 两种后端，共 12 次执行。独立 workspace 可以暴露被 dev-dependencies 或 workspace
 feature 合并掩盖的问题。
