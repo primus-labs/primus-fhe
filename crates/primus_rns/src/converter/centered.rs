@@ -178,18 +178,27 @@ impl CenteredBaseConverter {
         let count = source.moduli_count();
         if count == 1 {
             let q = source.moduli_values()[0];
-            for ((chunk, p), &q_mod_p) in output
+            let half = q / 2;
+            for ((chunk, modulus), &q_mod_p) in output
                 .chunks_exact_mut(n)
                 .zip(destination.moduli())
                 .zip(&self.product_mod_output)
             {
-                for (out, &value) in chunk.iter_mut().zip(input) {
-                    let value_p = p.reduce(value);
-                    *out = if value > q / 2 {
-                        p.reduce_sub(value_p, q_mod_p)
-                    } else {
-                        value_p
-                    };
+                let p = modulus.value();
+                // Every centered magnitude is at most floor(q/2).
+                if half < p {
+                    for (out, &value) in chunk.iter_mut().zip(input) {
+                        *out = if value > half { p - (q - value) } else { value };
+                    }
+                } else {
+                    for (out, &value) in chunk.iter_mut().zip(input) {
+                        let value_p = modulus.reduce(value);
+                        *out = if value > half {
+                            modulus.reduce_sub(value_p, q_mod_p)
+                        } else {
+                            value_p
+                        };
+                    }
                 }
             }
             return;

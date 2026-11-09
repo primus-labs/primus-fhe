@@ -389,3 +389,30 @@ fn centered_converter_has_its_own_exact_batch_and_workspace_contract() {
     let unsupported = BaseConverter::new(&base(&[16]), &base(&[19]));
     assert!(CenteredBaseConverter::try_from_converter(unsupported).is_err());
 }
+
+#[test]
+fn single_prime_centered_conversion_matches_signed_residues() {
+    use primus_rns::CenteredBaseConverter;
+
+    let q = (1_u64 << 61) - 1;
+    let half = q / 2;
+    let input = [0, 1, half - 1, half, half + 1, half + 2, q - 1];
+    let centered = input.map(|value| {
+        if value > half {
+            i128::from(value) - i128::from(q)
+        } else {
+            i128::from(value)
+        }
+    });
+    for p in [half - 2, half, half + 2, q - 2, q, q + 2] {
+        let converter = CenteredBaseConverter::try_new(&base(&[q]), &base(&[p])).unwrap();
+        let mut output = [0; 7];
+        converter.convert_to(
+            &input,
+            &mut output,
+            input.len(),
+            &mut converter.workspace(input.len()),
+        );
+        assert_eq!(output.as_slice(), residues(&centered, &[p]));
+    }
+}

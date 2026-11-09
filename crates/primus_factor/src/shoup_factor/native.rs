@@ -105,7 +105,27 @@ pub(super) fn try_add_mul_assign<T: FheUint>(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[inline]
+pub(super) fn try_butterfly_grouped_to(
+    lhs: &mut [u64],
+    rhs: &[u64],
+    factors: &[ShoupFactor<u64>],
+    group_len: usize,
+    right: &mut [u64],
+    modulus: u64,
+) -> bool {
+    if group_len < 8 || !available::<u64>(lhs.len()) {
+        return false;
+    }
+    // SAFETY: the CPU feature check covers all instructions in the kernel.
+    // The public caller has checked the full group and slice shapes.
+    unsafe { avx512::butterfly_grouped_to(lhs, rhs, factors, group_len, right, modulus) };
+    true
+}
+
+#[cfg(target_arch = "x86_64")]
 mod avx512 {
+    use super::super::butterfly_scalar;
     use super::ShoupFactor;
     use crate::FactorMul;
     use std::arch::x86_64::*;
@@ -152,6 +172,46 @@ mod avx512 {
             _mm512_mullo_epi64(quotient, modulus),
         );
         _mm512_min_epu64(lazy, _mm512_sub_epi64(lazy, modulus))
+    }
+
+    #[target_feature(enable = "avx512f,avx512dq")]
+    pub(super) unsafe fn butterfly_grouped_to(
+        lhs: &mut [u64],
+        rhs: &[u64],
+        factors: &[ShoupFactor<u64>],
+        group_len: usize,
+        right: &mut [u64],
+        modulus: u64,
+    ) {
+        for (((lhs, rhs), right), &factor) in lhs
+            .chunks_exact_mut(group_len)
+            .zip(rhs.chunks_exact(group_len))
+            .zip(right.chunks_exact_mut(group_len))
+            .zip(factors)
+        {
+            let (value, q_lo, q_hi, q) = broadcast(factor, modulus);
+            let (lhs, lhs_tail) = lhs.as_chunks_mut::<8>();
+            let (rhs, rhs_tail) = rhs.as_chunks::<8>();
+            let (right, right_tail) = right.as_chunks_mut::<8>();
+            for ((lhs, rhs), right) in lhs.iter_mut().zip(rhs).zip(right) {
+                // SAFETY: these chunks each contain eight u64s and the loads
+                // and stores allow unaligned addresses.
+                unsafe {
+                    let original = _mm512_loadu_si512(lhs.as_ptr().cast());
+                    let rhs = _mm512_loadu_si512(rhs.as_ptr().cast());
+                    let sum = _mm512_add_epi64(original, rhs);
+                    let sum = _mm512_min_epu64(sum, _mm512_sub_epi64(sum, q));
+                    let diff = _mm512_sub_epi64(original, rhs);
+                    let diff = _mm512_min_epu64(diff, _mm512_add_epi64(diff, q));
+                    _mm512_storeu_si512(lhs.as_mut_ptr().cast(), sum);
+                    _mm512_storeu_si512(
+                        right.as_mut_ptr().cast(),
+                        product(diff, value, q_lo, q_hi, q),
+                    );
+                }
+            }
+            butterfly_scalar(lhs_tail, rhs_tail, right_tail, factor, modulus);
+        }
     }
 
     #[target_feature(enable = "avx512f,avx512dq")]

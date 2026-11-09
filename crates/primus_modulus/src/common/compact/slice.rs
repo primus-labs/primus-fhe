@@ -17,6 +17,31 @@ pub fn reduce_add_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &
         .zip(b)
         .for_each(|(x, &y)| super::reduce_add_assign(modulus, x, y));
 }
+
+/// Adds little-endian residues to the matching limb, returning whether every
+/// imported residue is canonical. A false result may leave invalid output.
+///
+/// # Correctness
+/// The accumulator starts canonical and `2 <= modulus <= 2^63`. The caller
+/// must discard the accumulator on failure.
+///
+/// # Panics
+/// The input and output lengths must match.
+#[must_use]
+#[inline]
+pub fn add_canonical_le_words_assign(modulus: u64, output: &mut [u64], input: &[[u8; 8]]) -> bool {
+    assert_eq!(output.len(), input.len());
+    let mut canonical = true;
+    for (out, &word) in output.iter_mut().zip(input) {
+        let value = u64::from_le_bytes(word);
+        canonical &= value < modulus;
+        // Wrap even on malformed input so the validation can be accumulated
+        // without a branch in the per-residue loop.
+        *out = super::reduce_once(modulus, out.wrapping_add(value));
+    }
+    canonical
+}
+
 /// Writes the element-wise sum of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_add_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {

@@ -233,11 +233,17 @@ mod mul {
     impl<T: FheUint> ReduceMulSlice<T> for BarrettModulus<T> {
         #[inline]
         fn reduce_mul_slice_assign(self, a: &mut [T], b: &[T]) {
+            if super::super::native::try_mul(self, None, b, a) {
+                return;
+            }
             slice::reduce_mul_slice_assign(self, a, b);
         }
 
         #[inline]
         fn reduce_mul_slice_to(self, a: &[T], b: &[T], output: &mut [T]) {
+            if super::super::native::try_mul(self, Some(a), b, output) {
+                return;
+            }
             slice::reduce_mul_slice_to(self, a, b, output);
         }
 

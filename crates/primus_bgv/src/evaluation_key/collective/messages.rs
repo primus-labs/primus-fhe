@@ -1,6 +1,7 @@
 //! Canonical public bodies and sums bound to an exact local plan and round.
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, SecretKeyDistr};
+use primus_modulus::common::compact::slice::add_canonical_le_words_assign;
 use primus_poly::DcrtPolynomial;
 use primus_reduce::ReduceAdd;
 
@@ -314,12 +315,49 @@ impl BgvCollectiveAggregate<'_> {
                 actual: expected + 1,
             });
         }
+        self.finish_import();
+        Ok(())
+    }
+
+    /// Checks and adds one complete imported little-endian residue body.
+    ///
+    /// The aggregate's actual ordered basis supplies the limb moduli. The
+    /// caller must authenticate the body and sender before calling. A rejected
+    /// length or residue permanently aborts the aggregate, which may have
+    /// been partly updated when the residue was rejected.
+    pub fn add_imported_le_words(&mut self, values: &[[u8; 8]]) -> Result<(), BgvCollectiveError> {
+        if self.failed {
+            return Err(BgvCollectiveError::Aborted);
+        }
+        self.failed = true;
+        if values.len() != self.values.len() {
+            return Err(BgvCollectiveError::Length {
+                expected: self.values.len(),
+                actual: values.len(),
+            });
+        }
+        let n = self.binding.context.parameters().poly_length().get();
+        let moduli = self.binding.base.moduli_values();
+        for ((output, input), &q) in self
+            .values
+            .chunks_exact_mut(n)
+            .zip(values.chunks_exact(n))
+            .zip(moduli.iter().cycle())
+        {
+            if !add_canonical_le_words_assign(q, output, input) {
+                return Err(BgvCollectiveError::Residue);
+            }
+        }
+        self.finish_import();
+        Ok(())
+    }
+
+    fn finish_import(&mut self) {
         self.count = self
             .count
             .checked_add(1)
             .expect("collective count overflow");
         self.failed = false;
-        Ok(())
     }
 
     /// Number of mathematical contributions added; duplicates are a protocol check.

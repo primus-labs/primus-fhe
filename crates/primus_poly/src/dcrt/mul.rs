@@ -5,11 +5,6 @@ use primus_integer::FheUint;
 use primus_modulus::common::compact;
 use primus_reduce::{ReduceMulAddSlice, ReduceMulSlice};
 
-#[cfg(feature = "simd")]
-use primus_factor::SimdFactorMul;
-#[cfg(feature = "simd")]
-use primus_integer::SimdArray;
-
 use super::DcrtPolynomial;
 
 // Writes (a+s, (a-s)*w) modulo the current CRT limb's modulus. Preserve the
@@ -29,47 +24,6 @@ where
         let diff = compact::reduce_sub(modulus, a_orig, s);
         *b = w.factor_mul_modulo(diff, modulus);
     });
-}
-
-// Factors remain scalar-packed: convert each complete vector of factors once,
-// then delegate the tail to the same scalar butterfly used without SIMD.
-#[cfg(feature = "simd")]
-#[allow(clippy::chunks_exact_to_as_chunks)]
-fn simd_butterfly_mul_factor_slice<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
-where
-    T: FheUint,
-    F: SimdFactorMul<T>,
-{
-    debug_assert_eq!(a.len(), s.len());
-    debug_assert_eq!(a.len(), w.len());
-    debug_assert_eq!(a.len(), b.len());
-
-    let m = T::SimdT::splat(modulus);
-
-    let (a_chunks, a_rem) = T::simd_as_chunks_mut(a);
-    let (s_chunks, s_rem) = T::simd_as_chunks(s);
-    let (out_chunks, out_rem) = T::simd_as_chunks_mut(b);
-
-    let simd_len = a_chunks.len() * T::LANE_COUNT;
-    let (w_body, w_rem) = w.split_at(simd_len);
-
-    for (((a, &s), w), b) in a_chunks
-        .iter_mut()
-        .zip(s_chunks)
-        .zip(w_body.chunks_exact(T::LANE_COUNT))
-        .zip(out_chunks)
-    {
-        let av = T::SimdT::from_array(*a);
-        let sv = T::SimdT::from_array(s);
-        let wf = F::simd_from_factor_slice(w);
-
-        let diff = compact::simd::reduce_sub::<T>(m, av, sv);
-
-        *a = compact::simd::reduce_add::<T>(m, av, sv).to_array();
-        *b = wf.factor_mul_modulo(diff, m).to_array();
-    }
-
-    butterfly_mul_factor_slice(a_rem, s_rem, w_rem, out_rem, modulus);
 }
 
 impl<S, T> DcrtPolynomial<S>
@@ -315,9 +269,8 @@ where
     }
 }
 
-// The caller supplies complete modulus-major blocks; the public entry retains
-// the shape diagnostics. Each limb uses its own scalar or SIMD butterfly and
-// corresponding factor block.
+// The caller supplies complete modulus-major blocks. Both feature builds use
+// the fused loop so LLVM can vectorize directly from the interleaved factors.
 #[inline]
 fn butterfly_mul_factor_to_kernel<T, F>(
     mut lhs: DcrtPolynomial<&mut [T]>,
@@ -337,11 +290,5 @@ fn butterfly_mul_factor_to_kernel<T, F>(
         output.iter_each_modulus_mut(poly_length),
         moduli
     )
-    .for_each(|(a, s, w, b, &modulus)| {
-        #[cfg(not(feature = "simd"))]
-        butterfly_mul_factor_slice(a, s, w, b, modulus);
-
-        #[cfg(feature = "simd")]
-        simd_butterfly_mul_factor_slice(a, s, w, b, modulus);
-    })
+    .for_each(|(a, s, w, b, &modulus)| butterfly_mul_factor_slice(a, s, w, b, modulus))
 }

@@ -162,6 +162,21 @@ fn single_input_fast_and_corrected_conversion_use_distinct_lifts() {
 }
 
 #[test]
+fn single_input_array_conversion_matches_exact_reduction_at_modulus_boundaries() {
+    let p = 13;
+    for q in [p - 1, p, p + 1, 2 * p, 2 * p + 1] {
+        let converter = BaseConverter::new(&base(&[q]), &base(&[p]));
+        let input: Vec<_> = (0..q).collect();
+        let mut output = vec![Value::MAX; input.len()];
+        converter.fast_convert_array(&input, &mut output, input.len(), &mut []);
+        assert_eq!(
+            output,
+            input.iter().map(|value| value % p).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn corrected_array_conversion_uses_centered_values_and_reuses_workspace() {
     // 7428 = 17*19*23 - 1 represents -1, hence 4 modulo the destination 5.
     // Each source modulus exceeds the destination in this corrected path too.
