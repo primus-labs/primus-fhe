@@ -11,6 +11,7 @@ use primus_lattice::{
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use primus_tfhe::rotation::RotationModulusSwitch;
+use primus_tfhe_glwe::GlweBlindRotationControls;
 
 use super::SparseGlweBootstrappingKey;
 
@@ -20,11 +21,38 @@ use super::SparseGlweBootstrappingKey;
 /// one coefficient GLWE buffer and external-product scratch. It contains no
 /// plaintext secret support or matching, and allocates only during construction.
 pub struct SparseGlweBlindRotationWorkspace<T: TorusFftValue> {
-    input_exponents: Vec<usize>,
-    aggregate: Ggsw<Vec<T>>,
-    transformed: FourierGgsw<Vec<Complex64>>,
-    scratch: TorusGlwe<Vec<T>>,
-    external_product: FourierGlweExternalProductWorkspace<T>,
+    inner: ControlAggregationWorkspace<T>,
+}
+
+/// Single-input coefficient/Fourier scratch shared by both control layouts.
+/// The selected blind-rotation method owns exactly one instance.
+pub(crate) struct ControlAggregationWorkspace<T: TorusFftValue> {
+    pub(crate) input_exponents: Vec<usize>,
+    pub(crate) aggregate: Ggsw<Vec<T>>,
+    pub(crate) transformed: FourierGgsw<Vec<Complex64>>,
+    pub(crate) scratch: TorusGlwe<Vec<T>>,
+    pub(crate) external_product: FourierGlweExternalProductWorkspace<T>,
+}
+
+impl<T: TorusFftValue> ControlAggregationWorkspace<T> {
+    pub(crate) fn new(controls: &GlweBlindRotationControls<T, NativeModulus<T>>) -> Self {
+        let size = controls.size();
+        Self {
+            input_exponents: vec![0; controls.input_dimension().get()],
+            aggregate: Ggsw::zero(size.ggsw_len()),
+            transformed: FourierGgsw::zero(size.fourier_ggsw_len()),
+            scratch: TorusGlwe::zero(size.glwe_len()),
+            external_product: FourierGlweExternalProductWorkspace::new(size),
+        }
+    }
+
+    pub(crate) fn with_external_product<R>(
+        &mut self,
+        size: primus_lattice::GadgetSize,
+        operation: impl FnOnce(&mut FourierGlweExternalProductWorkspace<T>) -> R,
+    ) -> R {
+        self.external_product.with_rebound(size, operation)
+    }
 }
 
 impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
@@ -33,20 +61,15 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
         size: primus_lattice::GadgetSize,
         operation: impl FnOnce(&mut FourierGlweExternalProductWorkspace<T>) -> R,
     ) -> R {
-        self.external_product.with_rebound(size, operation)
+        self.inner.with_external_product(size, operation)
     }
 
-    /// Allocates scratch for this key's input dimension and gadget layout.
+    /// Allocates scratch for the controls' input dimension and gadget layout.
     /// Reusable with other sparse keys of the same dimensions and layout.
     #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, NativeModulus<T>>) -> Self {
-        let size = key.size();
+    pub fn new(controls: &GlweBlindRotationControls<T, NativeModulus<T>>) -> Self {
         Self {
-            input_exponents: vec![0; key.input_dimension().get()],
-            aggregate: Ggsw::zero(size.ggsw_len()),
-            transformed: FourierGgsw::zero(size.fourier_ggsw_len()),
-            scratch: TorusGlwe::zero(size.glwe_len()),
-            external_product: FourierGlweExternalProductWorkspace::new(size),
+            inner: ControlAggregationWorkspace::new(controls),
         }
     }
 }
@@ -125,10 +148,10 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
         B: Data<Elem = T>,
         C: DataMut<Elem = T>,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
         assert!(
-            modulus_switch.is_compatible(key.input_modulus_value(), 2 * poly_length),
+            modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * poly_length),
             "sparse blind-rotation quantizer domain mismatch"
         );
         assert_eq!(
@@ -141,7 +164,10 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
             "sparse blind-rotation input, LUT or output layout mismatch"
         );
         assert_eq!(
-            (self.input_exponents.len(), self.external_product.size()),
+            (
+                self.inner.input_exponents.len(),
+                self.inner.external_product.size()
+            ),
             (key.input_dimension().get(), size),
             "sparse blind-rotation workspace layout mismatch"
         );
@@ -173,16 +199,16 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
     ) where
         Table: FftTable,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
-        let SparseGlweBlindRotationWorkspace {
+        let modulus = key.controls().ring_modulus();
+        let ControlAggregationWorkspace {
             input_exponents,
             aggregate,
             transformed,
             scratch,
             external_product,
-        } = self;
+        } = &mut self.inner;
         modulus_switch.exponent_slice_to(input.a(), input_exponents);
         let initial_exponent =
             modulus_switch.exponent(input.b()).wrapping_neg() & (2 * poly_length - 1);
@@ -197,36 +223,13 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
             // A bucket always has one dummy, including publicly empty buckets.
             // Start from it so no aggregation state survives the previous bucket.
             aggregate.as_mut().copy_from_slice(dummy);
-            let ggsw_len = size.ggsw_len();
-            // Fuse two rotations so each accumulator coefficient is loaded and
-            // stored once per pair; each modular contribution remains canonical.
-            let (index_pairs, index_tail) = indices.as_chunks::<2>();
-            let mut selection_pairs = selections.chunks_exact(2 * ggsw_len);
-            for (indices, pair) in index_pairs.iter().zip(selection_pairs.by_ref()) {
-                let (a, b) = pair.split_at(ggsw_len);
-                aggregate.add_mul_monomial_pair_assign(
-                    &Ggsw::new(a),
-                    input_exponents[indices[0]],
-                    &Ggsw::new(b),
-                    input_exponents[indices[1]],
-                    poly_length,
-                    modulus,
-                );
-            }
-            if let Some(&index) = index_tail.first() {
-                let selection = selection_pairs.remainder();
-                for (acc, source) in aggregate
-                    .as_mut()
-                    .chunks_exact_mut(poly_length)
-                    .zip(selection.chunks_exact(poly_length))
-                {
-                    Polynomial(acc).add_mul_monomial_assign(
-                        &Polynomial(source),
-                        input_exponents[index],
-                        modulus,
-                    );
-                }
-            }
+            aggregate_controls_assign(
+                indices.iter().map(|&index| input_exponents[index]),
+                selections,
+                aggregate,
+                poly_length,
+                modulus,
+            );
             // Transform only the completed aggregate. Native wrapping above is
             // exact; each polynomial is lifted at the normalized torus scale.
             aggregate.write_fourier_form(transformed, fft);
@@ -234,7 +237,7 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     &output,
                     scratch,
-                    key.basis(),
+                    key.controls().basis(),
                     fft,
                     external_product,
                 );
@@ -242,7 +245,7 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     scratch,
                     &mut output,
-                    key.basis(),
+                    key.controls().basis(),
                     fft,
                     external_product,
                 );
@@ -251,6 +254,44 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
         }
         if !output_is_current {
             output.as_mut().copy_from_slice(scratch.as_ref());
+        }
+    }
+}
+
+/// Adds all rotated bit controls to an aggregate already initialized to zero
+/// or its independently encrypted dummy. Complete coefficient layouts are established
+/// by the owning key; every control contributes, including zero exponents.
+/// Pairing preserves Sparse's native wrapping order while loading/storing each
+/// aggregate coefficient only once per pair.
+#[inline]
+pub(crate) fn aggregate_controls_assign<T: TorusFftValue>(
+    mut exponents: impl ExactSizeIterator<Item = usize>,
+    selections: &[T],
+    aggregate: &mut Ggsw<Vec<T>>,
+    poly_length: usize,
+    modulus: NativeModulus<T>,
+) {
+    let ggsw_len = aggregate.as_ref().len();
+    debug_assert_eq!(selections.len(), exponents.len() * ggsw_len);
+    let mut selection_pairs = selections.chunks_exact(2 * ggsw_len);
+    for pair in selection_pairs.by_ref() {
+        let (a, b) = pair.split_at(ggsw_len);
+        aggregate.add_mul_monomial_pair_assign(
+            &Ggsw::new(a),
+            exponents.next().expect("complete control pair"),
+            &Ggsw::new(b),
+            exponents.next().expect("complete control pair"),
+            poly_length,
+            modulus,
+        );
+    }
+    if let Some(exponent) = exponents.next() {
+        for (acc, source) in aggregate
+            .as_mut()
+            .chunks_exact_mut(poly_length)
+            .zip(selection_pairs.remainder().chunks_exact(poly_length))
+        {
+            Polynomial(acc).add_mul_monomial_assign(&Polynomial(source), exponent, modulus);
         }
     }
 }

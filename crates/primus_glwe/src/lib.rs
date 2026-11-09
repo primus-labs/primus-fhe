@@ -61,7 +61,7 @@ pub use parameter::{
     GadgetSize, GgswParameters, GlevParameterError, GlevParameters, GlweEncryptionParameters,
     GlweKeySwitchingParameters, GlweParameterError, GlweParameters, GlweSize, GlweSizeError,
 };
-pub use primus_distr::SecretKeyDistr;
+pub use primus_distr::{BlockOccupancy, SecretKeyDistr};
 pub use primus_lattice::{GlweDimension, GlweDimensionError, LweDimension};
 #[cfg(feature = "ntt")]
 pub use public_key::{NttGlwePublicEncryptWorkspace, NttGlwePublicKey};

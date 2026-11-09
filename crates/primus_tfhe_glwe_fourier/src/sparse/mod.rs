@@ -2,6 +2,7 @@
 
 mod blind_rotation;
 mod key;
+pub(crate) use blind_rotation::{ControlAggregationWorkspace, aggregate_controls_assign};
 pub(crate) use key::SparseKeyLayout;
 
 pub use blind_rotation::SparseGlweBlindRotationWorkspace;

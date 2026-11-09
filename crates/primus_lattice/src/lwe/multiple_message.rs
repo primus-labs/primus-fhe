@@ -4,12 +4,14 @@ use primus_reduce::prelude::*;
 
 use super::Lwe;
 
-/// Packed LWE samples extracted from an RLWE ciphertext.
+/// Packed LWE samples sharing publicly signed rotations of one mask.
 ///
-/// Storage contains a length-`N` mask in constant-term extraction order,
-/// followed by retained body coefficients `b[0..count]`. Later samples rotate
-/// this mask negacyclically. The original polynomial length and body count are
-/// supplied by the caller; this layout cannot represent multiple GLWE masks.
+/// Storage contains a length-`N` mask followed by bodies `b[0..count]`.
+/// Sample j uses its signed right rotation by j positions. This includes RLWE
+/// samples whose mask is in constant-term extraction order, as well as directly
+/// encrypted packed LWE samples. The dimension and body count are supplied by
+/// the caller; direct LWE use does not require a power-of-two dimension. This
+/// layout cannot represent multiple GLWE masks.
 ///
 /// The optional `serde` feature serializes the backing storage `S` only.
 /// Deserialization does not validate the layout or supply parameter/key metadata.
@@ -44,9 +46,10 @@ where
     ///
     /// # Correctness
     ///
-    /// `dimension` is the original nonzero RLWE polynomial length; `msg_count`
-    /// is at most `dimension`. Their sum must fit in `usize`. This allocates
-    /// zero storage without sampling a randomized encryption.
+    /// `dimension` is the shared nonzero LWE mask length; for RLWE-derived
+    /// samples it equals the original polynomial length. `msg_count` is at most
+    /// `dimension`, and their sum must fit in `usize`. This allocates zero
+    /// storage without sampling a randomized encryption.
     #[must_use]
     #[inline]
     pub fn zero(dimension: usize, msg_count: usize) -> Self {
@@ -63,8 +66,8 @@ where
     ///
     /// # Correctness
     ///
-    /// `dimension` is the original RLWE polynomial length, separating its
-    /// constant-term extraction mask from retained body coefficients.
+    /// `dimension` is the shared LWE mask length, separating it from the bodies.
+    /// For RLWE-derived samples it equals the original polynomial length.
     ///
     /// # Panics
     ///
@@ -90,8 +93,8 @@ where
     ///
     /// # Correctness
     ///
-    /// `dimension` is the original RLWE polynomial length, separating its
-    /// constant-term extraction mask from retained body coefficients.
+    /// `dimension` is the shared LWE mask length, separating it from the bodies.
+    /// For RLWE-derived samples it equals the original polynomial length.
     ///
     /// # Panics
     ///
@@ -102,14 +105,15 @@ where
     }
 
     /// Allocates the sample for body coefficient `index`.
-    /// `dimension` is the original RLWE polynomial length. The mask must already
-    /// be in constant-term LWE extraction order, and `index` must be less than
-    /// both `dimension` and the retained body count.
+    /// `dimension` is the common mask length; `index` must be less than both
+    /// `dimension` and the retained body count. For RLWE-derived samples the
+    /// stored mask must already be in constant-term extraction order.
     ///
     /// # Correctness
     ///
-    /// The stored values must be canonical under `modulus`; the extracted
-    /// key is the coefficient vector of the original RLWE secret.
+    /// The stored values must be canonical under `modulus` and satisfy the
+    /// shared-secret signed-rotation layout described on the type. For
+    /// RLWE-derived samples the key is the original ring secret coefficient vector.
     /// The strict `index < dimension` requirement is not validated in release;
     /// `index == dimension` can produce an incorrect sample without panicking.
     ///
@@ -117,7 +121,7 @@ where
     ///
     /// Panics if the requested mask/body slice is out of bounds or the
     /// rotation exceeds `dimension`. These checks do not validate the
-    /// original RLWE layout.
+    /// shared-mask layout.
     #[must_use]
     #[inline]
     pub fn extract_lwe_at<M>(&self, index: usize, dimension: usize, modulus: M) -> Lwe<Vec<T>>
@@ -134,14 +138,14 @@ where
     }
 
     /// Allocates all samples, with `msg_count` specifying the exact retained
-    /// body count. The remaining storage is the constant-term extraction mask.
+    /// body count. The remaining storage is the shared mask.
     ///
     /// # Correctness
     ///
     /// `msg_count` must be the actual retained body count. The remaining
-    /// storage has the original RLWE polynomial length and constant-term
-    /// extraction order. Values must be canonical under `modulus`. The output
-    /// keys are the coefficient vector of the original RLWE secret.
+    /// storage is the shared mask in the type's signed-rotation layout. Values
+    /// must be canonical under `modulus`. All output samples use the same
+    /// LWE secret (the original ring secret coefficient vector for RLWE extraction).
     ///
     /// # Panics
     ///

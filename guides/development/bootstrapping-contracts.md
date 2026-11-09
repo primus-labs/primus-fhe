@@ -58,6 +58,18 @@ The independently encrypted dummy represents one minus the sum of that bucket's 
 
 Retrying the public map until matching succeeds conditions the published map on the fixed secret admitting a matching. It reduces generation failure without removing that correlation. Only the independent NTRU ring secret is conditioned on invertibility; the external fixed-weight secret may have even weight. Conditioned secret/map distributions and evaluation-key KDM/circular-security assumptions require separate analysis. Matching, rejection sampling and inverse preparation have no constant-time guarantee.
 
+GLWE NTT raw sparse and block BR also accept independent input batches. Their
+default four-lane workspaces share read-only key tiles on one thread. The block
+workspace also supports a sixteen-lane configuration. Each lane retains its own
+exponents, aggregate, accumulator and external-product scratch. The batch groups
+use the same per-chain control order and arithmetic as single calls, with the
+single kernel for a one-input tail. Complete batch layouts
+are checked before any output write, and evaluation allocates no memory. Outputs
+remain separate coefficient-domain GLWE ciphertexts: summing, KS and extraction
+belong to the caller. Shared physical key errors remain correlated between lanes.
+See the [block workspace](../../crates/primus_tfhe_glwe_ntt/src/block/blind_rotation.rs)
+and [sparse workspace](../../crates/primus_tfhe_glwe_ntt/src/sparse/blind_rotation.rs).
+
 ### Matching and error dependencies
 
 For an independent initial map H, fixed-weight support S and matching event A,
@@ -102,7 +114,7 @@ C = sum_l D_l(P)*K_l.
 
 I is NLEV[1], the B controls are NLEV secret bits, and binary omits B_minus. K targets `H=X^(a*secret_0)`, so the phase is `P*H - epsilon(P)*H + sum_l D_l(P)*e_l(K)`. Only P is approximately decomposed: a small monomial difference is not discarded by that decomposition. If a=0, K=I still performs the required lift.
 
-Sparse BR uses the first bucket's NLEV aggregate K_0 instead. The same phase formula holds with H equal to the selected monomial, or one for an unoccupied bucket. Even an empty first bucket lifts through its encrypted dummy. Later coordinates/buckets use NGSW on encrypted accumulators; NGSW's extra f factor prevents substituting it for this public-polynomial lift. MVB, CBS and one-hot use the same BR initialization. See the [NTRU family](../../crates/primus_tfhe_ntru/README.md#sparse-coefficient-keys).
+Sparse and Block BR use their first whole group's NLEV aggregate K_0 instead. The same phase formula holds with H equal to the selected monomial, or one for an unoccupied bucket. Even an empty first group lifts through its encrypted dummy. Later coordinates/buckets use NGSW on encrypted accumulators; NGSW's extra f factor prevents substituting it for this public-polynomial lift. MVB, CBS and one-hot use the same BR initialization. See the [NTRU family](../../crates/primus_tfhe_ntru/README.md#sparse-coefficient-keys).
 
 ## Ordinary CBS and consumption
 

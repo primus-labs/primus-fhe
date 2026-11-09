@@ -1,9 +1,10 @@
 use num_traits::{ConstOne, ConstZero};
 use primus_integer::{AsInto, FheInt, FheUint};
-use rand::distr::Bernoulli;
+use rand::distr::{Bernoulli, Distribution, Uniform};
 
 use crate::{
-    SecretKeyDistr, SecretKeySamplerError, SignedDiscreteGaussian, ternary::TernarySampler,
+    BlockOccupancy, SecretKeyDistr, SecretKeySamplerError, SignedDiscreteGaussian,
+    ternary::TernarySampler,
 };
 
 /// Prepared whole-key sampling with shared signed and modular output paths.
@@ -11,7 +12,7 @@ use crate::{
 /// `T` is the unsigned coefficient type. The same probability thresholds and
 /// Gaussian tables produce signed `T::SignedInteger` coefficients or canonical
 /// residues modulo a caller-supplied modulus. No ciphertext modulus is stored.
-/// Fixed weights apply to the complete output slice.
+/// Fixed weights and block partitions apply to the complete output slice.
 #[derive(Clone)]
 pub struct SecretKeySampler<T: FheUint> {
     distr: SecretKeyDistr,
@@ -29,6 +30,10 @@ enum SamplingMethod<G> {
     FixedHammingWeightBinary {
         hamming_weight: usize,
     },
+    BlockBinary {
+        block_size: usize,
+        category: Uniform<usize>,
+    },
     FixedHammingWeightTernary {
         hamming_weight: usize,
     },
@@ -44,17 +49,19 @@ impl<T: FheUint> SecretKeySampler<T> {
     ///
     /// # Panics
     ///
-    /// Panics if probabilities are invalid or Gaussian construction violates
+    /// Panics if probabilities or the block size are invalid, or Gaussian
+    /// construction violates
     /// [`SignedDiscreteGaussian::new`]'s validity rules for `T::SignedInteger`.
-    /// Fixed weights are checked against the complete output length when sampling.
+    /// Fixed weights and block partitioning are checked against the complete
+    /// output length when sampling.
     #[must_use]
     pub fn new(distr: SecretKeyDistr) -> Self {
         Self::try_new(distr).expect("invalid secret-key sampler")
     }
 
-    /// Prepares probabilities and Gaussian tables, returning their validation
-    /// errors. Fixed weights are checked separately by [`Self::validate_length`]
-    /// or when sampling into the actual output.
+    /// Prepares probabilities, block categories and Gaussian tables, returning
+    /// their validation errors. Fixed weights and block partitioning are checked
+    /// by [`Self::validate_length`] or when sampling into the actual output.
     pub fn try_new(distr: SecretKeyDistr) -> Result<Self, SecretKeySamplerError> {
         let method = match distr {
             SecretKeyDistr::UniformBinary => SamplingMethod::UniformBinary,
@@ -74,6 +81,20 @@ impl<T: FheUint> SecretKeySampler<T> {
             SecretKeyDistr::FixedHammingWeightBinary { hamming_weight } => {
                 SamplingMethod::FixedHammingWeightBinary { hamming_weight }
             }
+            SecretKeyDistr::BlockBinary {
+                block_size,
+                occupancy,
+            } => {
+                let category_count = block_size
+                    .checked_add(usize::from(occupancy == BlockOccupancy::AtMostOne))
+                    .filter(|_| block_size != 0)
+                    .ok_or(SecretKeySamplerError::InvalidBlockSize { block_size })?;
+                SamplingMethod::BlockBinary {
+                    block_size,
+                    category: Uniform::new(0, category_count)
+                        .expect("positive block size has a nonempty category range"),
+                }
+            }
             SecretKeyDistr::FixedHammingWeightTernary { hamming_weight } => {
                 SamplingMethod::FixedHammingWeightTernary { hamming_weight }
             }
@@ -91,10 +112,20 @@ impl<T: FheUint> SecretKeySampler<T> {
         Ok(Self { distr, method })
     }
 
-    /// Checks fixed weights against a complete logical key before key generation.
-    /// Returns an error if the weight sum overflows or exceeds `length`.
+    /// Checks fixed weights and block partitioning before key generation.
+    /// Returns an error if the weight sum overflows or exceeds `length`, or a
+    /// block-binary key is empty or does not contain complete blocks.
     /// Sampling still checks the actual output, which may have a different length.
     pub fn validate_length(&self, length: usize) -> Result<(), SecretKeySamplerError> {
+        if let SamplingMethod::BlockBinary { block_size, .. } = &self.method {
+            if length == 0 || !length.is_multiple_of(*block_size) {
+                return Err(SecretKeySamplerError::InvalidBlockLength {
+                    length,
+                    block_size: *block_size,
+                });
+            }
+            return Ok(());
+        }
         let weight = match self.distr {
             SecretKeyDistr::FixedHammingWeightBinary { hamming_weight }
             | SecretKeyDistr::FixedHammingWeightTernary { hamming_weight } => Some(hamming_weight),
@@ -148,7 +179,8 @@ impl<T: FheUint> SecretKeySampler<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a fixed weight exceeds `length` or its sum overflows.
+    /// Panics if a fixed weight exceeds `length` or its sum overflows, or a
+    /// block-binary key is empty or has an incomplete block.
     #[must_use]
     pub fn sample_signed<R: rand::Rng + rand::CryptoRng>(
         &self,
@@ -164,7 +196,7 @@ impl<T: FheUint> SecretKeySampler<T> {
     }
 
     /// Overwrites a complete signed key without allocating.
-    /// Fixed weights apply to the whole slice, not independently to chunks.
+    /// Fixed weights and block partitions apply to the whole slice.
     /// Randomness consumption follows the underlying vector samplers and may
     /// change with their algorithms; empty slices may consume randomness.
     /// A panicking RNG may leave partially written output.
@@ -172,7 +204,8 @@ impl<T: FheUint> SecretKeySampler<T> {
     /// # Panics
     ///
     /// Panics before writing or sampling if a fixed weight exceeds the output
-    /// length or its sum overflows.
+    /// length or its sum overflows, or a block-binary key is empty or has an
+    /// incomplete block.
     #[inline]
     pub fn sample_signed_to<R: rand::Rng + rand::CryptoRng>(
         &self,
@@ -198,7 +231,8 @@ impl<T: FheUint> SecretKeySampler<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a fixed weight exceeds `length` or its sum overflows.
+    /// Panics if a fixed weight exceeds `length` or its sum overflows, or a
+    /// block-binary key is empty or has an incomplete block.
     #[must_use]
     pub fn sample_encoded<R: rand::Rng + rand::CryptoRng>(
         &self,
@@ -215,8 +249,9 @@ impl<T: FheUint> SecretKeySampler<T> {
     }
 
     /// Overwrites a complete key with canonical residues without allocating.
-    /// Fixed weights apply to the whole slice. RNG consumption follows
-    /// [`Self::sample_signed_to`]; a panicking RNG may leave partial output.
+    /// Fixed weights and block partitions apply to the whole slice. RNG
+    /// consumption follows [`Self::sample_signed_to`]; a panicking RNG may leave
+    /// partial output.
     ///
     /// # Correctness
     ///
@@ -227,7 +262,8 @@ impl<T: FheUint> SecretKeySampler<T> {
     /// # Panics
     ///
     /// Panics before writing or sampling if a fixed weight exceeds the output
-    /// length or its sum overflows.
+    /// length or its sum overflows, or a block-binary key is empty or has an
+    /// incomplete block.
     #[inline]
     pub fn sample_encoded_to<R: rand::Rng + rand::CryptoRng>(
         &self,
@@ -266,6 +302,24 @@ impl<T: FheUint> SecretKeySampler<T> {
             SamplingMethod::Ternary(distribution) => distribution.sample_to(output, minus_one, rng),
             SamplingMethod::FixedHammingWeightBinary { hamming_weight } => {
                 crate::sample_fixed_hamming_weight_binary_values_to(output, *hamming_weight, rng)
+            }
+            SamplingMethod::BlockBinary {
+                block_size,
+                category,
+            } => {
+                // Validate before clearing or drawing: chunks_exact_mut would
+                // otherwise silently leave an incomplete tail untouched.
+                self.validate_length(output.len())
+                    .expect("invalid block-binary key length");
+                for block in output.chunks_exact_mut(*block_size) {
+                    block.fill(U::ZERO);
+                    let position = category.sample(rng);
+                    // Only AtMostOne has the extra all-zero category. Never
+                    // reject or resample it, even when the whole key is zero.
+                    if position < *block_size {
+                        block[position] = U::ONE;
+                    }
+                }
             }
             SamplingMethod::FixedHammingWeightTernary { hamming_weight } => {
                 crate::sample_fixed_hamming_weight_ternary_values_to(

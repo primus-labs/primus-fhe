@@ -31,6 +31,9 @@
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
 //! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
 //!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
+//! - [`block`]: contiguous block-binary controls with independently encrypted
+//!   empty-block dummies, single-input and bounded batch workspaces; choose
+//!   [`BlindRotationMethod::Block`] with a matching secret distribution.
 //!
 //! [`Evaluator`] owns common [`bootstrap::BootstrapResources`] and the ordinary return stage.
 //! Default [`CbsEvaluator`] owns its input/BR resources; low-level
@@ -59,7 +62,7 @@
 //! [`bootstrapping_key`] and [`blind_rotation`] expose raw ring-control operations.
 //! [`Evaluator::try_from_parts`] borrows independent BR and ring KS material.
 //! CBS component binding omits KS for BR→KS, but requires it for KS→BR input preparation.
-//! Both PBS orders and classic binary/ternary or sparse binary keys are supported.
+//! Both PBS orders support classic binary/ternary, sparse binary and block-binary keys.
 //! Keys and values must use this context's NTT root and ordering convention.
 //! Raw ciphertexts do not record secret identity, encoding or noise margins.
 
@@ -75,6 +78,7 @@ use primus_modulus::BarrettModulus;
 
 mod accumulator;
 pub mod blind_rotation;
+pub mod block;
 pub mod bootstrap;
 pub mod bootstrapping_key;
 pub mod circuit_bootstrap;
@@ -90,9 +94,9 @@ pub mod sparse;
 pub mod boolean;
 
 pub use error::{
-    CircuitBootstrapParameterError, KeyGenerationError, LookupTableError,
-    SparseBootstrappingKeyError, TfheClientError, TfheContextError, TfheEvaluationError,
-    TfheKeyError, TfheParameterError,
+    BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
+    LookupTableError, SparseBootstrappingKeyError, TfheClientError, TfheContextError,
+    TfheEvaluationError, TfheKeyError, TfheParameterError,
 };
 
 pub use accumulator::AccumulatorClient;

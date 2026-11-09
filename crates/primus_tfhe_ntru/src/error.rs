@@ -37,6 +37,9 @@ pub enum TfheParameterError {
     /// The external LWE distribution must be binary or ternary.
     #[error("NTRU TFHE requires a binary or ternary client secret-key distribution")]
     UnsupportedClientSecretKeyDistribution,
+    /// Direct block controls require a block-binary distribution.
+    #[error("block blind rotation requires a block-binary external LWE secret")]
+    InvalidBlockSecretDistribution,
 }
 
 /// An incompatibility between NTRU client keys and TFHE parameters.
@@ -54,6 +57,9 @@ pub enum TfheKeyError {
     /// An external LWE coefficient is outside the declared binary or ternary domain.
     #[error("NTRU TFHE client coefficients do not match their binary or ternary domain")]
     InvalidClientSecretKeyCoefficient,
+    /// A block-binary external secret violates its declared per-block occupancy.
+    #[error("external LWE secret block violates its declared occupancy")]
+    InvalidClientSecretKeyBlock,
     /// The external secret has the wrong LWE dimension.
     #[error("NTRU client key has the wrong external LWE dimension")]
     ExternalLweDimensionMismatch,
@@ -117,9 +123,12 @@ pub enum CircuitBootstrapParameterError {
     UnsupportedTraceModulus,
 }
 
-/// Failure to generate classic, sparse or circuit-bootstrap keys for this TFHE family.
+/// Failure to generate blind-rotation or circuit-bootstrap keys for this TFHE family.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KeyGenerationError {
+    /// The selected blind-rotation method is not supported by this backend.
+    #[error("unsupported blind-rotation method: {0:?}")]
+    UnsupportedBlindRotationMethod(primus_tfhe::BlindRotationMethod),
     /// The context has no complete ring-output CBS configuration.
     #[error("context has no circuit-bootstrap parameters")]
     MissingCircuitBootstrapParameters,
@@ -127,6 +136,9 @@ pub enum KeyGenerationError {
     #[error("key-switching parameters do not match the blind-rotation domain")]
     IncompatibleKeySwitchingParameters,
 
+    /// Direct block blind-rotation key generation failed.
+    #[error(transparent)]
+    BlockBootstrapping(#[from] BlockBootstrappingKeyError),
     /// Sparse blind-rotation key generation failed.
     #[error(transparent)]
     SparseBootstrapping(#[from] SparseBootstrappingKeyError),
@@ -166,6 +178,33 @@ pub enum SparseBootstrappingKeyError {
     #[error("sparse coefficient storage length mismatch: expected {expected}, got {actual}")]
     StorageLengthMismatch {
         /// Required coefficient count, including all dummy controls.
+        expected: usize,
+        /// Supplied coefficient count.
+        actual: usize,
+    },
+}
+
+/// Failure to bind or generate direct block-binary NTRU controls.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BlockBootstrappingKeyError {
+    /// Direct block controls require a block-binary secret.
+    #[error("block bootstrapping requires a block-binary external secret")]
+    UnsupportedSecretDistribution,
+    /// The logical dimension must consist of complete nonempty blocks.
+    #[error("invalid block geometry: dimension {dimension}, block size {block_size}")]
+    InvalidBlockGeometry {
+        /// Logical external LWE dimension.
+        dimension: usize,
+        /// Number of logical coefficients per block.
+        block_size: usize,
+    },
+    /// Complete control storage cannot be represented or allocated.
+    #[error("block control storage size overflow")]
+    StorageSizeOverflow,
+    /// Every logical bit and each mode-required dummy must have a complete control.
+    #[error("block coefficient storage length mismatch: expected {expected}, got {actual}")]
+    StorageLengthMismatch {
+        /// Required coefficient count, including any required dummy controls.
         expected: usize,
         /// Supplied coefficient count.
         actual: usize,

@@ -53,7 +53,7 @@ where
     /// # Panics
     ///
     /// Panics on the sampler errors of [`Self::try_new`],
-    /// including fixed secret weights exceeding the dimension.
+    /// including fixed secret weights exceeding the dimension or incomplete blocks.
     #[must_use]
     #[inline]
     pub fn new(
@@ -71,7 +71,7 @@ where
         .expect("invalid LWE parameters")
     }
 
-    /// Checks secret support/weight and the coefficient-noise sampler.
+    /// Checks secret support, weight/block partitioning and the coefficient-noise sampler.
     /// The dimension has already been checked by [`LweDimension`].
     /// Noise standard deviation is measured in ciphertext coefficient units.
     /// Successful construction does not establish security or a decryption margin.

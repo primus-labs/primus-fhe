@@ -8,8 +8,8 @@ use primus_lattice::{
 use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::Polynomial;
-use primus_reduce::ReduceOnceSlice;
 use primus_tfhe::rotation::RotationModulusSwitch;
+use primus_tfhe_glwe::GlweBlindRotationControls;
 
 use super::SparseGlweBootstrappingKey;
 
@@ -19,14 +19,20 @@ use super::SparseGlweBootstrappingKey;
 /// external-product scratch. Multi-tile u64 layouts also cache rotation descriptors
 /// within each bucket. It contains no secret support or matching data.
 pub struct SparseGlweBlindRotationWorkspace<T: FheUint> {
-    input_exponents: Vec<usize>,
-    rotation_groups: Vec<super::aggregation::FourRotations>,
-    aggregate: Vec<T>,
-    scratch: Glwe<Vec<T>>,
-    external_product: NttGlweExternalProductWorkspace<T>,
+    inner: ControlAggregationWorkspace<T>,
 }
 
-impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
+/// Shared coefficient aggregation state. Typed sparse/block wrappers establish
+/// group geometry; this state retains no grouping or input-support metadata.
+pub(crate) struct ControlAggregationWorkspace<T: FheUint> {
+    pub(crate) input_exponents: Vec<usize>,
+    pub(crate) rotation_groups: Vec<super::aggregation::FourRotations>,
+    pub(crate) aggregate: Vec<T>,
+    pub(crate) scratch: Glwe<Vec<T>>,
+    pub(crate) external_product: NttGlweExternalProductWorkspace<T>,
+}
+
+impl<T: FheUint> ControlAggregationWorkspace<T> {
     pub(crate) fn with_external_product<R>(
         &mut self,
         size: primus_lattice::GadgetSize,
@@ -35,21 +41,20 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
         self.external_product.with_rebound(size, operation)
     }
 
-    /// Allocates scratch for the key's input dimension and gadget layout.
-    /// It can be reused with other sparse keys of the same dimensions and layout.
-    #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
-        let size = key.size();
+    /// The typed wrapper supplies its largest group, not the full input dimension.
+    /// Descriptors exist only for u64 layouts whose controls span multiple tiles.
+    pub(crate) fn new(
+        controls: &GlweBlindRotationControls<T, BarrettModulus<T>>,
+        max_group_len: usize,
+    ) -> Self {
+        let size = controls.size();
         let tile_len = super::aggregation::tile_len::<T>(size.glwe_size().poly_length().get());
         Self {
-            input_exponents: vec![0; key.input_dimension().get()],
-            // A bucket contains each input index at most once. Dimension-based
-            // capacity preserves reuse with different keys of the same layout.
-            // u32 and single-tile layouts compute addresses on demand, with no plans.
+            input_exponents: vec![0; controls.input_dimension().get()],
             rotation_groups: vec![
                 super::aggregation::FourRotations::default();
                 if T::BITS == 64 && size.ggsw_len() > tile_len {
-                    key.input_dimension().get() / 4
+                    max_group_len / 4
                 } else {
                     0
                 }
@@ -57,6 +62,27 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
             aggregate: vec![T::ZERO; size.ggsw_len()],
             scratch: Glwe::zero(size.glwe_len()),
             external_product: NttGlweExternalProductWorkspace::new(size),
+        }
+    }
+}
+
+impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
+    pub(crate) fn with_external_product<R>(
+        &mut self,
+        size: primus_lattice::GadgetSize,
+        operation: impl FnOnce(&mut NttGlweExternalProductWorkspace<T>) -> R,
+    ) -> R {
+        self.inner.with_external_product(size, operation)
+    }
+
+    /// Allocates scratch for the controls' input dimension and gadget layout.
+    /// It can be reused with other sparse keys of the same dimensions and layout.
+    #[must_use]
+    pub fn new(controls: &GlweBlindRotationControls<T, BarrettModulus<T>>) -> Self {
+        Self {
+            // A sparse bucket contains each input index at most once. Preserve
+            // dimension-based capacity for reuse with different matching maps.
+            inner: ControlAggregationWorkspace::new(controls, controls.input_dimension().get()),
         }
     }
 }
@@ -74,8 +100,8 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
     /// # Correctness
     ///
     /// The input must use this key's small-LWE secret and canonical residues at
-    /// [`SparseGlweBootstrappingKey::input_modulus_value`] (q). LUT coefficients use
-    /// [`SparseGlweBootstrappingKey::ring_modulus`] (Q). The LUT has `N` encoded
+    /// [`GlweBlindRotationControls::input_modulus_value`] (q). LUT coefficients use
+    /// [`GlweBlindRotationControls::ring_modulus`] (Q). The LUT has `N` encoded
     /// coefficients; the caller is responsible for its encoding and noise margin.
     /// This raw operation performs neither key switching nor sample extraction.
     ///
@@ -103,11 +129,11 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
             1,
             "ordinary blind rotation requires step one"
         );
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
+        let modulus = key.controls().ring_modulus();
         assert!(
-            modulus_switch.is_compatible(key.input_modulus_value(), 2 * poly_length),
+            modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * poly_length),
             "sparse blind-rotation quantizer domain mismatch"
         );
         assert_eq!(
@@ -120,7 +146,10 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
             "sparse blind-rotation input, LUT or output layout mismatch"
         );
         assert_eq!(
-            (self.input_exponents.len(), self.external_product.size()),
+            (
+                self.inner.input_exponents.len(),
+                self.inner.external_product.size()
+            ),
             (key.input_dimension().get(), size),
             "sparse blind-rotation workspace layout mismatch"
         );
@@ -159,16 +188,16 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
     ) where
         Table: NttTable<ValueT = T>,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
-        let SparseGlweBlindRotationWorkspace {
+        let modulus = key.controls().ring_modulus();
+        let ControlAggregationWorkspace {
             input_exponents,
             rotation_groups,
             aggregate,
             scratch,
             external_product,
-        } = self;
+        } = &mut self.inner;
         modulus_switch.exponent_slice_to(input.a(), input_exponents);
         let initial_exponent =
             modulus_switch.exponent(input.b()).wrapping_neg() & (2 * poly_length - 1);
@@ -176,14 +205,6 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(initial_exponent, &mut Polynomial(body), modulus);
 
-        // Bound the aggregation working set while keeping complete polynomials.
-        // Small GGSWs fit in one tile; larger ones reuse each tile across entries.
-        let tile_length = super::aggregation::tile_len::<T>(poly_length);
-        let group_capacity = super::aggregation::max_group_len(modulus.value());
-        // Keep four-source fusion independent of reduction frequency. Up to
-        // seven fused groups fit in one u32 batch when (2m+1)q <= u32::MAX.
-        // Round down before the bucket/tile loops; zero retains single updates.
-        let u32_batch_len = group_capacity.min(28) & !3;
         let mut output_is_current = true;
         for bucket_index in 0..key.bucket_count() {
             let (indices, ciphertexts) = key.bucket_data(bucket_index);
@@ -191,116 +212,20 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
             // Every bucket has a dummy, even if publicly empty. It overwrites the
             // previous bucket's NTT values before adding the rotated selections.
             aggregate.copy_from_slice(dummy);
-            // u64 fuses at least four sources and keeps the whole bucket in one group.
-            // Insufficient headroom retains the bounded pair kernel below.
-            let use_groups = T::BITS == 64 && indices.len() >= 4 && indices.len() <= group_capacity;
-            if use_groups && !rotation_groups.is_empty() {
-                // Exponents are fixed for this input; every polynomial tile uses
-                // the same wrap points, source offsets and signs for a group.
-                for (plan, indices) in rotation_groups.iter_mut().zip(indices.as_chunks::<4>().0) {
-                    *plan = super::aggregation::FourRotations::new(
-                        indices.map(|i| input_exponents[i]),
-                        poly_length,
-                    );
-                }
-            }
-            for (tile_index, tile) in aggregate.chunks_mut(tile_length).enumerate() {
-                let start = tile_index * tile_length;
-                let end = start + tile.len();
-                // Each bounded batch begins and ends canonical, including a
-                // final partial batch. Capacity therefore does not depend on
-                // bucket length or on the preceding batch's signs.
-                if T::BITS == 32 && indices.len() >= 4 && u32_batch_len != 0 {
-                    for (indices, selections) in indices
-                        .chunks(u32_batch_len)
-                        .zip(selections.chunks(u32_batch_len * size.ggsw_len()))
-                    {
-                        super::aggregation::add_rotated_group_assign(
-                            indices,
-                            selections,
-                            input_exponents,
-                            &[],
-                            tile,
-                            start,
-                            size,
-                            modulus,
-                        );
-                    }
-                    continue;
-                }
-                // Large u32 moduli and buckets shorter than four retain single updates.
-                if T::BITS != 64 {
-                    for (&input_index, selection) in
-                        indices.iter().zip(selections.chunks_exact(size.ggsw_len()))
-                    {
-                        let exponent = input_exponents[input_index];
-                        for (acc, source) in tile
-                            .chunks_exact_mut(poly_length)
-                            .zip(selection[start..end].chunks_exact(poly_length))
-                        {
-                            Polynomial(acc).add_mul_monomial_assign(
-                                &Polynomial(source),
-                                exponent,
-                                modulus,
-                            );
-                        }
-                    }
-                    continue;
-                }
-                let ggsw_len = size.ggsw_len();
-                if use_groups {
-                    let prepared = &rotation_groups[..rotation_groups.len().min(indices.len() / 4)];
-                    super::aggregation::add_rotated_group_assign(
-                        indices,
-                        selections,
-                        input_exponents,
-                        prepared,
-                        tile,
-                        start,
-                        size,
-                        modulus,
-                    );
-                    continue;
-                }
-                // Fuse two rotations and correct once per pair, retaining [0,2q)
-                // residues until the complete bucket is normalized before NTT.
-                let (index_pairs, index_tail) = indices.as_chunks::<2>();
-                let mut selection_pairs = selections.chunks_exact(2 * ggsw_len);
-                for (indices, pair) in index_pairs.iter().zip(selection_pairs.by_ref()) {
-                    let (a, b) = pair.split_at(ggsw_len);
-                    // A tile contains complete polynomials but need not be a
-                    // complete GGSW, so use the shared coefficient-batch kernel.
-                    primus_poly::lazy_add_mul_monomial_pair_assign(
-                        tile,
-                        &a[start..end],
-                        input_exponents[indices[0]],
-                        &b[start..end],
-                        input_exponents[indices[1]],
-                        poly_length,
-                        modulus,
-                    );
-                }
-                if let Some(&index) = index_tail.first() {
-                    let selection = selection_pairs.remainder();
-                    primus_poly::lazy_add_mul_monomial_assign(
-                        tile,
-                        &selection[start..end],
-                        input_exponents[index],
-                        poly_length,
-                        modulus,
-                    );
-                }
-            }
-            if T::BITS == 64 && !use_groups {
-                // The ordinary NTT entry requires canonical coefficients.
-                modulus.reduce_once_slice_assign(aggregate);
-            }
+            super::aggregation::aggregate_controls_assign(
+                indices.iter().map(|&index| input_exponents[index]),
+                selections,
+                rotation_groups,
+                aggregate,
+                size,
+                modulus,
+            );
             let aggregate_ntt = Ggsw::new(aggregate.as_mut_slice()).into_ntt_form(ntt);
             if output_is_current {
                 aggregate_ntt.external_product_to(
                     &output,
                     scratch,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -309,7 +234,7 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
                 aggregate_ntt.external_product_to(
                     scratch,
                     &mut output,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -339,12 +264,12 @@ pub struct SparseGlweBlindRotationBatchWorkspace<T: FheUint> {
 }
 
 impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
-    /// Allocates four independent lanes for this key's layout.
+    /// Allocates four independent lanes for this control layout.
     #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
+    pub fn new(controls: &GlweBlindRotationControls<T, BarrettModulus<T>>) -> Self {
         Self {
             lanes: (0..4)
-                .map(|_| SparseGlweBlindRotationWorkspace::new(key))
+                .map(|_| SparseGlweBlindRotationWorkspace::new(controls))
                 .collect(),
         }
     }
@@ -375,10 +300,10 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
         // All lanes were constructed together and cannot be independently rebound.
         assert_eq!(
             (
-                self.lanes[0].input_exponents.len(),
-                self.lanes[0].external_product.size()
+                self.lanes[0].inner.input_exponents.len(),
+                self.lanes[0].inner.external_product.size()
             ),
-            (key.input_dimension().get(), key.size()),
+            (key.input_dimension().get(), key.controls().size()),
             "sparse blind-rotation workspace layout mismatch"
         );
         check_ciphertexts(key, inputs, outputs);
@@ -389,9 +314,13 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
         let (input_groups, input_tail) = inputs.as_chunks::<4>();
         let (output_groups, output_tail) = outputs.as_chunks_mut::<4>();
         for (inputs, outputs) in input_groups.iter().zip(output_groups) {
-            blind_rotate_batch_kernel(
-                lanes.each_mut(),
-                key,
+            blind_rotate_groups_batch_kernel(
+                lanes.each_mut().map(|lane| &mut lane.inner),
+                key.controls(),
+                (0..key.bucket_count()).map(|bucket| {
+                    let (indices, data) = key.bucket_data(bucket);
+                    (indices.iter().copied(), data)
+                }),
                 inputs.each_ref().map(Lwe::as_view),
                 lookup_table.as_view(),
                 modulus_switch,
@@ -403,9 +332,13 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
         let (output_pairs, output_tail) = output_tail.as_chunks_mut::<2>();
         let (lane_pairs, _) = lanes.as_chunks_mut::<2>();
         for (inputs, outputs) in input_pairs.iter().zip(output_pairs) {
-            blind_rotate_batch_kernel(
-                lane_pairs[0].each_mut(),
-                key,
+            blind_rotate_groups_batch_kernel(
+                lane_pairs[0].each_mut().map(|lane| &mut lane.inner),
+                key.controls(),
+                (0..key.bucket_count()).map(|bucket| {
+                    let (indices, data) = key.bucket_data(bucket);
+                    (indices.iter().copied(), data)
+                }),
                 inputs.each_ref().map(Lwe::as_view),
                 lookup_table.as_view(),
                 modulus_switch,
@@ -434,14 +367,14 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     modulus_switch: &RotationModulusSwitch<T>,
     ntt: &Table,
 ) {
-    let n = key.size().glwe_size().poly_length().get();
+    let n = key.controls().size().glwe_size().poly_length().get();
     assert_eq!(
         modulus_switch.rotation_step(),
         1,
         "ordinary blind rotation requires step one"
     );
     assert!(
-        modulus_switch.is_compatible(key.input_modulus_value(), 2 * n),
+        modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * n),
         "sparse blind-rotation quantizer domain mismatch"
     );
     assert_eq!(
@@ -456,7 +389,7 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     );
     assert_eq!(
         ntt.modulus(),
-        key.ring_modulus().value(),
+        key.controls().ring_modulus().value(),
         "sparse blind-rotation NTT modulus mismatch"
     );
 }
@@ -480,26 +413,43 @@ fn check_ciphertexts<T: FheUint, A: Data<Elem = T>, C: Data<Elem = T>>(
     assert!(
         outputs
             .iter()
-            .all(|output| output.as_ref().len() == key.size().glwe_len()),
+            .all(|output| output.as_ref().len() == key.controls().size().glwe_len()),
         "sparse blind-rotation output layout mismatch"
     );
 }
 
-/// Each lane owns its exponents, aggregate and EP scratch. Only the source-group
-/// traversal is interleaved; the dependent bucket chain stays ordered per input.
-/// This path is used only for batches; the original single-input loop stays separate.
-fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANES: usize>(
-    mut lanes: [&mut SparseGlweBlindRotationWorkspace<T>; LANES],
-    key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>,
+/// Each lane owns its exponents, aggregate and external-product scratch. Sparse
+/// buckets supply indexed controls; blocks supply contiguous ranges. Every group
+/// has one selector per index and an optional trailing dummy. Sparse and
+/// AtMostOne always provide one full dummy; ExactlyOne provides none. Typed
+/// wrappers establish these complete layouts before entering the kernel.
+///
+/// Only source-group traversal is interleaved; each input's dependent group chain,
+/// 16 KiB tile schedule and arithmetic/reduction boundaries remain unchanged.
+/// Single-input evaluation retains its original kernel.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "keep control geometry, group traversal and per-lane resources explicit"
+)]
+pub(crate) fn blind_rotate_groups_batch_kernel<
+    'a,
+    T: FheUint,
+    Table: NttTable<ValueT = T>,
+    I: ExactSizeIterator<Item = usize> + Clone,
+    const LANES: usize,
+>(
+    mut lanes: [&mut ControlAggregationWorkspace<T>; LANES],
+    controls: &GlweBlindRotationControls<T, BarrettModulus<T>>,
+    groups: impl Iterator<Item = (I, &'a [T])>,
     inputs: [Lwe<&[T]>; LANES],
     lookup_table: Polynomial<&[T]>,
     modulus_switch: &RotationModulusSwitch<T>,
     mut outputs: [Glwe<&mut [T]>; LANES],
     ntt: &Table,
 ) {
-    let size = key.size();
+    let size = controls.size();
     let n = size.glwe_size().poly_length().get();
-    let modulus = key.ring_modulus();
+    let modulus = controls.ring_modulus();
     for ((lane, input), output) in lanes.iter_mut().zip(inputs).zip(&mut outputs) {
         modulus_switch.exponent_slice_to(input.a(), &mut lane.input_exponents);
         let exponent = modulus_switch.exponent(input.b()).wrapping_neg() & (2 * n - 1);
@@ -508,38 +458,42 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
         lookup_table.mul_monomial_to(exponent, &mut Polynomial(body), modulus);
     }
     let mut output_is_current = true;
-    for bucket in 0..key.bucket_count() {
-        let (indices, ciphertexts) = key.bucket_data(bucket);
-        let (selections, dummy) = ciphertexts.split_at(indices.len() * size.ggsw_len());
+    for (indices, ciphertexts) in groups {
+        let count = indices.len();
+        let (selections, dummy) = ciphertexts.split_at(count * size.ggsw_len());
         for lane in lanes.iter_mut() {
-            // Overwrite the previous bucket's NTT values, including empty buckets.
-            lane.aggregate.copy_from_slice(dummy);
+            // The public group layout determines initialization, never secret
+            // occupancy. No-dummy groups must erase the previous NTT values too.
+            if dummy.is_empty() {
+                lane.aggregate.fill(T::ZERO);
+            } else {
+                lane.aggregate.copy_from_slice(dummy);
+            }
         }
         let use_groups = T::BITS == 64
-            && indices.len() >= 4
-            && indices.len() <= super::aggregation::max_group_len(modulus.value());
+            && count >= 4
+            && count <= super::aggregation::max_group_len(modulus.value());
         for lane in lanes.iter_mut() {
             if use_groups && !lane.rotation_groups.is_empty() {
-                for (plan, indices) in lane
-                    .rotation_groups
-                    .iter_mut()
-                    .zip(indices.as_chunks::<4>().0)
-                {
+                let mut indices = indices.clone();
+                for plan in lane.rotation_groups.iter_mut().take(count / 4) {
                     *plan = super::aggregation::FourRotations::new(
-                        indices.map(|i| lane.input_exponents[i]),
+                        std::array::from_fn(|_| {
+                            lane.input_exponents[indices.next().expect("control index")]
+                        }),
                         n,
                     );
                 }
             }
         }
-        super::aggregation::aggregate_bucket_many(
+        super::aggregation::aggregate_controls_many_assign(
             indices,
             selections,
             &mut lanes
                 .each_mut()
                 .map(|lane| super::aggregation::AggregationLane {
                     prepared: &lane.rotation_groups[..if use_groups {
-                        lane.rotation_groups.len().min(indices.len() / 4)
+                        lane.rotation_groups.len().min(count / 4)
                     } else {
                         0
                     }],
@@ -555,7 +509,7 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
                 aggregate_ntt.external_product_to(
                     output,
                     &mut lane.scratch,
-                    key.basis(),
+                    controls.basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,
@@ -564,7 +518,7 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
                 aggregate_ntt.external_product_to(
                     &lane.scratch,
                     output,
-                    key.basis(),
+                    controls.basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,

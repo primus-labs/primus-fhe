@@ -15,6 +15,24 @@ pub enum SecretKeySamplerError {
         /// Complete logical key length, not a polynomial or batch stride.
         length: usize,
     },
+    /// The block size is zero or its number of categorical states overflows.
+    #[error(
+        "block-binary block size {block_size} must be positive with representable category count"
+    )]
+    InvalidBlockSize {
+        /// Requested number of coefficients per block.
+        block_size: usize,
+    },
+    /// The complete key is empty or has an incomplete final block.
+    #[error(
+        "block-binary key length {length} must be a positive multiple of block size {block_size}"
+    )]
+    InvalidBlockLength {
+        /// Complete logical key length.
+        length: usize,
+        /// Number of coefficients per block.
+        block_size: usize,
+    },
     /// The selected modulus cannot encode every supported secret magnitude.
     #[error(
         "secret-key maximum magnitude {maximum_magnitude} must not exceed modulus minus one {modulus_minus_one}"

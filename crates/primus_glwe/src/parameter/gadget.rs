@@ -5,7 +5,7 @@ use primus_decompose::{
 };
 use primus_distr::DiscreteGaussian;
 use primus_integer::FheUint;
-use primus_lattice::{GadgetSize, GlweDimension, GlweSize};
+use primus_lattice::{GadgetSize, GlweDimension, GlweSize, LweDimension};
 use primus_reduce::RingContext;
 use primus_shape::PolyLength;
 use std::sync::Arc;
@@ -92,6 +92,48 @@ where
         Self::try_from_matching_parts(glwe_size, encryption_parameters, basis)
     }
 
+    /// Binds gadget rows to an LWE secret prefix padded with public zeros.
+    ///
+    /// The secret sampler describes only the first `logical_dimension`
+    /// coefficients, in their original order. The remaining coefficients of
+    /// the GLWE mask are public zeros. This permits complete logical blocks
+    /// even when the padded GLWE capacity is not divisible by their width.
+    /// The shared samplers and basis are reused without copying precomputation.
+    ///
+    /// # Correctness
+    ///
+    /// Row encryption must use the logical secret followed by the public zero
+    /// tail. Sampling the whole `glwe_size.mask_len()` with the stored secret
+    /// sampler does not generate this padded key. This constructor does not
+    /// inspect or generate secret coefficients.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a logical dimension exceeding the GLWE capacity, invalid secret
+    /// weight or block partitioning at that logical dimension, a basis modulus
+    /// mismatch, or gadget layout overflow. Modulus support and noise were
+    /// already checked by `encryption_parameters`.
+    pub fn try_from_padded_lwe_parts(
+        glwe_size: GlweSize,
+        logical_dimension: LweDimension,
+        encryption_parameters: Arc<GlweEncryptionParameters<T, M>>,
+        basis: ApproxSignedBasis<T>,
+    ) -> Result<Self, GlevParameterError> {
+        if logical_dimension.get() > glwe_size.mask_len() {
+            return Err(GlevParameterError::PaddedSecretDimensionExceedsCapacity {
+                logical_dimension: logical_dimension.get(),
+                capacity: glwe_size.mask_len(),
+            });
+        }
+        if basis.modulus() != encryption_parameters.cipher_modulus_value() {
+            return Err(GlevParameterError::BasisModulusMismatch);
+        }
+        encryption_parameters
+            .secret_key_sampler()
+            .validate_length(logical_dimension.get())?;
+        Self::try_from_matching_parts(glwe_size, encryption_parameters, basis)
+    }
+
     /// Derives only the new gadget layout. The caller has established matching
     /// basis/modulus and secret weight/layout pairs; sampler state is unchanged.
     fn try_from_matching_parts(
@@ -145,8 +187,8 @@ where
         if basis.modulus() != self.basis.modulus() {
             return Err(GlevParameterError::BasisModulusMismatch);
         }
-        // Only the basis changes: secret weight was already checked against
-        // this unchanged GLWE layout when the source parameters were built.
+        // Only the basis changes: the validated secret layout, including any
+        // logical prefix and public zero tail, is unchanged.
         Self::try_from_matching_parts(
             self.glwe_size(),
             Arc::clone(&self.encryption_parameters),

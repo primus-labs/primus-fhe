@@ -11,19 +11,30 @@ use primus_tfhe_glwe::ClientKey;
 
 use crate::{
     BlindRotationMethod, GlweKeySwitchingParameters, KeyGenerationError, PbsParameters,
-    TfheContext, bootstrapping_key::FourierGlweBootstrappingKey,
+    TfheContext, block::BlockGlweBootstrappingKey, bootstrapping_key::FourierGlweBootstrappingKey,
     sparse::SparseGlweBootstrappingKey,
 };
 
 /// Blind-rotation key selected when generating a server key.
 ///
-/// Classic keys store Fourier GGSWs; sparse keys store coefficient GGSWs and public
-/// buckets. Both target the same accumulator secret and use the small-LWE input.
+/// Classic keys store Fourier GGSWs; grouped keys store coefficient GGSWs with
+/// public bucket or block geometry. All target the same accumulator secret and
+/// use the small-LWE input.
 pub enum BlindRotationKey<T: TorusFftValue> {
     /// One binary control or a ternary control pair per input coefficient.
     Classic(FourierGlweBootstrappingKey<T>),
     /// Bucketed selections for a fixed-weight binary input secret.
     Sparse(SparseGlweBootstrappingKey<T, NativeModulus<T>>),
+    /// Contiguous block-binary controls, with dummies only for AtMostOne.
+    Block(BlockGlweBootstrappingKey<T, NativeModulus<T>>),
+}
+
+/// Checked setup geometry, before secret sampling or ciphertext allocation.
+/// This choice retains neither ciphertexts nor private assignments.
+enum BlindRotationLayout {
+    Classic,
+    Sparse(crate::sparse::SparseKeyLayout),
+    Block(crate::block::BlockKeyLayout),
 }
 
 impl<T: TorusFftValue> BlindRotationKey<T> {
@@ -43,12 +54,22 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
             ),
             Self::Sparse(key) => (
                 key.input_dimension(),
-                key.input_modulus_value(),
+                key.controls().input_modulus_value(),
                 SecretKeyDistr::FixedHammingWeightBinary {
                     hamming_weight: key.hamming_weight(),
                 },
-                key.size(),
-                key.basis(),
+                key.controls().size(),
+                key.controls().basis(),
+            ),
+            Self::Block(key) => (
+                key.controls().input_dimension(),
+                key.controls().input_modulus_value(),
+                SecretKeyDistr::BlockBinary {
+                    block_size: key.block_size(),
+                    occupancy: key.occupancy(),
+                },
+                key.controls().size(),
+                key.controls().basis(),
             ),
         };
         dimension == (parameters.small_lwe().dimension())
@@ -59,7 +80,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
     }
 }
 
-/// Classic or sparse evaluation keys used by a Fourier TFHE server.
+/// Classic, sparse or block evaluation keys used by a Fourier TFHE server.
 ///
 /// Both PBS orders share these key materials. [`crate::PbsOrder`] only changes
 /// the order in which the evaluator applies them.
@@ -83,7 +104,7 @@ impl<T: TorusFftValue> ServerKey<T> {
         }
     }
 
-    /// Borrows the selected classic or sparse blind-rotation material.
+    /// Borrows the selected blind-rotation material.
     #[must_use]
     #[inline]
     pub fn blind_rotation_key(&self) -> &BlindRotationKey<T> {
@@ -119,7 +140,7 @@ pub(crate) fn check_bound_glwe_key_switching_key<T: TorusFftValue>(
     Ok(())
 }
 
-/// Generates client and classic or sparse server keys for one Fourier context.
+/// Generates client and selected server keys for one Fourier context.
 pub struct KeyGenerator<'a, T, Table, LM = NativeModulus<T>>
 where
     T: TorusFftValue,
@@ -148,6 +169,8 @@ where
     /// No return or CBS key is generated. Sparse BR keeps the fixed-weight input
     /// secret and retries at most eight public maps, without falling back to classic.
     /// Each selector and dummy is encrypted independently after matching succeeds.
+    /// Block BR encrypts each complete logical block directly, including a fresh
+    /// dummy for every block, without maps or secret-dependent control counts.
     ///
     /// # Correctness
     /// Independently generated components must share the actual secrets and this
@@ -157,7 +180,7 @@ where
     /// for the conditional-distribution and security requirements.
     ///
     /// # Errors
-    /// Rejects incompatible secrets or invalid sparse geometry before consuming
+    /// Rejects incompatible secrets or invalid grouped geometry before consuming
     /// randomness. Sparse matching failure consumes only map randomness and returns
     /// no partial key.
     pub fn try_generate_blind_rotation_key<R: rand::Rng + rand::CryptoRng>(
@@ -166,7 +189,7 @@ where
         rng: &mut R,
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let mut encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
             self.context
@@ -175,12 +198,7 @@ where
                 .encryption_parameters(),
         )
         .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_blind_rotation_key_with_accumulator(
-            client_key,
-            &mut encryptor,
-            sparse_layout,
-            rng,
-        )
+        self.generate_blind_rotation_key_with_accumulator(client_key, &mut encryptor, layout, rng)
     }
 
     /// Generates ring KS material from the accumulator to the padded small secret.
@@ -206,7 +224,7 @@ where
     }
 
     /// Generates the configured BR and KS pair.
-    /// Validates sparse geometry before sampling the client. Shares accumulator
+    /// Validates grouped geometry before sampling the client. Shares accumulator
     /// preparation across BR rows, then prepares the separate KS target. Sparse
     /// matching retries only public maps, keeping the same client secrets.
     ///
@@ -219,7 +237,7 @@ where
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let client_key = ClientKey::generate(self.context.parameters(), rng);
         let encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
@@ -230,7 +248,7 @@ where
         )
         .map_err(crate::error::glwe_encryption_error)?;
         let server_key =
-            self.generate_server_key_with_accumulator(&client_key, encryptor, sparse_layout, rng)?;
+            self.generate_server_key_with_accumulator(&client_key, encryptor, layout, rng)?;
         Ok((client_key, server_key))
     }
 
@@ -249,7 +267,7 @@ where
         R: rand::Rng + rand::CryptoRng,
     {
         client_key.check_compatible(self.context.parameters())?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
             self.context
@@ -258,7 +276,7 @@ where
                 .encryption_parameters(),
         )
         .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_server_key_with_accumulator(client_key, encryptor, sparse_layout, rng)
+        self.generate_server_key_with_accumulator(client_key, encryptor, layout, rng)
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
@@ -267,7 +285,7 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         encryptor: &mut FourierGlweEncryptor<'_, T>,
-        sparse_layout: Option<crate::sparse::SparseKeyLayout>,
+        layout: BlindRotationLayout,
         rng: &mut R,
     ) -> Result<BlindRotationKey<T>, KeyGenerationError>
     where
@@ -276,19 +294,26 @@ where
         let parameters = self.context.parameters();
         let blind_rotation_ggsw = parameters.blind_rotation_params();
 
-        Ok(match sparse_layout {
-            None => BlindRotationKey::Classic(FourierGlweBootstrappingKey::generate_fourier(
-                client_key.small_lwe_secret_key(),
-                parameters.small_lwe(),
-                encryptor,
-                blind_rotation_ggsw,
-                &mut self.fft,
-                rng,
-            )),
-            Some(layout) => BlindRotationKey::Sparse({
+        Ok(match layout {
+            BlindRotationLayout::Classic => {
+                BlindRotationKey::Classic(FourierGlweBootstrappingKey::generate_fourier(
+                    client_key.small_lwe_secret_key(),
+                    parameters.small_lwe(),
+                    encryptor,
+                    blind_rotation_ggsw,
+                    &mut self.fft,
+                    rng,
+                ))
+            }
+            BlindRotationLayout::Sparse(layout) => BlindRotationKey::Sparse({
                 let prepared = self.prepare_sparse_map(client_key, layout, rng)?;
                 self.generate_sparse_bootstrapping_key_with_accumulator(prepared, encryptor, rng)
             }),
+            BlindRotationLayout::Block(layout) => {
+                BlindRotationKey::Block(self.generate_block_bootstrapping_key_with_accumulator(
+                    client_key, layout, encryptor, rng,
+                )?)
+            }
         })
     }
 
@@ -299,7 +324,7 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         mut encryptor: FourierGlweEncryptor<'_, T>,
-        sparse_layout: Option<crate::sparse::SparseKeyLayout>,
+        layout: BlindRotationLayout,
         rng: &mut R,
     ) -> Result<ServerKey<T>, KeyGenerationError>
     where
@@ -308,7 +333,7 @@ where
         let blind_rotation_key = self.generate_blind_rotation_key_with_accumulator(
             client_key,
             &mut encryptor,
-            sparse_layout,
+            layout,
             rng,
         )?;
         drop(encryptor);
@@ -350,17 +375,24 @@ where
         ))
     }
 
-    /// Validates the configured sparse geometry before sampling any secrets or rows.
-    /// `None` denotes classic BR; matching for sparse BR later keeps the same secret.
-    fn prepare_blind_rotation(
-        &self,
-    ) -> Result<Option<crate::sparse::SparseKeyLayout>, KeyGenerationError> {
+    /// Checks the selected public geometry before sampling secrets or rows.
+    /// Sparse matching later keeps the same client secret; block controls use
+    /// the complete logical blocks directly.
+    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
         Ok(match self.context.parameters().blind_rotation_method() {
-            BlindRotationMethod::Classic => None,
+            BlindRotationMethod::Classic => BlindRotationLayout::Classic,
+            BlindRotationMethod::Block => {
+                let parameters = self.context.parameters();
+                BlindRotationLayout::Block(crate::block::BlockKeyLayout::try_new(
+                    parameters.small_lwe().dimension().get(),
+                    parameters.small_lwe().secret_key_distr(),
+                    parameters.blind_rotation_params(),
+                )?)
+            }
             BlindRotationMethod::Sparse {
                 copy_count,
                 bucket_count,
-            } => Some(self.prepare_sparse_layout(copy_count, bucket_count)?),
+            } => BlindRotationLayout::Sparse(self.prepare_sparse_layout(copy_count, bucket_count)?),
         })
     }
 }

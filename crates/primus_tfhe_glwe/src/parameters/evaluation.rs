@@ -4,10 +4,11 @@ use primus_glwe::{GgswParameters, GlweKeySwitchingParameters};
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_reduce::{ModulusSwitch, RingContext};
+use primus_tfhe::rotation::RotationModulusSwitch;
 
 use super::PbsOrder;
 
-/// Prepared server-side domains, ring parameters and Q→q conversion.
+/// Prepared server-side domains, ring parameters and modulus switches.
 ///
 /// Borrowed by evaluators independently of the client input reducer. Owns no
 /// client codec or LWE sampler; ring gadget/KS parameters are stored only here.
@@ -19,6 +20,7 @@ pub struct PbsEvaluationParameters<T: FheUint, M: RingContext<T>> {
     pub(super) small_modulus: Option<T>,
     pub(super) small_secret_distr: crate::SecretKeyDistr,
     pub(super) ring_to_small: Option<ModulusSwitch<T>>,
+    pub(super) rotation_modulus_switch: RotationModulusSwitch<T>,
     pub(super) pbs_order: PbsOrder,
     pub(super) blind_rotation_params: GgswParameters<T, M>,
     pub(super) key_switching_params: GlweKeySwitchingParameters<T, M>,
@@ -55,6 +57,13 @@ impl<T: FheUint, M: RingContext<T>> PbsEvaluationParameters<T, M> {
     #[must_use]
     pub fn ring_to_small_modulus_switch(&self) -> Option<&ModulusSwitch<T>> {
         self.ring_to_small.as_ref()
+    }
+
+    /// Borrows the step-one quantizer from the small modulus q to the 2N rotation domain.
+    /// KS→BR uses it after compact extraction and any Q→q conversion.
+    #[must_use]
+    pub fn rotation_modulus_switch(&self) -> &RotationModulusSwitch<T> {
+        &self.rotation_modulus_switch
     }
 
     /// Returns the accumulator ring and BR GGSW decomposition.

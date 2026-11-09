@@ -1,12 +1,16 @@
-//! Fixed two-input sparse BR with a scoped projection capability.
+//! Fixed two-input grouped BR with a scoped projection capability.
 
 use primus_integer::FheUint;
 use primus_ntt::MonomialNttTable;
 
 use super::OneHotCircuitBootstrapEvaluator;
-use crate::{Lwe, blind_rotation::RotationState, bootstrap::BootstrapResources};
+use crate::{
+    Lwe,
+    blind_rotation::RotationState,
+    bootstrap::{BlindRotationPairWorkspace, BootstrapResources},
+};
 
-/// One prepared input from [`OneHotCircuitBootstrapEvaluator::with_sparse_pair`].
+/// One prepared input from [`OneHotCircuitBootstrapEvaluator::with_pair`].
 /// This scoped view only permits projection; it cannot replace the current BR or
 /// outlive the callback. Consuming it lets both inputs reuse one selector buffer.
 /// It owns no allocation or independent transform/product workspace.
@@ -49,29 +53,31 @@ where
     Table: MonomialNttTable<ValueT = T>,
 {
     /// Allocates a second input's aggregate, current and exponents for
-    /// [`Self::with_sparse_pair`]. Returns `None` for classic resources.
+    /// [`Self::with_pair`]. Supports sparse buckets and direct blocks;
+    /// returns `None` for classic resources. Storage is independent of bucket
+    /// geometry or block width and may be reused across compatible grouped keys.
     /// Shared transform, projection and external-product scratch is not duplicated.
     ///
     /// # Panics
     /// Panics if resources belong to a different context.
     #[must_use]
-    pub fn new_sparse_pair_workspace(
+    pub fn new_pair_workspace(
         &self,
         resources: &BootstrapResources<'a, T, Table>,
-    ) -> Option<crate::sparse::SparseBlindRotationPairWorkspace<T>> {
+    ) -> Option<BlindRotationPairWorkspace<T>> {
         resources.check_context(self.context);
-        resources
-            .blind_rotation_key
-            .sparse_bootstrapping_key()
-            .map(|_| {
-                crate::sparse::SparseBlindRotationPairWorkspace::new(
+        match &resources.blind_rotation.rotation {
+            RotationState::Sparse { .. } | RotationState::Block { .. } => {
+                Some(BlindRotationPairWorkspace::new(
                     resources.context.blind_rotation(),
                     resources.context.external_lwe_dimension(),
-                )
-            })
+                ))
+            }
+            RotationState::Binary { .. } | RotationState::Ternary { .. } => None,
+        }
     }
 
-    /// Blind-rotates two sparse inputs together, then consumes their projections
+    /// Blind-rotates two sparse or direct-block inputs together, then consumes their projections
     /// in input order. The callback receives index 0 then 1; each scoped view
     /// can write NLEV and/or nonzero NGSW and consumes no additional selector batch.
     /// Complete projection and any buffer consumption inside the callback before
@@ -80,21 +86,23 @@ where
     ///
     /// # Correctness
     /// Inherits [`Self::one_hot_to`]'s secrets, encoding, residue and noise contracts.
-    /// Each input retains its original bucket/selector order and arithmetic.
+    /// Each input retains its original group/selector order and arithmetic.
+    /// The complete first NLEV group lifts each public LUT, including an empty
+    /// first block; later groups use NGSW controls with the same product arithmetic.
     ///
     /// # Panics
-    /// Rejects non-sparse resources, a foreign context, input dimensions or workspace
+    /// Rejects non-grouped resources, a foreign context, input dimensions or workspace
     /// geometry before BR. Projection length checks occur within each callback;
     /// a later panic may leave an earlier callback's output written. Scratch is
     /// overwritten on the next call, including after a callback unwinds.
-    pub fn with_sparse_pair(
+    pub fn with_pair(
         &mut self,
         inputs: [Lwe<&[T]>; 2],
-        second: &mut crate::sparse::SparseBlindRotationPairWorkspace<T>,
+        second: &mut BlindRotationPairWorkspace<T>,
         resources: &mut BootstrapResources<'a, T, Table>,
         mut consume: impl FnMut(usize, OneHotProjection<'_, 'a, T, Table>),
     ) {
-        self.prepare_sparse_pair(inputs, second, resources);
+        self.prepare_pair(inputs, second, resources);
         consume(
             0,
             OneHotProjection {
@@ -112,16 +120,22 @@ where
         );
     }
 
-    /// Prepares two independent BR results in bucket/pair/input order.
+    /// Prepares two independent BR results in group/pair/input order.
     /// The first remains in resources; the second remains in `second` until swapped.
-    fn prepare_sparse_pair(
+    fn prepare_pair(
         &mut self,
         inputs: [Lwe<&[T]>; 2],
-        second: &mut crate::sparse::SparseBlindRotationPairWorkspace<T>,
+        second: &mut BlindRotationPairWorkspace<T>,
         resources: &mut BootstrapResources<'a, T, Table>,
     ) {
         use primus_poly::Polynomial;
         resources.check_context(self.context);
+        let workspace = match &mut resources.blind_rotation.rotation {
+            RotationState::Sparse { scratch, .. } | RotationState::Block { scratch, .. } => scratch,
+            RotationState::Binary { .. } | RotationState::Ternary { .. } => {
+                panic!("one-hot pair requires grouped blind-rotation resources")
+            }
+        };
         let parameters = resources.context;
         let n = parameters.poly_length().get();
         assert!(
@@ -141,15 +155,8 @@ where
                 parameters.blind_rotation().nlev_len(),
                 parameters.external_lwe_dimension().get()
             ),
-            "sparse pair workspace mismatch"
+            "blind-rotation pair workspace mismatch"
         );
-        let RotationState::Sparse {
-            key,
-            scratch: workspace,
-        } = &mut resources.blind_rotation.rotation
-        else {
-            panic!("one-hot pair requires sparse blind-rotation resources");
-        };
         let modulus = parameters.accumulator_ntru().cipher_modulus();
         let modulus_switch = parameters
             .rotation_modulus_switch()
@@ -167,17 +174,26 @@ where
                 modulus,
             );
         }
-        crate::sparse::rotate_buckets_pair(
-            key,
-            workspace,
-            second,
-            [
-                &mut resources.blind_rotation.current,
-                &mut resources.blind_rotation.scratch,
-            ],
-            resources.blind_rotation_key.blind_rotation_basis(),
-            modulus,
-            resources.context.table(),
-        );
+        let buffers = [
+            &mut resources.blind_rotation.current,
+            &mut resources.blind_rotation.scratch,
+        ];
+        let basis = resources.blind_rotation_key.blind_rotation_basis();
+        let table = resources.context.table();
+        match &mut resources.blind_rotation.rotation {
+            RotationState::Sparse { key, scratch } => {
+                crate::sparse::rotate_buckets_pair(
+                    key, scratch, second, buffers, basis, modulus, table,
+                );
+            }
+            RotationState::Block { key, scratch } => {
+                crate::block::rotate_blocks_pair(
+                    key, scratch, second, buffers, basis, modulus, table,
+                );
+            }
+            RotationState::Binary { .. } | RotationState::Ternary { .. } => {
+                unreachable!("grouped resources checked before blind rotation")
+            }
+        }
     }
 }

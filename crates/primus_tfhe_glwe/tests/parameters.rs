@@ -1,14 +1,14 @@
 //! GLWE-specific capacity, external client roles and BR/return domains.
 
 use primus_glwe::GlweDimension;
-use primus_lwe::LweDimension;
+use primus_lwe::{LweDimension, LweSecretKey};
 use primus_modulus::NativeModulus;
 use primus_shape::PolyLength;
 use primus_tfhe::{BlindRotationMethod, DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_glwe::{
-    CbsGadgetConfig, CbsParameters, ClientKey, DecompositionConfig, GadgetEncryptionConfig,
-    LweConfig, ModulusConfig, PbsConfig, PbsMessageConfig, PbsOrder, PbsParameters, SecretKeyDistr,
-    TfheParameterError,
+    BlockOccupancy, CbsGadgetConfig, CbsParameters, ClientKey, DecompositionConfig,
+    GadgetEncryptionConfig, LweConfig, ModulusConfig, PbsConfig, PbsMessageConfig, PbsOrder,
+    PbsParameters, SecretKeyDistr, TfheKeyError, TfheParameterError,
 };
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -16,6 +16,82 @@ fn decomposition(base: u32) -> DecompositionConfig {
     DecompositionConfig {
         log_basis: DecompositionBaseLog::new(base),
         level_count: None,
+    }
+}
+
+/// Stored groups follow the declared law; public ring-KS padding is not a block.
+#[test]
+fn block_control_storage_binds_complete_logical_groups() {
+    use primus_tfhe_glwe::{BlockBootstrappingKeyError, BlockGlweBootstrappingKey};
+
+    let parameters = PbsParameters::try_from_config(config(PbsOrder::BootstrapKeyswitch)).unwrap();
+    let gadget = parameters.blind_rotation_params();
+    let ggsw_len = gadget.ggsw_len();
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let count = 3 + usize::from(occupancy == BlockOccupancy::AtMostOne);
+        let data: Vec<u32> = (0..2 * count * ggsw_len)
+            .map(|index| index as u32)
+            .collect();
+        let key = BlockGlweBootstrappingKey::try_new(
+            data.clone(),
+            LweDimension::new(6),
+            3,
+            occupancy,
+            gadget,
+            NativeModulus::<u32>::new(),
+        )
+        .unwrap();
+        assert_eq!(key.occupancy(), occupancy);
+        assert_eq!(key.block_count(), 2);
+        assert_eq!(key.controls().input_dimension(), LweDimension::new(6));
+        for block_index in 0..2 {
+            let (range, controls) = key.block_data(block_index);
+            assert_eq!(range, 3 * block_index..3 * (block_index + 1));
+            assert_eq!(
+                controls,
+                &data[count * block_index * ggsw_len..count * (block_index + 1) * ggsw_len]
+            );
+        }
+        for block_size in [0, 4] {
+            assert!(matches!(
+                BlockGlweBootstrappingKey::try_new(
+                    data.clone(),
+                    LweDimension::new(6),
+                    block_size,
+                    occupancy,
+                    gadget,
+                    NativeModulus::<u32>::new(),
+                ),
+                Err(BlockBootstrappingKeyError::InvalidBlockGeometry { .. })
+            ));
+        }
+        assert!(matches!(
+            BlockGlweBootstrappingKey::try_new(
+                vec![0; data.len() - 1],
+                LweDimension::new(6),
+                3,
+                occupancy,
+                gadget,
+                NativeModulus::<u32>::new(),
+            ),
+            Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
+        ));
+        let other = if occupancy == BlockOccupancy::AtMostOne {
+            BlockOccupancy::ExactlyOne
+        } else {
+            BlockOccupancy::AtMostOne
+        };
+        assert!(matches!(
+            BlockGlweBootstrappingKey::try_new(
+                data,
+                LweDimension::new(6),
+                3,
+                other,
+                gadget,
+                NativeModulus::<u32>::new(),
+            ),
+            Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
+        ));
     }
 }
 
@@ -220,6 +296,90 @@ fn capacity_and_padded_return_follow_pbs_order() {
             small_lwe_dimension: 65,
             capacity: 64
         })
+    ));
+}
+
+/// Logical blocks stop at n; ring-KS public padding is not another sampled block.
+#[test]
+fn block_controls_validate_imports_and_preserve_public_zero_padding() {
+    for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+        let mut cfg = config(order);
+        cfg.small_lwe.dimension = LweDimension::new(6);
+        for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+            cfg.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size: 3,
+                occupancy,
+            };
+            for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
+                cfg.method = method;
+                let parameters = PbsParameters::try_from_config(cfg).unwrap();
+                let mut rng = StdRng::seed_from_u64(109);
+                let generated = ClientKey::generate(&parameters, &mut rng);
+                generated.check_compatible(&parameters).unwrap();
+                let (_, ring, _) = generated.into_parts();
+                let empty_block = if occupancy == BlockOccupancy::ExactlyOne {
+                    Err(TfheKeyError::InvalidLweSecretKeyBlock)
+                } else {
+                    Ok(())
+                };
+                for (coefficients, expected) in [
+                    (vec![0; 6], empty_block.clone()),
+                    (vec![0, 0, 0, 0, 1, 0], empty_block.clone()),
+                    (vec![0, 1, 0, 0, 0, 1], Ok(())),
+                    (
+                        vec![1, 1, 0, 0, 0, 0],
+                        Err(TfheKeyError::InvalidLweSecretKeyBlock),
+                    ),
+                    (
+                        vec![2, 0, 0, 0, 0, 0],
+                        Err(TfheKeyError::InvalidLweSecretKeyCoefficient),
+                    ),
+                ] {
+                    let check_distribution = coefficients == [0, 1, 0, 0, 0, 1];
+                    let client = ClientKey::new(
+                        LweSecretKey::new(
+                            coefficients.clone(),
+                            cfg.small_lwe.secret_key_distr,
+                            NativeModulus::new(),
+                        ),
+                        ring.clone(),
+                        order,
+                    );
+                    assert_eq!(client.check_compatible(&parameters), expected);
+                    if check_distribution {
+                        let mut other = cfg;
+                        other.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                            block_size: 3,
+                            occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                                BlockOccupancy::ExactlyOne
+                            } else {
+                                BlockOccupancy::AtMostOne
+                            },
+                        };
+                        other.method = BlindRotationMethod::Classic;
+                        let other = PbsParameters::try_from_config(other).unwrap();
+                        assert_eq!(
+                            client.check_compatible(&other),
+                            Err(TfheKeyError::LweSecretKeyDistributionMismatch)
+                        );
+                    }
+                    if expected.is_ok() {
+                        let padded = client.padded_small_glwe_secret_key(&parameters);
+                        let prefix: Vec<i32> = coefficients.iter().map(|&x| x as i32).collect();
+                        assert_eq!(&padded.as_slice()[..6], prefix);
+                        assert!(padded.as_slice()[6..].iter().all(|&x| x == 0));
+                        assert_eq!(padded.as_slice().len(), 32);
+                        assert_eq!(padded.distr(), cfg.small_lwe.secret_key_distr);
+                    }
+                }
+            }
+        }
+    }
+    let mut wrong_distribution = config(PbsOrder::BootstrapKeyswitch);
+    wrong_distribution.method = BlindRotationMethod::Block;
+    assert!(matches!(
+        PbsParameters::try_from_config(wrong_distribution),
+        Err(TfheParameterError::InvalidBlockSecretDistribution)
     ));
 }
 

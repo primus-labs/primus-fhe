@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-GLWE-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with classic binary/ternary or sparse fixed-weight binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
+GLWE-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
 
 ## Quick start
 
@@ -72,6 +72,8 @@ Transformed keys, values and evaluators must use the **same FFT table instance**
 Factorized MVB requires an even actual Scaled output scale `round(2^BITS/t_out)`; an odd scale returns `LookupTableError::OddFactorizationScale`. Factors are transformed as signed integers without torus scaling. Budget their amplification and FFT error. See the [MVB contract](../primus_tfhe/README.md#fixed-scale-factorized-mvb).
 
 Sparse BR must be selected explicitly with `BlindRotationMethod::Sparse` in `config.method`; a fixed-weight secret alone still permits classic BR. Sparse requires binary weight `0<h<n`, `copy_count>=1` and `bucket_count>=max(copy_count,h)`. Both orders support PBS, ManyLUT, MVB and CBS. A working PBS configuration does not by itself establish CBS output precision or CMux noise margin.
+
+Direct block BR uses `config.method = BlindRotationMethod::Block` and `config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`. Complete consecutive blocks may be empty. Both PBS orders, ManyLUT, MVB and CBS keep the same factories. Each block stores its bit controls plus an independently encrypted dummy, generated in exact native coefficients, then aggregates them before the ordinary FFT. Trace precision remains independent; this does not add Split35 to BR or SS. Raw single-input BR uses `block::BlockGlweBlindRotationWorkspace::new(key)` and `blind_rotate_lookup_table_to`. Presets remain unchanged; block noise and security require their own assessment.
 
 Keep the context, keys and compiled programs across requests. `_to` methods reuse evaluator scratch and caller outputs; concurrent requests need separate mutable evaluators. MVB programs stay bound to their context. `KeyGenerator::try_generate_blind_rotation_key(client, rng)` generates only BR material using the context's `config.method`; independent components must use the same actual secrets and transform representation. Advanced material composition and per-call borrowing contracts are documented on [KeyGenerator](src/key.rs), [Evaluator](src/evaluator.rs) and [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs). Context factories prepare the default workflow directly. For borrowed CBS, compile the program first, then bind it with the chosen gadget parameters and circuit key through `CircuitBootstrapEvaluator::try_new`.
 

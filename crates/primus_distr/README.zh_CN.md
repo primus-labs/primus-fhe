@@ -22,7 +22,7 @@
 
 ## 私钥分布参数
 
-`SecretKeyDistr` 描述完整 binary、ternary、固定重量或 Gaussian 密钥的分布，不是标量 sampler。自定义概率使用 `binary(one_probability)` 或 `ternary(negative_one_probability, one_probability)`；各概率必须有限且位于 `[0, 1]`，ternary 概率之和不能超过一。各密码方案自行选择支持的变体。
+`SecretKeyDistr` 描述完整 binary、ternary、固定重量、block-binary 或 Gaussian 密钥的分布，不是标量 sampler。自定义概率使用 `binary(one_probability)` 或 `ternary(negative_one_probability, one_probability)`；各概率必须有限且位于 `[0, 1]`，ternary 概率之和不能超过一。各密码方案自行选择支持的变体。
 
 | 构造函数 | 分布 |
 | --- | --- |
@@ -31,6 +31,10 @@
 | `fixed_composition_ternary(length, negative_weight, positive_weight)` | 分别固定负一和正一的数量 |
 
 重量作用于完整逻辑密钥。构造函数拒绝过大的重量及重量和溢出，但不保留长度；采样时按实际输出长度检查，在写入或取样前拒绝非法重量。
+
+`BlockBinary { block_size: w, occupancy }` 按连续分块独立采样。`BlockOccupancy::AtMostOne` 在全零向量和 `w` 个 one-hot 向量间均匀选择，总重量随机；`ExactlyOne` 仅在 one-hot 向量间均匀选择，总重量等于块数。两者都不是全局均匀固定重量分布。
+
+`w` 必须为正，无须为二的幂；`AtMostOne` 还要求 `w+1` 能用 `usize` 表示。完整密钥长度必须为 `w` 的正整数倍；`validate_length` 和采样在写入或取样前拒绝空密钥及不完整块。`ExactlyOne` 在 `w=1` 时确定为全一秘密，不是安全的秘密选择。
 
 通过 `try_new(distribution)`（返回错误）或 `new(distribution)`（失败时 panic）准备 `SecretKeySampler<T>`。`sample_signed` / `sample_signed_to` 生成 `T::SignedInteger` 输出；`sample_encoded` / `sample_encoded_to` 生成规范 residue。`_to` 方法无分配地覆盖调用方存储。
 

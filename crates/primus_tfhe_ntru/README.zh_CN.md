@@ -40,7 +40,9 @@ BR 和 KS 分别使用 `GadgetEncryptionConfig { decomposition, noise_standard_d
 
 Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boolean、MVB、CBS 和 one-hot。Sparse 须通过 `config.method` 显式选择，`SparseTernary` 秘密分布本身不会选择桶聚合。外部固定重量可以为偶数，仍须满足[共享 sparse 限制](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
-`SparseNtruBootstrappingKey<T>` 保存 sparse 系数控制，首桶为提升用 NLev 控制，后续桶为加密旋转用 NGSW 控制。优先用 context/key-generator 工厂，原始存储契约见 [sparse 密钥类型](src/sparse.rs)，提升推导见[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
+`NtruBlindRotationControls<T>` 保存分组系数控制。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
+
+NTRU NTT 也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。选择 `BlockOccupancy::AtMostOne` 允许空块，或选择 `ExactlyOne` 要求每块恰有一个 `1`。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存全部 bit 控制；仅 `AtMostOne` 额外独立加密 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTT 支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
 
 ## 客户端与 LUT
 
@@ -68,7 +70,7 @@ NTT reverse trace 使用模逆元。Scheme switching 的输入误差乘 f，分�
 
 ## One-hot CBS
 
-`context.one_hot_evaluator(&server)?` 使用相同 CBS 组合，支持 classic binary/ternary 或 sparse fixed-weight binary BR。要求 t=2M、M=2^tau 且 tau>=1，用 `encrypt_padded` 加密 `0..M`。输出有 L 层时，令 `W=next_power_of_two(L)`，要求 `2MW<=N`。
+`context.one_hot_evaluator(&server)?` 使用相同 CBS 组合，支持 classic binary/ternary、sparse fixed-weight binary 或直接 Block BR。要求 t=2M、M=2^tau 且 tau>=1，用 `encrypt_padded` 加密 `0..M`。输出有 L 层时，令 `W=next_power_of_two(L)`，要求 `2MW<=N`。
 
 | 输出 | 分配 / 求值 |
 | --- | --- |
@@ -76,6 +78,19 @@ NTT reverse trace 使用模逆元。Scheme switching 的输入误差乘 f，分�
 | 完整 NGSW selectors | `allocate_ngsw_output` / `one_hot_ngsw_to` |
 | 仅非零 NGSW 分支 | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
 | 两种表示 | `one_hot_to`，或用 `one_hot_nlev_and_nonzero_ngsw_to` 生成完整 NLev 加非零 NGSW |
+
+对于 Sparse 和 Block BR，可将拥有工作区的 one-hot evaluator 通过 `into_parts` 拆开，
+再调用 `new_pair_workspace(&resources)` 和 `with_pair`。额外的
+`bootstrap::BlindRotationPairWorkspace` 仅保存第二条输入的指数、系数 aggregate 和 accumulator；
+变换、外积 scratch 和 selector 缓冲串行复用。回调按输入 0、1 的顺序消费，须在下一条输入复用缓冲前完成。
+支持 NLEV-only、非零 NGSW-only 和双输出投影。Classic 返回 `None`，此时每条输入都走单输入方法；
+奇数条的最后一条也走单输入路径。Pair 输入仍共享密钥误差。
+
+公开查表多项式在没有 CMux 选表层执行首次提升时（`c=d`）需要 `NLEV[1]`。
+分组 BR 没有独立的 classic initializer，应通过
+`KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` 或
+`try_generate_public_lift_key` 请求独立材料，不从首组 bit/dummy 控制相加派生。
+Lift 保留自身生成参数，并引入自身的分解和加密误差。
 
 完整输出覆盖 δ_r(m)，r=0..M-1；紧凑 NGSW 的位置 r-1 对应 r=1..M-1，m=0 时这些目标 bit 均为零。`cmux_k_to` 以 C0 为默认项消费非零控制。NLev 输出为 Q 下系数表示，用于公开多项式提升前须变换；NGSW 使用后端变换表示供 CMux 消费。
 

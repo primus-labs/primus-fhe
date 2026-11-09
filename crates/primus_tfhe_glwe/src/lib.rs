@@ -55,9 +55,11 @@
 
 #![deny(missing_docs)]
 
+mod block;
 mod circuit_bootstrap;
 mod client;
 mod config;
+mod controls;
 mod error;
 mod key;
 mod lookup_table;
@@ -67,11 +69,13 @@ mod sparse;
 use primus_glwe::{GgswParameters, GlevParameters, GlweKeySwitchingParameters, GlweSecretKey};
 use primus_lwe::LweSecretKey;
 
+pub use block::BlockGlweBootstrappingKey;
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, FourierTracePrecision, PbsConfig};
+pub use controls::GlweBlindRotationControls;
 pub use error::{
-    CircuitBootstrapParameterError, KeyGenerationError, SparseBootstrappingKeyError,
-    TfheClientError, TfheKeyError, TfheParameterError,
+    BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
+    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
 };
 pub use key::{ClientKey, ExternalLweSecretKey};
 pub use parameters::{CbsParameters, PbsEvaluationParameters, PbsOrder, PbsParameters};
@@ -86,7 +90,7 @@ pub use primus_tfhe::{
     PbsMessageConfig, ProgrammableBootstrap, ProgrammableBootstrapInterleaved, TfheEvaluationError,
 };
 
-pub use primus_glwe::SecretKeyDistr;
+pub use primus_glwe::{BlockOccupancy, SecretKeyDistr};
 
 /// LWE public key used by the public-key client encryptor.
 pub use primus_lwe::LwePublicKey;
