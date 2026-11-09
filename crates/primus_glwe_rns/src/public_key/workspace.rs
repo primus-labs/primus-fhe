@@ -15,7 +15,12 @@ pub struct DcrtGlwePublicKeyWorkspace<T: FheUint> {
 }
 
 impl<T: FheUint> DcrtGlwePublicKeyWorkspace<T> {
-    pub(super) fn new(size: RnsGlweSize) -> Self {
+    /// Allocates one ephemeral RNS polynomial for the supplied GLWE layout.
+    ///
+    /// Scheme-specific public encryptors can reuse this storage and its erasure
+    /// contract without retaining an unrelated raw encryption binding.
+    #[must_use]
+    pub fn new(size: RnsGlweSize) -> Self {
         Self {
             size,
             ephemeral: vec![T::ZERO; size.rns_poly_len()],
@@ -33,14 +38,21 @@ impl<T: FheUint> DcrtGlwePublicKeyWorkspace<T> {
             self.size, size,
             "public encryption workspace layout mismatch"
         );
-        assert_eq!(
+        debug_assert_eq!(
             self.ephemeral.len(),
             size.rns_poly_len(),
             "public encryption ephemeral length mismatch"
         );
     }
 
-    pub(super) fn as_mut_slice(&mut self) -> &mut [T] {
+    /// Borrows the complete ephemeral polynomial for scratch reuse.
+    ///
+    /// Contents may be arbitrary and must be fully overwritten before use. The
+    /// caller must check [`Self::size`] against its operation's complete layout,
+    /// including the GLWE dimension. The slice cannot change this workspace's
+    /// length or geometry. Retained values are erased on explicit zeroization
+    /// and drop.
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
         self.ephemeral.as_mut_slice()
     }
 }

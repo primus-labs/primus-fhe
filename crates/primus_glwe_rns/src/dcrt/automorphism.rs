@@ -4,17 +4,18 @@
 //! [`NttAutomorphismPermutation`] owns the bit-reversed index map. This module
 //! applies that same map independently to each ordered RNS modulus component.
 
+use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
 use primus_lattice::glev::{DcrtGlevIter, DcrtGlevIterMut};
-use primus_ntt::{NttAutomorphismPermutation, NttTable};
+use primus_ntt::{DcrtTable, NttAutomorphismPermutation, NttTable};
 use primus_poly::{DcrtPolynomial, NttPolynomialIter, NttPolynomialIterMut};
 use primus_reduce::FieldContext;
 use zeroize::Zeroizing;
 
 use crate::RnsDomainError;
 use crate::automorphism::{AutomorphismKeyMetadata, AutomorphismWorkspace};
-use crate::{DcrtGadgetDomain, DcrtGlevEncryptor, DcrtGlweCiphertext, DcrtGlweSecretKey};
+use crate::{CrtGlevParameters, DcrtGlevEncryptor, DcrtGlweCiphertext, DcrtGlweSecretKey};
 
 /// Applies one bit-reversed evaluation map to each DCRT modulus component.
 /// The caller supplies complete, matching RNS polynomials; no arithmetic or
@@ -38,11 +39,11 @@ fn dcrt_polynomial_automorphism_to<T: FheUint>(
 /// For each secret-key polynomial s_i (in NTT domain), apply NTT-domain
 /// permutation σ_k(s_i) and encrypt under a GLEV ciphertext.
 ///
-/// The caller binds the encryptor to this domain once and supplies one complete
+/// The caller binds the encryptor to these resources once and supplies one complete
 /// DCRT scratch polynomial. Each row overwrites it in the existing NTT order;
 /// no coefficient conversion or BFV scaling is performed.
 fn generate_ntt_auto_key_data<T, M, Table, R>(
-    domain: &DcrtGadgetDomain<'_, T, M, Table>,
+    parameters: &CrtGlevParameters<T, M>,
     permutation: &NttAutomorphismPermutation,
     dcrt_sk: &DcrtGlweSecretKey<T>,
     encryptor: &DcrtGlevEncryptor<'_, T, M, Table>,
@@ -55,7 +56,7 @@ where
     R: rand::Rng + rand::CryptoRng,
     M: FieldContext<T>,
 {
-    let params = domain.parameters();
+    let params = parameters;
     let dcrt_glev_len = params.rns_glev_len();
     let mut key = vec![T::ZERO; params.dimension().get() * dcrt_glev_len];
     let mut auto_si = DcrtPolynomial(auto_buffer);
@@ -101,13 +102,15 @@ impl<T: FheUint> DcrtGlweAutoKey<T> {
     /// # Panics
     ///
     /// Panics if `degree` is not odd and less than twice the polynomial length.
-    /// Also panics if the secret layout or ordered moduli do not match the domain.
+    /// Also panics if the secret layout or ordered moduli do not match the supplied parameters.
     ///
     /// # Correctness
-    /// Secrets must use the intended key and the domain table's NTT representation.
+    /// Secrets must use the intended key and the supplied table's NTT representation.
     #[must_use]
     pub fn new<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         degree: usize,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
@@ -118,8 +121,15 @@ impl<T: FheUint> DcrtGlweAutoKey<T> {
         Table: NttTable<ValueT = T>,
     {
         Self {
-            data: DcrtGlweAutoKeyData::new(domain, degree, dcrt_sk, rng),
-            metadata: AutomorphismKeyMetadata::new(domain),
+            data: DcrtGlweAutoKeyData::new(
+                parameters,
+                sampling_parameters,
+                table,
+                degree,
+                dcrt_sk,
+                rng,
+            ),
+            metadata: AutomorphismKeyMetadata::new(parameters),
         }
     }
 }
@@ -142,10 +152,12 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
     /// # Panics
     ///
     /// Panics if `degree` is invalid or the secret layout/ordered basis differs
-    /// from the domain. These checks precede sampling.
+    /// from the supplied parameters. These checks precede sampling.
     #[must_use]
     fn new<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         degree: usize,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
@@ -155,15 +167,14 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let permutation =
-            NttAutomorphismPermutation::new(degree, domain.parameters().poly_length());
+        let permutation = NttAutomorphismPermutation::new(degree, parameters.poly_length());
 
         let encryptor = dcrt_sk
-            .try_bind_gadget(domain)
-            .expect("automorphism secret key and gadget domain are incompatible");
-        let mut auto_buffer = Zeroizing::new(vec![T::ZERO; domain.parameters().rns_poly_len()]);
+            .try_bind_gadget(parameters, sampling_parameters, table)
+            .expect("automorphism secret key and gadget parameters/table are incompatible");
+        let mut auto_buffer = Zeroizing::new(vec![T::ZERO; parameters.rns_poly_len()]);
         let key = generate_ntt_auto_key_data(
-            domain,
+            parameters,
             &permutation,
             dcrt_sk,
             &encryptor,
@@ -175,12 +186,14 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
     }
 
     /// Generates a homogeneous key set in the supplied degree order. The DCRT
-    /// key/domain binding precedes sampling; one NTT scratch polynomial serves
+    /// key/parameter/table binding precedes sampling; one NTT scratch polynomial serves
     /// all degrees and is erased on return/unwind. Each entry retains its own
     /// permutation and encrypted rows, with the original row/level RNG order.
     #[must_use]
     pub(super) fn generate_key_set<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         degrees: impl Iterator<Item = usize>,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
@@ -190,17 +203,17 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let encryptor = dcrt_sk
-            .try_bind_gadget(domain)
-            .expect("automorphism secret key and gadget domain are incompatible");
+            .try_bind_gadget(parameters, sampling_parameters, table)
+            .expect("automorphism secret key and gadget parameters/table are incompatible");
         let mut auto_buffer = Zeroizing::new(vec![T::ZERO; params.rns_poly_len()]);
 
         degrees
             .map(|degree| {
                 let permutation = NttAutomorphismPermutation::new(degree, params.poly_length());
                 let key = generate_ntt_auto_key_data(
-                    domain,
+                    parameters,
                     &permutation,
                     dcrt_sk,
                     &encryptor,
@@ -219,15 +232,15 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
         &self,
         ciphertext: DcrtGlweCiphertext<&[T]>,
         mut result: DcrtGlweCiphertext<&mut [T]>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut AutomorphismWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
-        let table = domain.table();
-        let rns_base = domain.rns_base();
+        let params = parameters;
+        let rns_base = parameters.base_q();
         let poly_length = params.poly_length().get();
         let rns_poly_len = params.rns_poly_len();
         let moduli = params.cipher_moduli();
@@ -275,7 +288,7 @@ impl<T: FheUint> DcrtGlweAutoKeyData<T> {
     }
 }
 
-/// DCRT automorphism, bound to one key, numerical domain and owned scratch.
+/// DCRT automorphism, bound to one key, gadget parameters, table and owned scratch.
 ///
 /// Construct once and reuse. Numerical checks do not establish secret identity
 /// or agreement on the table's NTT representation; callers maintain both.
@@ -287,7 +300,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweAutoKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: AutomorphismWorkspace<T>,
 }
 
@@ -297,29 +311,35 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`DcrtGlweAutoEvaluator`] for a compatible key and domain.
+    /// Creates a new [`DcrtGlweAutoEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
-    pub fn new(key: &'a DcrtGlweAutoKey<T>, domain: &'a DcrtGadgetDomain<'a, T, M, Table>) -> Self {
-        Self::try_new(key, domain)
+    pub fn new(
+        key: &'a DcrtGlweAutoKey<T>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
+    ) -> Self {
+        Self::try_new(key, parameters, table)
             .unwrap_or_else(|error| panic!("invalid DCRT automorphism binding: {error}"))
     }
 
     /// Checks layout, ordered Q, radix and retained levels before allocating scratch.
     ///
     /// # Errors
-    /// Returns [`RnsDomainError`] if the key and domain are numerically incompatible.
+    /// Returns [`RnsDomainError`] if the key, gadget parameters and table are numerically incompatible.
     pub fn try_new(
         key: &'a DcrtGlweAutoKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        key.metadata.validate(domain)?;
-        let workspace = AutomorphismWorkspace::from_parameters(domain.parameters());
+        key.metadata.validate(parameters, table)?;
+        let workspace = AutomorphismWorkspace::from_parameters(parameters);
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -327,7 +347,7 @@ where
     /// Applies `X -> X^degree`, overwriting the complete output and internal scratch.
     ///
     /// # Correctness
-    /// Both ciphertexts must have the bound domain's complete RNS GLWE layout and
+    /// Both ciphertexts must have the bound parameters' complete RNS GLWE layout and
     /// NTT representation, and use the secret for which the key was generated.
     ///
     /// # Panics
@@ -337,13 +357,14 @@ where
         input: &DcrtGlweCiphertext<A>,
         output: &mut DcrtGlweCiphertext<B>,
     ) {
-        let len = self.domain.parameters().rns_glwe_len();
+        let len = self.parameters.rns_glwe_len();
         assert_eq!(input.as_ref().len(), len);
         assert_eq!(output.as_ref().len(), len);
         self.key.data.automorphism_kernel(
             input.as_view(),
             output.as_mut_view(),
-            self.domain,
+            self.parameters,
+            self.table,
             &mut self.workspace,
         );
     }

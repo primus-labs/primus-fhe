@@ -3,22 +3,18 @@
 use primus_decompose::{
     DecompositionBaseLog, DecompositionLevelCount, big_integer::BigUintApproxSignedBasis,
 };
-use primus_distr::ErrorSampler;
 use primus_integer::{BigUint, FheUint};
-use primus_lattice::{GlweDimension, RnsGadgetSize};
+use primus_lattice::{GlweDimension, RnsGadgetSize, RnsGlweSize};
 use primus_reduce::FieldContext;
 use primus_rns::{RNSBase, Residues};
 use primus_shape::PolyLength;
-use rand::distr::Uniform;
-use std::sync::Arc;
 
-use super::{CrtGlevParametersError, CrtGlweParameters, core::CrtGlweEncryptionParameters};
-use crate::SecretKeyDistr;
+use super::{CrtGlevParametersError, RnsDomainError};
 
 /// CRT GLev/GGSW parameters for gadget encryption under the product modulus Q.
 ///
-/// These bind a shared checked layout and prepared sampling state. The gadget
-/// owns its ordered RNS base, decomposition basis and cached level weights;
+/// The gadget owns its checked layout, ordered RNS base, decomposition basis
+/// and cached level weights. Sampling is supplied separately to key generation;
 /// plaintext encoding and BFV scaling are not part of this parameter type.
 #[derive(Clone)]
 pub struct CrtGlevParameters<T, M>
@@ -26,7 +22,6 @@ where
     T: FheUint,
     M: FieldContext<T>,
 {
-    encryption_parameters: Arc<CrtGlweEncryptionParameters<T>>,
     size: RnsGadgetSize,
     base_q: RNSBase<T, M>,
     basis: BigUintApproxSignedBasis<T>,
@@ -39,77 +34,64 @@ where
     T: FheUint,
     M: FieldContext<T>,
 {
-    /// Creates a new [`CrtGlevParameters<T, M>`] from matching GLWE parameters.
+    /// Checks layout/base geometry and prepares its decomposition.
     ///
-    /// # Panics
-    ///
-    /// Panics if [`Self::try_with_glwe_params`] rejects the decomposition parameters.
-    #[must_use]
-    #[inline]
-    pub fn with_glwe_params(
-        glwe_params: &CrtGlweParameters<T, M>,
-        log_basis: DecompositionBaseLog,
-        level_count: Option<DecompositionLevelCount>,
-    ) -> Self {
-        Self::try_with_glwe_params(glwe_params, log_basis, level_count)
-            .unwrap_or_else(|error| panic!("failed to construct CRT GLev parameters: {error}"))
-    }
-
-    /// Creates a [`CrtGlevParameters<T, M>`] with checked decomposition and layout.
-    /// It uses the ordered RNS base owned by `glwe_params`.
-    /// The sampler/base pairing is inherited; the new radix and gadget layout
-    /// are still validated before computing level weights.
-    ///
-    /// The radix `2^log_basis` must be strictly smaller than every RNS modulus,
-    /// as required by the fast centered lift used by CRT/DCRT gadget products.
+    /// No plaintext codec or sampling state is created. The ordered base is moved.
+    /// The radix must be strictly smaller than every q_i, as required
+    /// by the fast centered lift used by gadget products.
     ///
     /// # Errors
-    ///
-    /// Returns [`CrtGlevParametersError`] if decomposition construction fails,
-    /// a modulus does not satisfy the centered-lift precondition, or a derived
-    /// gadget storage length overflows.
-    pub fn try_with_glwe_params(
-        glwe_params: &CrtGlweParameters<T, M>,
+    /// Returns [`CrtGlevParametersError`] for a mismatched ordered base, invalid
+    /// decomposition, unsupported radix or overflowing complete gadget layout.
+    pub fn try_new(
+        glwe_size: RnsGlweSize,
+        base_q: RNSBase<T, M>,
         log_basis: DecompositionBaseLog,
         level_count: Option<DecompositionLevelCount>,
     ) -> Result<Self, CrtGlevParametersError<T>> {
-        let basis = BigUintApproxSignedBasis::try_new(
-            glwe_params.cipher_modulus(),
-            log_basis,
-            level_count,
-        )?;
-        Self::try_from_matching_parts(
-            Arc::clone(&glwe_params.encryption_parameters),
-            glwe_params.base_q().clone(),
-            basis,
-        )
+        if glwe_size.moduli_count() != base_q.moduli_count() {
+            return Err(RnsDomainError::ModuliCountMismatch {
+                expected: glwe_size.moduli_count(),
+                actual: base_q.moduli_count(),
+            }
+            .into());
+        }
+        let basis =
+            BigUintApproxSignedBasis::try_new(base_q.moduli_product(), log_basis, level_count)?;
+        Self::try_from_matching_parts(glwe_size, base_q, basis)
     }
 
-    /// Binds prepared layout/samplers, an owned ordered base and decomposition,
+    /// Binds a checked GLWE layout, an owned ordered base and decomposition,
     /// without constructing a BFV codec. The base and basis are moved; no converter
-    /// or sampling table is rebuilt. Cached weights follow level order, then Q order.
+    /// is rebuilt. Cached weights follow level order, then Q order.
     ///
     /// # Errors
-    /// Rejects a base/count/order mismatch, a different product modulus or limb
+    /// Rejects a base/count mismatch, a different product modulus or limb
     /// width, radix >= any q_i, or an overflowing gadget layout. The limb-width
     /// check preserves the exact fixed-width representation used by decomposition.
     pub fn try_from_parts(
-        encryption_parameters: Arc<CrtGlweEncryptionParameters<T>>,
+        glwe_size: RnsGlweSize,
         base_q: RNSBase<T, M>,
         basis: BigUintApproxSignedBasis<T>,
     ) -> Result<Self, CrtGlevParametersError<T>> {
-        encryption_parameters.validate_base(&base_q)?;
+        if glwe_size.moduli_count() != base_q.moduli_count() {
+            return Err(RnsDomainError::ModuliCountMismatch {
+                expected: glwe_size.moduli_count(),
+                actual: base_q.moduli_count(),
+            }
+            .into());
+        }
         if basis.modulus() != base_q.moduli_product().0 {
             return Err(CrtGlevParametersError::BasisModulusMismatch);
         }
-        Self::try_from_matching_parts(encryption_parameters, base_q, basis)
+        Self::try_from_matching_parts(glwe_size, base_q, basis)
     }
 
-    /// Sampler order and basis product/limb representation already match this Q.
+    /// Layout count and basis product/limb representation already match this Q.
     /// The new radix still has to fit every q_i for centered gadget lifting;
     /// validate that and the complete layout before allocating level weights.
     fn try_from_matching_parts(
-        encryption_parameters: Arc<CrtGlweEncryptionParameters<T>>,
+        glwe_size: RnsGlweSize,
         base_q: RNSBase<T, M>,
         basis: BigUintApproxSignedBasis<T>,
     ) -> Result<Self, CrtGlevParametersError<T>> {
@@ -122,7 +104,7 @@ where
                 });
             }
         }
-        let size = RnsGadgetSize::try_new(encryption_parameters.size, basis.level_count())?;
+        let size = RnsGadgetSize::try_new(glwe_size, basis.level_count())?;
         // L*m weights fit because the checked gadget layout contains
         // L*m*(k+1)*N coefficients. Validate that layout before allocating.
         let mut scalar_residues = vec![T::ZERO; basis.level_count().get() * base_q.moduli_count()];
@@ -133,19 +115,11 @@ where
             base_q.decompose_to(BigUint(scalar), Residues(residues));
         }
         Ok(Self {
-            encryption_parameters,
             size,
             base_q,
             basis,
             scalar_residues,
         })
-    }
-
-    /// Returns the shared layout and sampling state, without BFV encoding.
-    #[must_use]
-    #[inline]
-    pub fn encryption_parameters(&self) -> &CrtGlweEncryptionParameters<T> {
-        &self.encryption_parameters
     }
 
     /// Returns the dimension of this [`CrtGlevParameters<T, M>`].
@@ -166,11 +140,6 @@ where
     #[inline]
     pub fn cipher_modulus(&self) -> BigUint<&[T]> {
         self.base_q.moduli_product()
-    }
-
-    /// Returns a reference to the cipher modulus minus one of this [`CrtGlevParameters<T, M>`].
-    pub fn cipher_modulus_minus_one(&self) -> BigUint<&[T]> {
-        self.encryption_parameters.cipher_modulus_minus_one.view()
     }
 
     /// Returns the big uint value len of this [`CrtGlevParameters<T, M>`].
@@ -196,40 +165,10 @@ where
         self.base_q.moduli_values()
     }
 
-    /// Returns a reference to the cipher moduli minus one of this [`CrtGlevParameters<T, M>`].
-    pub fn cipher_moduli_minus_one(&self) -> &[T] {
-        &self.encryption_parameters.cipher_moduli_minus_one
-    }
-
-    /// Returns a reference to the cipher moduli uniform distr of this [`CrtGlevParameters<T, M>`].
-    pub fn cipher_moduli_uniform_distr(&self) -> &[Uniform<T>] {
-        &self.encryption_parameters.cipher_moduli_uniform_distr
-    }
-
     /// Returns the ordered ciphertext RNS basis.
     #[inline]
     pub fn base_q(&self) -> &RNSBase<T, M> {
         &self.base_q
-    }
-
-    /// Returns the secret key type of this [`CrtGlevParameters<T, M>`].
-    #[inline]
-    pub fn secret_key_distr(&self) -> SecretKeyDistr {
-        self.encryption_parameters.secret_key_sampler.distr()
-    }
-
-    /// Returns a reference to the noise distribution of this [`CrtGlevParameters<T, M>`].
-    #[inline]
-    pub fn noise_distribution(&self) -> &ErrorSampler<T> {
-        &self.encryption_parameters.noise_distribution
-    }
-
-    /// Returns the Gaussian scale or the exact CBD standard deviation sqrt(eta/2).
-    /// Equal values do not identify the distribution; inspect [`Self::noise_distribution`].
-    pub fn noise_standard_deviation(&self) -> f64 {
-        self.encryption_parameters
-            .noise_distribution
-            .standard_deviation()
     }
 
     /// Returns a reference to the basis of this [`CrtGlevParameters<T, M>`].
@@ -288,6 +227,3 @@ where
         self.poly_length().get() * self.big_uint_value_len()
     }
 }
-
-/// CRT GGSW parameters, sharing the GLev decomposition and sampling configuration.
-pub type CrtGgswParameters<T, M> = CrtGlevParameters<T, M>;

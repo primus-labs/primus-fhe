@@ -5,8 +5,8 @@
 
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
@@ -28,12 +28,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SecretKeyDistr::SparseTernary,
         ErrorDistribution::CenteredBinomial { eta: 21 },
     )?;
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table)?;
     let mut rng = rand::rng();
     let coefficient_key =
         GlweSecretKey::generate(size.glwe_size(), parameters.secret_key_sampler(), &mut rng);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let context = key.try_bind_raw(&domain)?;
+    let context = key.try_bind_raw(&parameters, &base, &table)?;
 
     // This is already the intended CRT phase lift; no plaintext modulus, gamma
     // or BFV delta is used. Negative values have a separate residue in each limb.
@@ -53,8 +52,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut phase = DcrtPolynomial::<Vec<u64>>::zero(size.rns_poly_len());
     let mut partial = DcrtPolynomial::<Vec<u64>>::zero(size.rns_poly_len());
-    context.phase_to(&ciphertext, &mut phase); // b - a*s, still in NTT form.
-    context.partial_phase_to(&ciphertext, &mut partial); // -a*s, without b.
+    key.phase_to(&ciphertext, &mut phase, &moduli); // b - a*s, still in NTT form.
+    key.partial_phase_to(&ciphertext, &mut partial, &moduli); // -a*s, without b.
     let (_, body) = ciphertext.a_b(size.rns_poly_len());
     for (limb, &q) in values.iter().enumerate() {
         for i in 0..n.get() {

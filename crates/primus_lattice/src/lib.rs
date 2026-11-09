@@ -77,3 +77,11 @@ pub mod nlev;
 pub mod ntru;
 /// Reusable workspaces and borrowed scratch views.
 pub mod workspace;
+
+/// Native rank-one Hybrid RNS gadget products and shared preparation.
+#[cfg(feature = "rns")]
+pub mod hybrid;
+
+/// Shared rank-one signed-radix evaluation-key preparation.
+#[cfg(feature = "rns")]
+pub mod radix;

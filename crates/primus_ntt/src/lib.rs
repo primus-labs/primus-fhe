@@ -9,6 +9,7 @@ mod error;
 
 mod dcrt;
 mod ntt;
+mod prime_basis;
 mod reverse;
 mod root;
 
@@ -16,6 +17,7 @@ pub use automorphism::NttAutomorphismPermutation;
 pub use dcrt::*;
 pub use error::NttError;
 pub use ntt::*;
+pub use prime_basis::{U64NttPrimeBasisError, validate_u64_ntt_primes};
 
 /// Bits reserved for the lazy `[0, 4q)` representation.
 pub(crate) const NTT_LAZY_REDUCTION_HEADROOM_BITS: u32 = 2;

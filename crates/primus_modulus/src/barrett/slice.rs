@@ -263,6 +263,9 @@ mod mul {
 
         #[inline]
         fn reduce_sub_mul_slice_assign(self, acc: &mut [T], a: &[T], b: &[T]) {
+            if super::super::native::try_sub_mul(self, acc, a, b) {
+                return;
+            }
             slice::reduce_sub_mul_slice_assign(self, acc, a, b);
         }
 
@@ -411,6 +414,9 @@ mod mul {
 
         #[inline]
         fn reduce_sub_mul_slice_assign(self, acc: &mut [T], a: &[T], b: &[T]) {
+            if super::super::native::try_sub_mul(self, acc, a, b) {
+                return;
+            }
             simd::reduce_sub_mul_slice_assign::<T, BarrettModulus<T>, SimdBarrettModulus<T>>(
                 self, acc, a, b,
             );

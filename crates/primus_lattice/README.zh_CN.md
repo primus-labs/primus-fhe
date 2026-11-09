@@ -5,9 +5,9 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE NTT、GLWE Fourier、NTRU NTT 路径以及 RNS GLWE 实现共同使用。
+`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE NTT、GLWE Fourier、NTRU NTT 路径、RNS GLWE 实现和原生 BFV/BGV Hybrid product 共同使用。
 
-密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns) 等更高层负责。
+密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns)、[`primus_bfv`](../primus_bfv)、[`primus_bgv`](../primus_bgv) 等更高层负责。
 
 ## 密文类型
 
@@ -24,6 +24,9 @@
 | `Nlev` / `Ngsw` | 按分解顺序排列的 `L` 个 NTRU 多项式 | 系数、NTT |
 
 RLWE、RLev 和 RGSW 分别使用 `Glwe`、`Glev` 和 `Ggsw`，并配合 `GlweSize::new(GlweDimension::new(1), PolyLength::new(N))`；NTT 和 CRT/DCRT 表示同样使用维度为 1 的布局。
+
+这里的通用 RLWE 布局使用 mask/body 顺序。原生 BFV/BGV 的 `[c0,c1]` plus-phase
+存储遵循方案层和 native Hybrid 契约；借用 view 不会自动转换这两种约定。
 
 类型通过对应模块导出，例如 `glwe::Glwe`、`ggsw::NttGgsw`、`ngsw::NttNgsw`。前缀表示数据形式。`Torus*` 是系数类型在 native torus 场景下的别名，不会强制模数，也不执行编码。
 
@@ -77,6 +80,22 @@ NLev 与 NGSW 的存储形状相同，但语义不同：`beta` 的 NLev 各层�
 NLev 的 `external_product_sum_to` 和 GGSW/NGSW 的 `cmux_k_to` 接收数量匹配的精确长度迭代器。可传入借用的 gadget 和多项式/密文视图；输出用 `output.as_mut_view()`，CMux 默认分支用 `default.as_view()`。候选项可来自 `GlweIter` / `NtruIter` 或借用的密文集合，无需收集视图。空求和写零，空 CMux 复制默认分支。Fourier 对聚合结果统一舍入，可能与逐项转回系数后相加不同。
 
 完整 GLWE 抽取将全部 mask 多项式展平为 LWE mask；紧凑抽取要求省略的秘密后缀为零。`MultiMsgLwe` 保存按常数项抽取顺序排列的共享 mask，其抽取接口通过负循环旋转 mask 得到各个保留 body 系数的样本。逆抽取嵌入常数项 LWE 样本并将未使用位置清零，不恢复原 GLWE 明文的全部系数。
+
+## Native Hybrid RNS product
+
+启用 `rns` 时，`radix::NativeRadixParameters` 在 BFV/BGV 角色密钥间共享不可变
+signed decomposition、已检查的列 geometry 和 CRT weights。它绑定 N 和有序 Q，
+不认证 secret 或 transform 身份。方案建钥入口通过
+`EvaluationKeyConfig::PreparedRadix` 消费此资源。
+
+启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
+为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
+CRT bases。`NativeHybridAuxiliary` 持有一个环的有序 P 基与 NTT 表。多个活跃 Q 层
+可以通过 `NativeHybridParameters::try_with_auxiliary` 复用它。方案层持有 Q NTT 表。
+Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridModDown::Centered` 和
+`PlaintextPreserving(p)` 保持不同 correction；不新增密文类型族或 raw GLWE bridge。
+方案层仍生成/检查角色 keys 并建立完整误差与安全条件；共享 setup 扩展先恢复唯一
+受支撑的实际系数秘密，再构造 P limbs。详见[Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
 
 ## 正确性与工作区契约
 
@@ -133,6 +152,11 @@ assert_eq!(sample.b(), 76);
 - `fourier` 启用对应的 Fourier 泛型接口，不选择具体 FFT 引擎。
 - `rustfft` / `tfhe-fft` 同时启用 `fourier` 和对应 FFT 实现，可叠加使用。
 - `rns` 启用 CRT/DCRT 密文及乘法工作区；DCRT 需要的 `ntt` 一并启用。
+- `parallel` 向已启用的 NTT 依赖转发有界 prefix 正逆变换调度，涵盖 GLev product
+  和 Hybrid Q/P 变换；它不激活 `ntt` 或 `rns`，须另行选择所需表示。每次 prefix
+  的 N≥4096 且至少两条 limb 时使用至多4个连续任务，总线程数须由
+  `RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 串行路径
+  不初始化 pool，随机采样不并行。
 - `simd` 仅向已启用的算术依赖传播 nightly SIMD，不激活后端、FFT 引擎或 `rns`。
 - `RnsGlweSize` 和 `RnsGadgetSize` 不依赖 `rns` feature。
 

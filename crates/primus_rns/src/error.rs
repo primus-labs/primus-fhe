@@ -5,6 +5,15 @@ use thiserror::Error;
 /// Invalid RNS bases, extensions or hybrid decomposition partitions.
 #[derive(Error, Debug)]
 pub enum RnsError {
+    /// An HPS basis modulus is even or outside the supported u64 range.
+    #[error("HPS modulus {modulus} must be odd and lie in [3, 2^62)")]
+    UnsupportedHpsModulus {
+        /// Unsupported modulus value.
+        modulus: u64,
+    },
+    /// HPS scale-and-round requires a positive integer scale.
+    #[error("HPS scale must be positive")]
+    ZeroScale,
     /// The input basis does not contain any modulus.
     #[error("rns base must contain at least one modulus")]
     EmptyBase,

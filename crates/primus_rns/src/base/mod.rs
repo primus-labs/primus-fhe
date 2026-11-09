@@ -122,10 +122,44 @@ where
             .map(|modulus| modulus.value())
             .collect::<Vec<_>>();
 
+        if moduli_values
+            .iter()
+            .array_combinations()
+            .any(|[&a, &b]| !a.is_coprime(b))
+        {
+            return Err(RnsError::NonCoprimeModuli);
+        }
+        Ok(Self::from_coprime_moduli(moduli, moduli_values))
+    }
+
+    /// Derives a nonempty ordered prefix from this already checked basis.
+    ///
+    /// The full prefix shares this owner. A shorter prefix prepares its distinct
+    /// product and CRT constants without rechecking inherited coprimality.
+    ///
+    /// # Panics
+    /// Panics if `moduli_count` is outside `1..=self.moduli_count()`.
+    #[must_use]
+    pub fn prefix(&self, moduli_count: usize) -> Self {
+        assert!(
+            moduli_count > 0 && moduli_count <= self.moduli_count(),
+            "RNS prefix must contain 1..=basis modulus count limbs"
+        );
+        if moduli_count == self.moduli_count() {
+            return self.clone();
+        }
+        Self::from_coprime_moduli(
+            self.moduli()[..moduli_count].to_vec(),
+            self.moduli_values()[..moduli_count].to_vec(),
+        )
+    }
+
+    // Only an externally checked basis or its nonempty prefix reaches here.
+    fn from_coprime_moduli(moduli: Vec<M>, moduli_values: Vec<T>) -> Self {
         if moduli.len() == 1 {
             let modulus = moduli[0];
             let value = modulus.value();
-            return Ok(Self {
+            return Self {
                 inner: Arc::new(RNSBaseInner {
                     moduli,
                     moduli_values,
@@ -133,15 +167,7 @@ where
                     punctured_product: vec![T::ONE],
                     inv_punctured_product_mod_modulus: vec![ShoupFactor::new(T::ONE, value)],
                 }),
-            });
-        }
-
-        if moduli_values
-            .iter()
-            .array_combinations()
-            .any(|[&a, &b]| !a.is_coprime(b))
-        {
-            return Err(RnsError::NonCoprimeModuli);
+            };
         }
 
         let moduli_product = multiply_many_values(&moduli_values);
@@ -166,7 +192,7 @@ where
             })
             .collect::<Vec<ShoupFactor<T>>>();
 
-        Ok(Self {
+        Self {
             inner: Arc::new(RNSBaseInner {
                 moduli,
                 moduli_values,
@@ -174,7 +200,7 @@ where
                 punctured_product,
                 inv_punctured_product_mod_modulus,
             }),
-        })
+        }
     }
 
     /// Returns the moduli in basis order.

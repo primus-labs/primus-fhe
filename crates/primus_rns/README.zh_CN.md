@@ -16,6 +16,9 @@
 | `RNSBase<T, M>` | 非空、模数两两互素的 RNS 基及其 CRT 预计算 |
 | `BaseConverter<T, M>` | 在两个 RNS 基之间执行 fast 或 corrected 转换的预计算 |
 | `CorrectedConversionWorkspace<T>` | corrected 批量转换使用的可复用 workspace |
+| `CenteredBaseConverter` / `CenteredConversionWorkspace` | u64 精确 centered 基转换，认证快速修正及整数临界 fallback |
+| `HpsRns` | u64 HPS 的精确 centered 扩展、P/Q 预缩放和 t/P 舍入预计算 |
+| `HpsRnsWorkspace` | HPS 的复用 batch scratch，包括精确边界 fallback |
 | `HybridRNSPartitioning` | 在 modulus chain 各层之间共享的固定 full-`Q` 分区规则 |
 | `HybridRNS<T, M>` | 一个 active Hybrid-RNS level 的基与预计算 |
 | `HybridRNSPartition<T, M>` | 一个连续 `Q` 分区及其 approximate ModUp converter |
@@ -62,6 +65,9 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 克隆 `RNSBase` 共享不可变预计算，不复制缓冲区；`extend` / `extend_with` 创建新基，原基保持不变。应复用已准备的基，避免独立重复构造相同基。
 
+`prefix(count)` 从非空有序前缀派生，不重做继承的互素检查。较短前缀准备其不同的
+CRT 常量；完整前缀共享原 owner。数量为零或超出原基时 panic。
+
 `compose*` 和 `decompose*` 执行 CRT 转换。单值入口接受借用的 `Residues` / `BigUint` 视图，可通过拥有存储的 `view()` 或 `view_mut()` 获得。单值分解不限定为 Q 的 limb 宽度，但须遵循模数实现对 limb slice 的契约；批量大整数则使用上述固定宽度。空批量不写入数据，但仍须满足文档中的输出、因子与 scratch 长度要求。
 
 `wrapping_decompose*` 从较小模数 `t` 执行居中提升：小于 `ceil(t / 2)` 的值解释为非负，其余解释为负代表元。`t = 2` 时直接保留 `0` 和 `1`，不会将 `1` 提升为 `-1`。
@@ -70,14 +76,18 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 ## 基转换
 
-`BaseConverter::new` 共享已准备的输入与输出基，`from_owned_bases` 接收基句柄的所有权。克隆多模数 converter 会复制转换矩阵，重复计算时应复用 converter。
+`BaseConverter::new` 共享已准备的输入与输出基，`from_owned_bases` 接收基句柄的所有权。克隆也共享不可变转换矩阵；通用converter为矩阵增加一个小型共享owner，单输入converter不保存矩阵。
 
 转换面向运行时或派生 Barrett context。多模数转换的跨模数点积须接受可能超过目标模数的源 residue；Barrett 接受小于 `2^(T::BITS - 2)` 的操作数。自定义 context 须满足[转换器算术契约](src/converter/fast.rs)，`FieldContext` 本身不保证这些范围。
 
-两类转换具有不同的数学契约：
+不同转换入口具有不同的数学契约：
 
 - `fast_convert` 和 `fast_convert_array` 执行 SEAL 风格的 approximate CRT lift。输入基包含多个模数时，结果表示某个整数 `x + kQ`，通常不等于规范的 `x mod p_j`。只有外层算法会消去或允许这个 `Q` 倍数项时才能使用。单模数输入 使用精确的直接约简。
 - `corrected_convert_array` 应用商修正，将输入解释为 `[-Q/2, Q/2)` 中的居中代表元，要求输出基恰好包含一个模数。多模数输入的修正使用 `f64`，靠近居中边界时仍可能相差一个 `Q` 的倍数，需要在此边界精确转换的应用须采用更高精度方法。完整契约见[修正转换 API](src/converter/corrected.rs)。
+
+- `CenteredBaseConverter::try_new(&input,&output)` 为小于 2^62 的奇 u64 bases 准备精确 centered 转换，也支持多个输出模数。`workspace(value_count)` 与 `convert_to` 复用全部存储：保守浮点区间认证快速 CRT 商，临界半界转精确多字组合。HPS 和 native Hybrid correction 共享该原语，不为转换器准备无关 HPS scaling 资源。
+
+已有converter时，`CenteredBaseConverter::try_from_converter(converter)`保留其已准备的bases和矩阵，只增加centered lift常量。它仍检查centered算法的模数条件；近似converter本身并未建立这些条件。
 
 通过 `corrected_conversion_workspace` 创建 `CorrectedConversionWorkspace`，在同一 converter 和长度下复用。Fast conversion 接收由 `fast_convert_scratch_len` 或 `fast_convert_array_scratch_len` 确定大小的 scratch slice；空批量不写入数据；corrected 转换仍要求单模数输出基及形状匹配的工作区。每个并发操作使用独立的可变工作区。
 
@@ -93,9 +103,13 @@ alpha = ceil(full_q_moduli_count / dnum)
 
 在同一 modulus chain 的较短有序前缀 level 上，应使用 `HybridRNS::from_partitioning`，以保持与 key 兼容的固定分区边界。构造器只验证 active 模数数量；modulus chain 的所有者负责保证前缀关系。
 
+`HybridRNS::from_bases`复用已准备的Q/P句柄。分区覆盖全部active Q时，直接共享原有bases，不重建CRT表。`mod_down_converter()`借用已准备的近似P→Q converter；需要精确centered correction时，可clone后交给`CenteredBaseConverter::try_from_converter`。两种转换的数学语义仍然不同。
+
 每个分区支持 approximate ModUp 到 `Q || P`；streaming ModUp 只生成转换后的 complement limb，原分区 limb 由调用方提供。ModDown 将 `P` correction 转换到 `Q`，执行减法，再乘以 `P^-1 mod q_i`。
 
-方案需要自定义 correction 时，可组合 `approx_convert_p_to_q_to` 和 `approx_mod_down_from_correction_q_assign`；调用方负责 correction 的来源、符号、缩放及相同 Q 基顺序。这并不自动构成 BFV、BGV 或 CKKS 的降模规则。零长度 Hybrid 运算不写入数据，也不触发流式回调。完整契约见 [hybrid API](src/hybrid)。
+方案需要自定义 correction 时，可组合 `approx_convert_p_to_q_to` 和 `approx_mod_down_from_correction_q_assign`；调用方负责 correction 的来源、符号、缩放及相同 Q 基顺序。这并不自动构成 BFV、BGV 或 CKKS 的降模规则。零长度 Hybrid 运算不写入数据，也不触发流式回调。完整契约见 [hybrid API](src/hybrid)。原生 BFV/BGV 在独立拥有的
+[Native Hybrid product](../../guides/development/native-hybrid-keys.md) 中复用 partitioned ModUp
+并使用精确 centered P correction；原 approximate ModDown 入口没有被静默改成该方案规则。
 
 ## 调用方契约与 workspace
 
@@ -119,3 +133,14 @@ cargo bench -p primus_rns --bench decompose
 ## 许可证
 
 本 crate 可由你选择使用 [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) 或 [MIT License](../../LICENSE-MIT)。
+
+## HPS 系数运算
+
+`HpsRns::try_new(&base_q,&base_p,t)` 为小于 `2^62` 的互素奇 u64 bases
+准备常量；不可变 handle 共享已有 CRT 预计算。一次准备 `workspace(value_count)`，
+复用 modulus-major batch scratch，在线不分配。`expand_q_to_p`、`expand_p_to_q`
+选择精确 centered 代表：浮点修正经区间认证，临界点走精确多字整数 fallback。
+`scale_q_to_p` 使用 HPS 的有界单侧 P/Q residual 规则，不是 nearest rounding。
+`scale_and_round` 从一致的 Q/P residues 精确计算 `nearest(t*z/P) mod Q`。
+这些运算不认证 NTT primes 或 BFV 电路噪声；[BFV 契约](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+说明实际消费算法及辅助基/误差条件（English）。

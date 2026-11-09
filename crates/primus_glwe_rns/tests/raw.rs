@@ -2,8 +2,8 @@
 
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlweSecretKey,
-    GlweSecretKey, RnsDomainError, SecretKeyDistr,
+    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
+    RnsDomainError, SecretKeyDistr,
 };
 use primus_integer::{AsFrom, FheUint};
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
@@ -196,7 +196,7 @@ where
         )
         .unwrap();
         let table = DcrtTable::<Table>::new(PolyLength::new(n), &moduli).unwrap();
-        let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
+
         let secret: Vec<i64> = (0..rank * n).map(|i| (i % 3) as i64 - 1).collect();
         let coefficient_key = GlweSecretKey::<T>::new(
             secret
@@ -207,7 +207,7 @@ where
             SecretKeyDistr::SparseTernary,
         );
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-        let context = key.try_bind_raw(&domain).unwrap();
+        let context = key.try_bind_raw(&parameters, &base, &table).unwrap();
         // Deliberately different per-limb representatives detect accidental limb
         // copying and implicit BFV scaling, without requiring any t or gamma.
         let message: Vec<T> = values
@@ -327,15 +327,12 @@ where
     let n = 32;
     let moduli = values.map(BarrettModulus::new);
     let values: Vec<u64> = values.iter().map(|&value| value.as_into()).collect();
-    let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(
         GlweSize::new(GlweDimension::new(rank), PolyLength::new(n)),
         2,
     );
-    let parameters =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
     let table = DcrtTable::<Table>::new(PolyLength::new(n), &moduli).unwrap();
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
+
     let secrets: Vec<Vec<i64>> = (0..3)
         .map(|party| {
             (0..rank * n)
@@ -388,9 +385,8 @@ where
             SecretKeyDistr::SparseTernary,
         );
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-        let context = key.try_bind_raw(&domain).unwrap();
         let mut share = DcrtPolynomial::new(vec![T::ONE; size.rns_poly_len()]);
-        context.partial_phase_to(&ciphertext, &mut share);
+        key.partial_phase_to(&ciphertext, &mut share, &moduli);
         let partial = recover_coefficients(share.as_ref(), n, &values);
         let bodyless: Vec<u64> = ciphertext
             .as_ref()
@@ -410,7 +406,7 @@ where
             partial_sum[i] = (partial_sum[i] + value) % values[i / n];
         }
         if party == 0 {
-            context.phase_to(&ciphertext, &mut share);
+            key.phase_to(&ciphertext, &mut share, &moduli);
         }
         for (i, value) in recover_coefficients(share.as_ref(), n, &values)
             .into_iter()
@@ -450,24 +446,44 @@ fn raw_binding_rejects_foreign_shapes_and_ordered_bases() {
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), n), 2);
     let parameters =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap();
     let table = DcrtTable::<U32NttTable>::new(n, &moduli).unwrap();
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
+
+    let coefficient_key = GlweSecretKey::<u32>::new(
+        vec![0; n.get()],
+        size.glwe_size(),
+        SecretKeyDistr::SparseTernary,
+    );
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
     let reversed_moduli = [moduli[1], moduli[0]];
     let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
     let reversed_table = DcrtTable::<U32NttTable>::new(n, &reversed_moduli).unwrap();
     assert!(matches!(
-        DcrtGlweDomain::try_new(&parameters, &reversed_base, &reversed_table),
+        key.try_bind_raw(&parameters, &reversed_base, &reversed_table),
         Err(RnsDomainError::ModulusOrderMismatch { .. })
     ));
+    // The phase-only entry point validates caller-owned numerical contexts
+    // independently of encryption sampling and NTT tables, before writes.
+    let ciphertext = DcrtGlweCiphertext::<Vec<u32>>::zero(size.rns_glwe_len());
+    for bad_moduli in [&reversed_moduli[..], &moduli[..1]] {
+        let mut output = DcrtPolynomial::new(vec![7; size.rns_poly_len()]);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                key.phase_to(&ciphertext, &mut output, bad_moduli);
+            }))
+            .is_err()
+        );
+        assert!(output.as_ref().iter().all(|&value| value == 7));
+    }
     let short_base = RNSBase::new(&moduli[..1]).unwrap();
     assert!(matches!(
-        DcrtGlweDomain::try_new(&parameters, &short_base, &table),
+        key.try_bind_raw(&parameters, &short_base, &table),
         Err(RnsDomainError::ModuliCountMismatch { .. })
     ));
     let wrong_length_table = DcrtTable::<U32NttTable>::new(PolyLength::new(64), &moduli).unwrap();
     assert!(matches!(
-        DcrtGlweDomain::try_new(&parameters, &base, &wrong_length_table),
+        key.try_bind_raw(&parameters, &base, &wrong_length_table),
         Err(RnsDomainError::PolynomialLengthMismatch { .. })
     ));
     for (rank, key_table, expected_dimension) in [(2, &table, true), (1, &reversed_table, false)] {
@@ -477,7 +493,7 @@ fn raw_binding_rejects_foreign_shapes_and_ordered_bases() {
             SecretKeyDistr::SparseTernary,
         );
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, key_table);
-        let error = key.try_bind_raw(&domain).err().unwrap();
+        let error = key.try_bind_raw(&parameters, &base, &table).err().unwrap();
         if expected_dimension {
             assert!(matches!(error, RnsDomainError::DimensionMismatch { .. }));
         } else {
@@ -492,16 +508,17 @@ fn malformed_raw_layouts_are_rejected_before_writes_or_randomness() {
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(32)), 2);
     let parameters =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap();
     let table = DcrtTable::<U64NttTable>::new(PolyLength::new(32), &moduli).unwrap();
-    let domain = DcrtGlweDomain::try_new(&parameters, &base, &table).unwrap();
+
     let key = GlweSecretKey::<u64>::new(
         vec![0; size.glwe_size().mask_len()],
         size.glwe_size(),
         SecretKeyDistr::SparseTernary,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-    let context = key.try_bind_raw(&domain).unwrap();
+    let context = key.try_bind_raw(&parameters, &base, &table).unwrap();
     for (message_len, output_len) in [
         (size.rns_poly_len() - 1, size.rns_glwe_len()),
         (size.rns_poly_len(), size.rns_glwe_len() + 1),
@@ -532,9 +549,9 @@ fn malformed_raw_layouts_are_rejected_before_writes_or_randomness() {
             let original = output.clone();
             assert!(
                 catch_unwind(AssertUnwindSafe(|| if partial {
-                    context.partial_phase_to(&input, &mut output);
+                    key.partial_phase_to(&input, &mut output, &moduli);
                 } else {
-                    context.phase_to(&input, &mut output);
+                    key.phase_to(&input, &mut output, &moduli);
                 }))
                 .is_err()
             );

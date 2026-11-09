@@ -1,8 +1,9 @@
 //! Immutable layout and sampling precomputation shared by RNS parameter roles.
 
 use primus_distr::{ErrorDistribution, ErrorSampler, SecretKeySampler};
-use primus_integer::{BigUint, FheUint};
+use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 use rand::distr::Uniform;
@@ -10,15 +11,13 @@ use rand::distr::Uniform;
 use super::{CrtGlweEncryptionParametersError, RnsDomainError, validate_moduli};
 use crate::SecretKeyDistr;
 
-/// Layout and sampling state shared by ordinary and gadget parameters.
+/// Layout and sampling precomputation for raw and gadget encryption.
 ///
-/// Base-dependent caches follow the immutable ordered base owned by each outer
-/// type: the ordinary codec or the gadget base. No second RNSBase is stored here.
-/// Arc sharing retains the same prepared error and secret samplers when
-/// gadget parameters are derived, instead of cloning those precomputations.
+/// The ordered RNS basis remains owned by the caller. Evaluators do not depend
+/// on this sampling state; gadget encryption receives it separately from the
+/// decomposition parameters.
 pub struct CrtGlweEncryptionParameters<T: FheUint> {
     pub(super) size: RnsGlweSize,
-    pub(super) cipher_modulus_minus_one: BigUint<Vec<T>>,
     pub(super) cipher_moduli_minus_one: Vec<T>,
     pub(super) cipher_moduli_uniform_distr: Vec<Uniform<T>>,
     pub(super) secret_key_sampler: SecretKeySampler<T>,
@@ -26,21 +25,6 @@ pub struct CrtGlweEncryptionParameters<T: FheUint> {
 }
 
 impl<T: FheUint> CrtGlweEncryptionParameters<T> {
-    /// Prepares a [`CrtGlweEncryptionParameters`] without BFV encoding.
-    ///
-    /// # Panics
-    /// Panics on the layout/base or sampler errors of [`Self::try_new`].
-    #[must_use]
-    pub fn new<M: FieldContext<T>>(
-        size: RnsGlweSize,
-        base_q: &RNSBase<T, M>,
-        secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
-    ) -> Self {
-        Self::try_new(size, base_q, secret_key_distr, noise_standard_deviation)
-            .expect("invalid CRT GLWE sampling parameters")
-    }
-
     /// Prepares the complete kN secret and noise domains, without t or gamma.
     /// The base remains owned by the caller; cached samplers follow its exact order.
     /// Mask/noise samplers serve both ordinary and gadget encryption. Different
@@ -97,12 +81,8 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
             noise_distribution.validate_modulus(modulus_minus_one)?;
         }
 
-        let mut cipher_modulus_minus_one = BigUint(base_q.moduli_product().0.to_vec());
-        let borrow = cipher_modulus_minus_one.sub_value_assign(T::ONE);
-        debug_assert!(!borrow);
         Ok(Self {
             size,
-            cipher_modulus_minus_one,
             cipher_moduli_minus_one: base_q.moduli().iter().map(|q| q.minus_one()).collect(),
             cipher_moduli_uniform_distr: base_q
                 .moduli()
@@ -161,7 +141,7 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
     /// The coefficient count is this core's N. `moduli` may be its Q basis or
     /// an auxiliary expanded basis such as QP; every limb receives the same
     /// logical signed sample. This method checks output shape and support, not
-    /// the basis identity bound by an encryption/evaluation domain.
+    /// the ordered basis checked by an encryptor/evaluator constructor.
     ///
     /// # Panics
     /// Inherits [`ErrorSampler::sample_crt_to`]'s layout and modulus checks.
@@ -177,9 +157,13 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
             .sample_crt_to(output, self.size.poly_length().get(), moduli, rng);
     }
 
-    /// Rechecks only the base-to-cache pairing when assembling independently
-    /// prepared parts. Product equality alone cannot establish sampler order.
-    pub(crate) fn validate_base<M: FieldContext<T>>(
+    /// Rechecks the ordered base-to-sampler pairing when composing prepared parts.
+    /// Product equality alone cannot establish sampler order. This does not
+    /// establish any plaintext recovery condition or transform identity.
+    ///
+    /// # Errors
+    /// Returns [`RnsDomainError`] if the modulus count or order differs.
+    pub fn validate_base<M: FieldContext<T>>(
         &self,
         base_q: &RNSBase<T, M>,
     ) -> Result<(), RnsDomainError<T>> {
@@ -188,6 +172,28 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
                 .iter()
                 .map(|&q_minus_one| q_minus_one + T::ONE),
             base_q.moduli().iter().map(|q| q.value()),
+        )
+    }
+
+    /// Checks a prepared transform table against this owner's N and ordered Q.
+    ///
+    /// Reuses the existing sampling metadata without rebuilding a basis. Actual
+    /// root/evaluation order and key identity remain caller contracts.
+    ///
+    /// # Errors
+    /// Returns [`RnsDomainError`] for a polynomial-length or ordered-moduli mismatch.
+    pub fn validate_table<Table: NttTable<ValueT = T>>(
+        &self,
+        table: &DcrtTable<Table>,
+    ) -> Result<(), RnsDomainError<T>> {
+        let expected = self.size.poly_length().get();
+        let actual = table.poly_length().get();
+        if expected != actual {
+            return Err(RnsDomainError::PolynomialLengthMismatch { expected, actual });
+        }
+        validate_moduli(
+            self.cipher_moduli_minus_one.iter().map(|&q| q + T::ONE),
+            table.iter().map(NttTable::modulus),
         )
     }
 }

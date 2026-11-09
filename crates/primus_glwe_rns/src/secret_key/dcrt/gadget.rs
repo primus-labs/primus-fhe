@@ -36,8 +36,7 @@ where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
-        let domain = self.domain;
-        let parameters = domain.parameters();
+        let parameters = self.parameters;
         assert_eq!(
             input.as_ref().len(),
             parameters.rns_poly_len(),
@@ -70,8 +69,7 @@ where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
-        let domain = self.domain;
-        let parameters = domain.parameters();
+        let parameters = self.parameters;
         assert_eq!(
             input.as_ref().len(),
             parameters.rns_poly_len(),
@@ -97,15 +95,15 @@ where
     ) where
         R: rand::Rng + rand::CryptoRng,
     {
-        let parameters = self.domain.parameters();
-        let table = self.domain.table();
+        let parameters = self.parameters;
+        let table = self.table;
         let poly_length = parameters.poly_length().get();
         let moduli = parameters.cipher_moduli();
-        let uniform_distrs = parameters.cipher_moduli_uniform_distr();
+        let uniform_distrs = self.sampling_parameters.cipher_moduli_uniform_distr();
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        parameters.encryption_parameters().sample_noise_to(
+        self.sampling_parameters.sample_noise_to(
             b.as_mut(),
             parameters.cipher_moduli_value(),
             &mut *rng,
@@ -126,7 +124,7 @@ where
     }
 
     /// Reuses the DCRT message at every gadget level, adding it after the noise
-    /// transform. The encryptor establishes the key/domain numerical binding;
+    /// transform. The encryptor establishes the key/resource numerical binding;
     /// message/output layouts and representations remain caller contracts.
     fn encrypt_dcrt_glev_kernel_to<R>(
         &self,
@@ -136,7 +134,7 @@ where
     ) where
         R: rand::Rng + rand::CryptoRng,
     {
-        let parameters = self.domain.parameters();
+        let parameters = self.parameters;
         output
             .iter_dcrt_glwe_mut(parameters.rns_glwe_len())
             .zip(parameters.scalar_residue_iter())
@@ -162,15 +160,15 @@ where
     ) where
         R: rand::Rng + rand::CryptoRng,
     {
-        let parameters = self.domain.parameters();
-        let table = self.domain.table();
+        let parameters = self.parameters;
+        let table = self.table;
         let poly_length = parameters.poly_length().get();
         let moduli = parameters.cipher_moduli();
-        let uniform_distrs = parameters.cipher_moduli_uniform_distr();
+        let uniform_distrs = self.sampling_parameters.cipher_moduli_uniform_distr();
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        parameters.encryption_parameters().sample_noise_to(
+        self.sampling_parameters.sample_noise_to(
             b.as_mut(),
             parameters.cipher_moduli_value(),
             &mut *rng,
@@ -192,7 +190,7 @@ where
     }
 
     /// Reuses the CRT message at every gadget level, adding it before the body
-    /// transform. The encryptor establishes the key/domain numerical binding;
+    /// transform. The encryptor establishes the key/resource numerical binding;
     /// message/output layouts and representations remain caller contracts.
     fn encrypt_crt_glev_kernel_to<R>(
         &self,
@@ -202,7 +200,7 @@ where
     ) where
         R: rand::Rng + rand::CryptoRng,
     {
-        let parameters = self.domain.parameters();
+        let parameters = self.parameters;
         output
             .iter_dcrt_glwe_mut(parameters.rns_glwe_len())
             .zip(parameters.scalar_residue_iter())

@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 primus_shape = { path = "../primus_shape" }
-primus_encoding = { path = "../primus_encoding", features = ["rns"] }
 primus_data = { path = "../primus_data" }
 primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
@@ -25,6 +24,7 @@ rand = { workspace = true }
 rayon = { workspace = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
+sha2 = "0.11"
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -41,18 +41,10 @@ harness = false
 name = "expand_coeff"
 harness = false
 
-[[bench]]
-name = "key_switching"
-harness = false
-
-[[bench]]
-name = "public_encryption"
-harness = false
-
 [features]
 default = []
+parallel = ["primus_ntt/parallel", "primus_lattice/parallel"]
 simd = [
-    "primus_encoding/simd",
     "primus_glwe/simd",
     "primus_integer/simd",
     "primus_modulus/simd",

@@ -1,0 +1,1677 @@
+{
+  "measured_date": "2026-11-03",
+  "source_base_revision": "e01dfed0b08fef7098014698e76441e07c6aeb46",
+  "source_state": "uncommitted BGV leveled implementation on the recorded base; historical evidence, not current-HEAD timing",
+  "source_input_count": 721,
+  "source_inputs_sha256": "5d7eb00a63a13367593bfe076129da883812f98cf514e7362ff8d4d2d03ca3cd",
+  "source_inventory_definition": "All local crate source files, crate Cargo manifests/build scripts, root Cargo.toml/Cargo.lock, workspace .cargo/config.toml, and the actual workflow/leveled benchmark sources. Registry sources are fixed by Cargo.lock checksums.",
+  "changed_production_inputs": {
+    "crates/primus_bgv/Cargo.toml": {
+      "sha256": "7610ad3ebc0eddaf1447b4a5fef400d0f8fa1389b22cda7290f002f3888d0814",
+      "bytes": 1325
+    },
+    "crates/primus_bgv/benches/leveled.rs": {
+      "sha256": "953482f637aea3215ab3527e9ca2bbc8bfd050a35a926cf950a9d7bb9054ce84",
+      "bytes": 5449
+    },
+    "crates/primus_bgv/benches/workflow.rs": {
+      "sha256": "6aa64176d5f76ce0c3730296881f7f788fb07a5d333b79eedea245c71fab91eb",
+      "bytes": 3389
+    },
+    "crates/primus_bgv/src/client.rs": {
+      "sha256": "30e7b535d46ff41d67b337bb73061c21600881146b6ea8d462967fbe7b5fb4cf",
+      "bytes": 12274
+    },
+    "crates/primus_bgv/src/context.rs": {
+      "sha256": "0944773db413f01c16a3314d59942d9d74f86a33907ed0a9a949e3d7d068b0f1",
+      "bytes": 6705
+    },
+    "crates/primus_bgv/src/evaluation_key.rs": {
+      "sha256": "480577378bae61f360206429752ec3c14857a296612507d8a7b6b6d1fd0dac0e",
+      "bytes": 23327
+    },
+    "crates/primus_bgv/src/evaluator.rs": {
+      "sha256": "0fe37d997a0bad435e22eb7dc5a6ca07631bbabf7a6501bb6840eddac0f3aba6",
+      "bytes": 13234
+    },
+    "crates/primus_bgv/src/lib.rs": {
+      "sha256": "48c84d991871b8aca06afcab5c75fcdb9e320a952103a3e51a9cfcba4c5c7ced",
+      "bytes": 1941
+    },
+    "crates/primus_bgv/src/modulus_switch.rs": {
+      "sha256": "8fa0b5eea6dd13436bf1db51799dcbf450e6b8ad62b9749547a64196a9434717",
+      "bytes": 6998
+    },
+    "crates/primus_bgv/src/public_key.rs": {
+      "sha256": "90cd77c8b4102976ca37dc4080514ac8f853dc9845b4e47c68ec4a8103efeee1",
+      "bytes": 7421
+    },
+    "crates/primus_bgv/src/quadratic.rs": {
+      "sha256": "42878b8f26c6113d0c7869fe6de99b043e4d2b1f4fc10cd6fcbc6b704350be48",
+      "bytes": 3315
+    },
+    "crates/primus_lattice/src/glev/dcrt/external_product.rs": {
+      "sha256": "e655b6ad3da516df4376ba2f017341a296b98f0074cf4d128bdfc5f2af115af3",
+      "bytes": 11754
+    }
+  },
+  "workspace_config": {
+    "sha256": "e2b297c3a408de9b61e50673821b7216df8dd93fb1186e51101df69043fe140b",
+    "bytes": 73
+  },
+  "cargo_lock": {
+    "sha256": "252c5f2ff9185f0e24686c795290e4aa38a6819765706f0558cea5fa9db33e15",
+    "bytes": 38284
+  },
+  "build_source_archive_sha256": "fe3212e7d2cba6e0c54b625c50936ff8f803ead5ead3b45a6675a6107e23a973",
+  "actual_cargo_artifacts": {
+    "workflow": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_bgv#0.1.0",
+      "manifest_path": "/home/lhf/codes/primus-fhe/crates/primus_bgv/Cargo.toml",
+      "target": {
+        "kind": [
+          "bench"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "workflow",
+        "src_path": "/home/lhf/codes/primus-fhe/crates/primus_bgv/benches/workflow.rs",
+        "edition": "2024",
+        "required-features": [
+          "batching"
+        ],
+        "doc": false,
+        "doctest": false,
+        "test": false
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "features": [
+        "batching",
+        "default"
+      ],
+      "filenames": [
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/workflow-0d1c357e27cf58a0"
+      ],
+      "executable": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/workflow-0d1c357e27cf58a0",
+      "fresh": false
+    },
+    "leveled": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_bgv#0.1.0",
+      "manifest_path": "/home/lhf/codes/primus-fhe/crates/primus_bgv/Cargo.toml",
+      "target": {
+        "kind": [
+          "bench"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "leveled",
+        "src_path": "/home/lhf/codes/primus-fhe/crates/primus_bgv/benches/leveled.rs",
+        "edition": "2024",
+        "required-features": [
+          "batching"
+        ],
+        "doc": false,
+        "doctest": false,
+        "test": false
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "features": [
+        "batching",
+        "default"
+      ],
+      "filenames": [
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/leveled-e9c32106df90895b"
+      ],
+      "executable": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/leveled-e9c32106df90895b",
+      "fresh": false
+    }
+  },
+  "binary_sha256": {
+    "workflow": "cf071cfe018e1b12eaaa8f7699f5458a099a57ec09b1778ecf0d0ab30f514fe6",
+    "leveled": "d3257190a43355ffcf3c7c6760e799fc9bcf41e49e41c3343d628b17e2e6798a",
+    "step09_control": "4a1d939bca365f14052c0031faabd4ada40de196fd3c1573f1d9246f19b5bdcb"
+  },
+  "old_control_identity": {
+    "binary": "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/step09-workflow-binary",
+    "binary_sha256": "4a1d939bca365f14052c0031faabd4ada40de196fd3c1573f1d9246f19b5bdcb",
+    "original_binary": "/home/lhf/codes/primus-fhe/target/step09-bgv-performance/release/deps/workflow-cff7f2b0a7007939",
+    "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+    "correctness": {
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/step09-workflow-binary",
+        "--bench",
+        "--test",
+        "--noplot"
+      ],
+      "cwd": "/home/lhf/codes/primus-fhe",
+      "environment": {
+        "PATH": "/home/lhf/.local/bin:/home/lhf/.codex/tmp/arg0-linux/codex-arg0JIIXj5:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/lhf/.local/bin:/home/lhf/.nvm/versions/node/v24.19.0/bin:/home/lhf/.cargo/bin:/home/lhf/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+        "HOME": "/home/lhf",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C",
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_TARGET_DIR": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance",
+        "RAYON_NUM_THREADS": "1",
+        "CRITERION_HOME": "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/criterion"
+      },
+      "started_utc": "2026-11-03T03:48:42.493900+00:00",
+      "stdout": "smoke-step09-control.stdout",
+      "stderr": "smoke-step09-control.stderr",
+      "returncode": 0,
+      "wall_seconds": 0.0017458440270274878,
+      "user_cpu_seconds": 2.4e-05,
+      "system_cpu_seconds": 0.001506,
+      "peak_rss_kib_linux": 29160,
+      "stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49",
+      "stderr_sha256": "3f7f92052702ef0ec1db090121572a45f933879e818ce6420af1372a58816cdc"
+    },
+    "previous_metadata_sha256": "43044497053cf29f33686d3efcc4425f79d1d0eac321bb57f564390b9fd9b077",
+    "previous_source_archive_sha256": "ed62e821cee8a8d1e1d459acb30fb8d37bc2eaf6601fe4b379d6cdeb21c4b292",
+    "previous_source_inputs_sha256": "a7a365a0ba3193f5a2744edbfda3624ff980c228da5fdd669e2116c340685ab4",
+    "previous_base_revision": "f46ed57f6e3a94c2082a8110f79000e008cd30b0",
+    "frozen_workflow_source_sha256": "e362dfed89a8ee0ce1515ec6b2adf6d2e81b6627ecdaff17d83a76c216f18b66"
+  },
+  "equivalent_workflow_source_diff_sha256": "bf20c46dc71cd6c3dc1f3da4f89f6679c3fdfb38904db3b3de3c21a469c97154",
+  "toolchain": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)\nrelease: 1.98.1\ncommit-hash: 797e8a9bca276c1c9f9f738d2a20f484fa4eea9d\ncommit-date: 2026-08-05\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.4 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:OpenSSL/3.6.3)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Ubuntu 26.4.0 (resolute) [64-bit]\n",
+  "criterion_package": {
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#criterion@0.8.2",
+    "target": "criterion",
+    "target_kind": [
+      "lib"
+    ],
+    "features": [
+      "cargo_bench_support",
+      "default",
+      "plotters",
+      "rayon"
+    ],
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 0,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "executable": null
+  },
+  "primus_artifact_features": [
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_data#0.1.0",
+      "target": "primus_data",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "aligned-vec",
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_gcd#0.1.0",
+      "target": "primus_gcd",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_integer#0.1.0",
+      "target": "primus_integer",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_reduce#0.1.0",
+      "target": "primus_reduce",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_factor#0.1.0",
+      "target": "primus_factor",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_modulus#0.1.0",
+      "target": "primus_modulus",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_shape#0.1.0",
+      "target": "primus_shape",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_ntt#0.1.0",
+      "target": "primus_ntt",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_poly#0.1.0",
+      "target": "primus_poly",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_rns#0.1.0",
+      "target": "primus_rns",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_decompose#0.1.0",
+      "target": "primus_decompose",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_lattice#0.1.0",
+      "target": "primus_lattice",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default",
+        "ntt",
+        "rns"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_encoding#0.1.0",
+      "target": "primus_encoding",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "batching",
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_distr#0.1.0",
+      "target": "primus_distr",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_lwe#0.1.0",
+      "target": "primus_lwe",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_glwe#0.1.0",
+      "target": "primus_glwe",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_glwe_rns#0.1.0",
+      "target": "primus_glwe_rns",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    },
+    {
+      "package_id": "path+file:///home/lhf/codes/primus-fhe/crates/primus_bgv#0.1.0",
+      "target": "primus_bgv",
+      "target_kind": [
+        "lib"
+      ],
+      "features": [
+        "batching",
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "executable": null
+    }
+  ],
+  "feature_note": "Stable default+batching; no Primus optional nightly simd feature. The u64 NTT may still use its existing hardware SIMD backend. BGV does not enable primus_encoding/rns.",
+  "cpu": "AMD Ryzen 9 9955HX3D 16-Core Processor, pinned CPU2, Rayon1",
+  "machine": {
+    "runner_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "cpu_configuration": {
+      "cpu2/cpufreq/scaling_governor": "powersave",
+      "cpu2/cpufreq/scaling_driver": "amd-pstate-epp",
+      "cpu2/topology/thread_siblings_list": "2,18",
+      "cpufreq/boost": "1"
+    },
+    "user_cargo_configuration": {},
+    "allocator": "Rust System (no library/bench global allocator)",
+    "rss_scope": "Linux wait4 ru_maxrss for the whole benchmark process, including untimed setup, all buffers, key/table construction, correctness assertions and Criterion analysis; not per-request live storage"
+  },
+  "build_profile": "stable release opt-level3/default+batching/native, no Primus optional simd, System allocator",
+  "native_flags": "workspace .cargo/config.toml supplies -C target-cpu=native; no RUSTFLAGS override",
+  "parameters": {
+    "ciphertext_secret_ring_N": 1024,
+    "plaintext_slot_capacity_n": 256,
+    "active_input_slots": 113,
+    "glwe_rank": 1,
+    "residue_type": "u64",
+    "plaintext_modulus": 12289,
+    "ordered_Q": [
+      1125899426789377,
+      1125899326117889,
+      1125898722088961
+    ],
+    "Q_bits": 150,
+    "level_count": 3,
+    "secret_distribution": "exact CBD1/SparseTernary",
+    "public_ephemeral_distribution": "exact CBD1, same signed integer across limbs",
+    "integer_error_distribution": "truncated discrete Gaussian sigma0.849, tailcut12, support[-10,10], then multiplied by p once",
+    "gadget_log_basis": 8,
+    "configured_gadget_level_count": null,
+    "level0_gadget_columns": 18,
+    "level0_drop_bits": 6,
+    "level1_gadget_columns": 12,
+    "level1_drop_bits": 4,
+    "input_slot_formula": "(7*i+1)%p for i<113; zero otherwise",
+    "factor_slot_formula": "1+i%3 for all256 slots",
+    "embedding": "centered",
+    "rng_seed_u64": 280411660,
+    "cpu_affinity": [
+      2
+    ],
+    "rayon_threads": 1,
+    "features": [
+      "default",
+      "batching"
+    ],
+    "optional_primus_simd": false
+  },
+  "measurement_scope": "One fresh packed request: encode/embed both slot vectors; two fresh public encryptions; ct*ct tensor/relinearize; ciphertext square/relinearize; p-corrected drop L0->L1; encrypted row-left rotation; actual Alice-to-Bob key switch; second p-corrected drop L1->L2; Bob exact full-N recovery, subring extract and all256-slot decode. Complete online RNG, transforms, decomposition/residual and exact quotient work included. Tables/context/two secret clients/PK/three evaluation keys/prepared operators/buffers and independent expected-slot oracle are outside timing. Every output slot and off-subring zero is asserted after each process workload; the same artifacts pass real --test smoke before timing.",
+  "process_order": [
+    "leveled-1",
+    "control-A1",
+    "control-B1",
+    "control-B2",
+    "control-A2",
+    "leveled-2"
+  ],
+  "sample_size_per_process": 20,
+  "warmup_seconds": 1,
+  "measurement_target_seconds": 2,
+  "measurement_environment": {
+    "PATH": "/home/lhf/.local/bin:/home/lhf/.codex/tmp/arg0-linux/codex-arg0JIIXj5:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/lhf/.local/bin:/home/lhf/.nvm/versions/node/v24.19.0/bin:/home/lhf/.cargo/bin:/home/lhf/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+    "HOME": "/home/lhf",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_TARGET_DIR": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance",
+    "RAYON_NUM_THREADS": "1",
+    "CRITERION_HOME": "/home/lhf/codes/primus_ssle/docs/step10/performance/measure/leveled-1/criterion"
+  },
+  "runs": [
+    {
+      "name": "leveled-1",
+      "binary_sha256": "d3257190a43355ffcf3c7c6760e799fc9bcf41e49e41c3343d628b17e2e6798a",
+      "workload": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+      "started_utc": "2026-11-03T03:49:44.848282+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/leveled-e9c32106df90895b",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 4.001038037007675,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 463052.0678571429,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            21.0,
+            42.0,
+            63.0,
+            84.0,
+            105.0,
+            126.0,
+            147.0,
+            168.0,
+            189.0,
+            210.0,
+            231.0,
+            252.0,
+            273.0,
+            294.0,
+            315.0,
+            336.0,
+            357.0,
+            378.0,
+            399.0,
+            420.0
+          ],
+          "times": [
+            9691531.0,
+            19418479.0,
+            29139757.0,
+            38811039.0,
+            48516476.0,
+            58353913.0,
+            68206780.0,
+            77790798.0,
+            87575384.0,
+            97243371.0,
+            106976450.0,
+            116678702.0,
+            126477075.0,
+            136212028.0,
+            145870466.0,
+            155598497.0,
+            165337657.0,
+            174793131.0,
+            184606563.0,
+            194371122.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 462598.0823625484,
+              "upper_bound": 463083.7635983613
+            },
+            "point_estimate": 462847.3878142801,
+            "standard_error": 123.6161687401982
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 462604.45781119465,
+              "upper_bound": 463113.9044011544
+            },
+            "point_estimate": 463052.0678571429,
+            "standard_error": 139.89433473429568
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 67.38299213704718,
+              "upper_bound": 753.9628810588997
+            },
+            "point_estimate": 383.8688346135522,
+            "standard_error": 176.5297706772023
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 462786.23175579583,
+              "upper_bound": 463132.72841551073
+            },
+            "point_estimate": 462948.99835739174,
+            "standard_error": 88.24204515620184
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 350.1823376138746,
+              "upper_bound": 728.6990265488655
+            },
+            "point_estimate": 565.7282707175696,
+            "standard_error": 96.80637018186755
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_leveled_slots",
+          "function_id": "encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+          "value_str": null,
+          "throughput": {
+            "Elements": 1
+          },
+          "full_id": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+          "directory_name": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1",
+          "title": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150"
+        },
+        "tukey": [
+          460640.9870448177,
+          461573.38935574214,
+          464059.79551820736,
+          464992.19782913185
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "4841fa3e45e67badf2643f9f3fed3f3317e286e8de5a2c4f99b3fc81f454d66f",
+        "estimates": "556fc9f3bc98f69f2037dec78f9795cee23020be93b24b22cb8cde3f21afc6d8",
+        "benchmark": "c762c6b02f53c0be9a038e1bcc60426e5b725a38193df3c5b22fcc59d0c80c85",
+        "tukey": "5a6e7f41e8fdb347c6e1dd4592cc6ff0e96901c4e68c8e7f2257581d868b173b"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "768dfed302e68034df06d9d538d6ca74adcad4597775ff4a10f7c6635e1ea1a1"
+    },
+    {
+      "name": "control-A1",
+      "binary_sha256": "4a1d939bca365f14052c0031faabd4ada40de196fd3c1573f1d9246f19b5bdcb",
+      "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+      "started_utc": "2026-11-03T03:49:48.860554+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/step09-workflow-binary",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 3.1678871400654316,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 67055.66583416583,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            143.0,
+            286.0,
+            429.0,
+            572.0,
+            715.0,
+            858.0,
+            1001.0,
+            1144.0,
+            1287.0,
+            1430.0,
+            1573.0,
+            1716.0,
+            1859.0,
+            2002.0,
+            2145.0,
+            2288.0,
+            2431.0,
+            2574.0,
+            2717.0,
+            2860.0
+          ],
+          "times": [
+            9619264.0,
+            19168546.0,
+            28755148.0,
+            38307687.0,
+            47903226.0,
+            57524473.0,
+            67087541.0,
+            76722906.0,
+            86411001.0,
+            95956435.0,
+            105506709.0,
+            115061130.0,
+            124592148.0,
+            134252901.0,
+            143904766.0,
+            153381450.0,
+            163047243.0,
+            172586946.0,
+            182261175.0,
+            192101577.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 67042.66284692448,
+              "upper_bound": 67098.34058911267
+            },
+            "point_estimate": 67068.22437013818,
+            "standard_error": 14.270124218110903
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 67032.83202214452,
+              "upper_bound": 67077.66580787633
+            },
+            "point_estimate": 67055.66583416583,
+            "standard_error": 11.432733427929698
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 21.289478992666144,
+              "upper_bound": 73.00392278390768
+            },
+            "point_estimate": 44.5718034044971,
+            "standard_error": 12.962678462774265
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 67053.14424685459,
+              "upper_bound": 67106.51239653383
+            },
+            "point_estimate": 67077.69674471869,
+            "standard_error": 14.136937495660607
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 32.480357344428185,
+              "upper_bound": 91.32704616444585
+            },
+            "point_estimate": 65.53875031257351,
+            "standard_error": 15.766002238950529
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "function_id": null,
+          "value_str": null,
+          "throughput": null,
+          "full_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "directory_name": "bgv_n1024_subring256_public_encrypt_linear_recover_slots",
+          "title": "bgv_n1024_subring256/public_encrypt_linear_recover_slots"
+        },
+        "tukey": [
+          66857.50001840266,
+          66942.22990430622,
+          67168.17626671573,
+          67252.9061526193
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "b8110c380dd3b7225f7e8a32780e7cc95806fbdda0c431c72acd2dd4b3a3ec1f",
+        "estimates": "050d90aec0b9ebe3cf94c84e3ba571dc61f28de1a04affb2c4da893b0bcff42a",
+        "benchmark": "3692f771d8e4540bb3d260268900dc65deb5cd5c3e46ac4a921a8702bbb6a480",
+        "tukey": "13485ca84da29aaa580a1905a84d836e62101ac66f2b88d2676d7227ec97b108"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49"
+    },
+    {
+      "name": "control-B1",
+      "binary_sha256": "cf071cfe018e1b12eaaa8f7699f5458a099a57ec09b1778ecf0d0ab30f514fe6",
+      "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+      "started_utc": "2026-11-03T03:49:52.038476+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/workflow-0d1c357e27cf58a0",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 3.157200244953856,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 66900.77055167055,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            143.0,
+            286.0,
+            429.0,
+            572.0,
+            715.0,
+            858.0,
+            1001.0,
+            1144.0,
+            1287.0,
+            1430.0,
+            1573.0,
+            1716.0,
+            1859.0,
+            2002.0,
+            2145.0,
+            2288.0,
+            2431.0,
+            2574.0,
+            2717.0,
+            2860.0
+          ],
+          "times": [
+            9573879.0,
+            19147356.0,
+            28724090.0,
+            38274734.0,
+            47852390.0,
+            57381333.0,
+            67010686.0,
+            76575968.0,
+            86102818.0,
+            95717193.0,
+            105357496.0,
+            114785909.0,
+            124334070.0,
+            133828116.0,
+            143336070.0,
+            152854293.0,
+            162532138.0,
+            172011949.0,
+            181620563.0,
+            191332812.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66875.88017146222,
+              "upper_bound": 66918.66078603403
+            },
+            "point_estimate": 66897.5734827978,
+            "standard_error": 10.954950801990543
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66868.07517482518,
+              "upper_bound": 66936.06748251748
+            },
+            "point_estimate": 66900.77055167055,
+            "standard_error": 17.542470296737147
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 26.033712509855267,
+              "upper_bound": 81.60478185877496
+            },
+            "point_estimate": 63.45705621607172,
+            "standard_error": 14.583490439029898
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66847.43150231677,
+              "upper_bound": 66893.07823806423
+            },
+            "point_estimate": 66867.73612728735,
+            "standard_error": 11.677310247285739
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 37.00149853783105,
+              "upper_bound": 59.04541582012831
+            },
+            "point_estimate": 50.1309841007499,
+            "standard_error": 5.613731726049093
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "function_id": null,
+          "value_str": null,
+          "throughput": null,
+          "full_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "directory_name": "bgv_n1024_subring256_public_encrypt_linear_recover_slots",
+          "title": "bgv_n1024_subring256/public_encrypt_linear_recover_slots"
+        },
+        "tukey": [
+          66605.49500499498,
+          66730.45129870129,
+          67063.66808191809,
+          67188.6243756244
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "7f653d689a554f6efb7eea4abacc8a0d96e882a4c81f6871b2d946436d654670",
+        "estimates": "be2cc694720c2ff831c7f4dd52a025bafe24f8fe437eed62c6d037337b02b7ef",
+        "benchmark": "3692f771d8e4540bb3d260268900dc65deb5cd5c3e46ac4a921a8702bbb6a480",
+        "tukey": "2613c8c667d9a03a47044d638437aaf1e5aef1de91826807729bdda0c5a55a88"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49"
+    },
+    {
+      "name": "control-B2",
+      "binary_sha256": "cf071cfe018e1b12eaaa8f7699f5458a099a57ec09b1778ecf0d0ab30f514fe6",
+      "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+      "started_utc": "2026-11-03T03:49:55.205924+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/workflow-0d1c357e27cf58a0",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 3.1572627229616046,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 66969.28646353647,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            143.0,
+            286.0,
+            429.0,
+            572.0,
+            715.0,
+            858.0,
+            1001.0,
+            1144.0,
+            1287.0,
+            1430.0,
+            1573.0,
+            1716.0,
+            1859.0,
+            2002.0,
+            2145.0,
+            2288.0,
+            2431.0,
+            2574.0,
+            2717.0,
+            2860.0
+          ],
+          "times": [
+            9587805.0,
+            19129813.0,
+            28744619.0,
+            38345698.0,
+            47845827.0,
+            57389628.0,
+            67031756.0,
+            76562002.0,
+            86231471.0,
+            95760965.0,
+            105316519.0,
+            114904163.0,
+            124452213.0,
+            134079672.0,
+            143728993.0,
+            153238861.0,
+            162839850.0,
+            172449898.0,
+            182061637.0,
+            191442511.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66950.0462104632,
+              "upper_bound": 66987.62867696729
+            },
+            "point_estimate": 66969.0039367672,
+            "standard_error": 9.614899485325827
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66949.2173211404,
+              "upper_bound": 66999.38616938617
+            },
+            "point_estimate": 66969.28646353647,
+            "standard_error": 11.777255381626679
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 19.361926229691214,
+              "upper_bound": 66.07478697855886
+            },
+            "point_estimate": 47.4276762092808,
+            "standard_error": 11.937980445783086
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66957.53008276952,
+              "upper_bound": 66988.75732255672
+            },
+            "point_estimate": 66974.29797032235,
+            "standard_error": 8.05446304073464
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 30.27506258104852,
+              "upper_bound": 54.072698682447914
+            },
+            "point_estimate": 44.1377680010249,
+            "standard_error": 6.083570496694103
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "function_id": null,
+          "value_str": null,
+          "throughput": null,
+          "full_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "directory_name": "bgv_n1024_subring256_public_encrypt_linear_recover_slots",
+          "title": "bgv_n1024_subring256/public_encrypt_linear_recover_slots"
+        },
+        "tukey": [
+          66768.14343733186,
+          66855.9834420387,
+          67090.2234545903,
+          67178.06345929716
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "12bcf9b6cbc935d95b502189afa07b692bceecac1874dcfd03a91a8a8c82bf91",
+        "estimates": "c1110d758671f9dc6164cbd0a102d9b89fa5b06b296d69459bd504f306827d9d",
+        "benchmark": "3692f771d8e4540bb3d260268900dc65deb5cd5c3e46ac4a921a8702bbb6a480",
+        "tukey": "e39156a1a0082355bbe1930df1e42da6e5ac7b60337569fb6eac8a5704915e5f"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49"
+    },
+    {
+      "name": "control-A2",
+      "binary_sha256": "4a1d939bca365f14052c0031faabd4ada40de196fd3c1573f1d9246f19b5bdcb",
+      "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+      "started_utc": "2026-11-03T03:49:58.372952+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/step09-workflow-binary",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 3.1674045061226934,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 66857.06987847222,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            144.0,
+            288.0,
+            432.0,
+            576.0,
+            720.0,
+            864.0,
+            1008.0,
+            1152.0,
+            1296.0,
+            1440.0,
+            1584.0,
+            1728.0,
+            1872.0,
+            2016.0,
+            2160.0,
+            2304.0,
+            2448.0,
+            2592.0,
+            2736.0,
+            2880.0
+          ],
+          "times": [
+            9588586.0,
+            19203232.0,
+            28848766.0,
+            38505270.0,
+            48141968.0,
+            57701469.0,
+            67376528.0,
+            77019427.0,
+            86592194.0,
+            96394915.0,
+            106011465.0,
+            116035925.0,
+            125142069.0,
+            134800587.0,
+            144510904.0,
+            154038524.0,
+            163617252.0,
+            173366993.0,
+            182937806.0,
+            192628395.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66805.19217403204,
+              "upper_bound": 66898.03716170164
+            },
+            "point_estimate": 66850.97321453343,
+            "standard_error": 23.504864907818455
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66839.45319794584,
+              "upper_bound": 66875.11495535714
+            },
+            "point_estimate": 66857.06987847222,
+            "standard_error": 9.246483883412685
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 12.30655420860928,
+              "upper_bound": 100.19733224891036
+            },
+            "point_estimate": 41.61182515823743,
+            "standard_error": 21.981330860012903
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66859.5627599955,
+              "upper_bound": 66922.06096601108
+            },
+            "point_estimate": 66884.26426635694,
+            "standard_error": 16.234599638866822
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 43.759531512646554,
+              "upper_bound": 151.57777588846992
+            },
+            "point_estimate": 107.5291671193047,
+            "standard_error": 26.821829942421136
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "function_id": null,
+          "value_str": null,
+          "throughput": null,
+          "full_id": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+          "directory_name": "bgv_n1024_subring256_public_encrypt_linear_recover_slots",
+          "title": "bgv_n1024_subring256/public_encrypt_linear_recover_slots"
+        },
+        "tukey": [
+          66671.30867317993,
+          66751.44217927333,
+          66965.13152885575,
+          67045.26503494916
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "5f5f442bf9c3df4a39d282f9a228afa84e760192ae0ce2cbacdcdff168eeab30",
+        "estimates": "9c693f4d9862e01e9ad6efaedd4ae76b2870b48546d5718aab5b8353d71fb546",
+        "benchmark": "3692f771d8e4540bb3d260268900dc65deb5cd5c3e46ac4a921a8702bbb6a480",
+        "tukey": "48ad63d5ae5623306bda2dcb1a0bace74f7a6d9f5da05aa77594d08e972cb2c4"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49"
+    },
+    {
+      "name": "leveled-2",
+      "binary_sha256": "d3257190a43355ffcf3c7c6760e799fc9bcf41e49e41c3343d628b17e2e6798a",
+      "workload": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+      "started_utc": "2026-11-03T03:50:01.551805+00:00",
+      "timing_command": [
+        "taskset",
+        "-c",
+        "2",
+        "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/leveled-e9c32106df90895b",
+        "--bench",
+        "--sample-size",
+        "20",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--noplot",
+        "--save-baseline",
+        "step10"
+      ],
+      "process_wall_seconds": 4.0431256480515,
+      "raw_spawn_wait4_peak_rss_kib_linux": 29184,
+      "sample_median_ns": 468552.185340803,
+      "criterion_original": {
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            21.0,
+            42.0,
+            63.0,
+            84.0,
+            105.0,
+            126.0,
+            147.0,
+            168.0,
+            189.0,
+            210.0,
+            231.0,
+            252.0,
+            273.0,
+            294.0,
+            315.0,
+            336.0,
+            357.0,
+            378.0,
+            399.0,
+            420.0
+          ],
+          "times": [
+            9882362.0,
+            19630129.0,
+            29556204.0,
+            39369837.0,
+            49190402.0,
+            59093653.0,
+            68817595.0,
+            78585501.0,
+            88582120.0,
+            98331931.0,
+            108308882.0,
+            118059224.0,
+            127769440.0,
+            137520103.0,
+            147424658.0,
+            157565769.0,
+            167295693.0,
+            178029586.0,
+            187226311.0,
+            195933048.0
+          ]
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 468167.5134368227,
+              "upper_bound": 469013.59813117544
+            },
+            "point_estimate": 468578.59282168234,
+            "standard_error": 216.15794724662265
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 468083.41575091577,
+              "upper_bound": 468907.6800595238
+            },
+            "point_estimate": 468552.185340803,
+            "standard_error": 200.52449865546765
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 345.23973012075436,
+              "upper_bound": 1107.9234036543353
+            },
+            "point_estimate": 724.4867781634315,
+            "standard_error": 194.9563458927057
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 467737.06514459144,
+              "upper_bound": 469317.2097657893
+            },
+            "point_estimate": 468526.7130413141,
+            "standard_error": 405.1021263340551
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 539.8426424116586,
+              "upper_bound": 1319.1561447734935
+            },
+            "point_estimate": 999.1026489594473,
+            "standard_error": 195.73459605224105
+          }
+        },
+        "benchmark": {
+          "group_id": "bgv_leveled_slots",
+          "function_id": "encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+          "value_str": null,
+          "throughput": {
+            "Elements": 1
+          },
+          "full_id": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+          "directory_name": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1",
+          "title": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150"
+        },
+        "tukey": [
+          465198.71558684367,
+          466608.67873359274,
+          470368.580458257,
+          471778.5436050061
+        ]
+      },
+      "criterion_original_sha256": {
+        "sample": "e230fd466bc732a15f9a31df114b1d35989f62a533d61a5b28553b158a2a93f9",
+        "estimates": "625b899fbddea2960ccee711d7e925316b67a6892ae1cb162c8ccb951c5fdc00",
+        "benchmark": "c762c6b02f53c0be9a038e1bcc60426e5b725a38193df3c5b22fcc59d0c80c85",
+        "tukey": "f2551f64da6320ff2b0703049361fe58d109f3cee0ad1fb4bd0b0b0daaa24c19"
+      },
+      "correctness_smoke_exit_code": 0,
+      "correctness_smoke_stdout_sha256": "768dfed302e68034df06d9d538d6ca74adcad4597775ff4a10f7c6635e1ea1a1"
+    }
+  ],
+  "equivalent_control": {
+    "old_average_mean_ns": 66959.5987923358,
+    "new_average_mean_ns": 66933.2887097825,
+    "new_over_old_fraction": -0.00039292473413554685,
+    "scope": "Step09 frozen executable versus current source workflow with only explicit level-0 API arguments changed; inspect workflow-source-diff.patch. Equivalent complete request, ABBA old/new/new/old."
+  },
+  "memory_smoke": {
+    "status": "passed",
+    "source_inputs_sha256": "5d7eb00a63a13367593bfe076129da883812f98cf514e7362ff8d4d2d03ca3cd",
+    "records": [
+      {
+        "name": "workflow",
+        "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+        "binary_sha256": "cf071cfe018e1b12eaaa8f7699f5458a099a57ec09b1778ecf0d0ab30f514fe6",
+        "time_v_peak_rss_kib": 4972,
+        "python_spawn_wait4_peak_rss_kib": 25900,
+        "raw_time_file": "workflow.time.txt",
+        "raw_time_sha256": "eaba5fa3076287a9456282e1d955736b61bac6612be26ae2eefc25f860001cb0",
+        "command": {
+          "argv": [
+            "/usr/bin/time",
+            "-v",
+            "-o",
+            "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/workflow.time.txt",
+            "taskset",
+            "-c",
+            "2",
+            "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/workflow-0d1c357e27cf58a0",
+            "--bench",
+            "--test",
+            "--noplot"
+          ],
+          "cwd": "/home/lhf/codes/primus-fhe",
+          "environment": {
+            "PATH": "/home/lhf/.local/bin:/home/lhf/.codex/tmp/arg0-linux/codex-arg0JIIXj5:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/lhf/.local/bin:/home/lhf/.nvm/versions/node/v24.19.0/bin:/home/lhf/.cargo/bin:/home/lhf/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+            "HOME": "/home/lhf",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C",
+            "CARGO_NET_OFFLINE": "true",
+            "CARGO_BUILD_JOBS": "2",
+            "CARGO_TARGET_DIR": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance",
+            "RAYON_NUM_THREADS": "1",
+            "CRITERION_HOME": "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/workflow"
+          },
+          "started_utc": "2026-11-03T03:50:51.970233+00:00",
+          "stdout": "workflow.stdout",
+          "stderr": "workflow.stderr",
+          "returncode": 0,
+          "wall_seconds": 0.002716490998864174,
+          "user_cpu_seconds": 0.001555,
+          "system_cpu_seconds": 0.00034899999999999997,
+          "peak_rss_kib_linux": 25900,
+          "stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49",
+          "stderr_sha256": "3f7f92052702ef0ec1db090121572a45f933879e818ce6420af1372a58816cdc"
+        }
+      },
+      {
+        "name": "leveled",
+        "workload": "bgv_leveled_slots/encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+        "binary_sha256": "d3257190a43355ffcf3c7c6760e799fc9bcf41e49e41c3343d628b17e2e6798a",
+        "time_v_peak_rss_kib": 7316,
+        "python_spawn_wait4_peak_rss_kib": 26012,
+        "raw_time_file": "leveled.time.txt",
+        "raw_time_sha256": "fe8e5256d2037bcaeb946a5452836ddf43068104f3bbbb7e76f4ae5248c0980b",
+        "command": {
+          "argv": [
+            "/usr/bin/time",
+            "-v",
+            "-o",
+            "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/leveled.time.txt",
+            "taskset",
+            "-c",
+            "2",
+            "/home/lhf/codes/primus-fhe/target/step10-bgv-performance/release/deps/leveled-e9c32106df90895b",
+            "--bench",
+            "--test",
+            "--noplot"
+          ],
+          "cwd": "/home/lhf/codes/primus-fhe",
+          "environment": {
+            "PATH": "/home/lhf/.local/bin:/home/lhf/.codex/tmp/arg0-linux/codex-arg0JIIXj5:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/lhf/.local/bin:/home/lhf/.nvm/versions/node/v24.19.0/bin:/home/lhf/.cargo/bin:/home/lhf/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+            "HOME": "/home/lhf",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C",
+            "CARGO_NET_OFFLINE": "true",
+            "CARGO_BUILD_JOBS": "2",
+            "CARGO_TARGET_DIR": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance",
+            "RAYON_NUM_THREADS": "1",
+            "CRITERION_HOME": "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/leveled"
+          },
+          "started_utc": "2026-11-03T03:50:51.977487+00:00",
+          "stdout": "leveled.stdout",
+          "stderr": "leveled.stderr",
+          "returncode": 0,
+          "wall_seconds": 0.003852150170132518,
+          "user_cpu_seconds": 0.0032649999999999997,
+          "system_cpu_seconds": 0.0004919999999999999,
+          "peak_rss_kib_linux": 26012,
+          "stdout_sha256": "768dfed302e68034df06d9d538d6ca74adcad4597775ff4a10f7c6635e1ea1a1",
+          "stderr_sha256": "3f7f92052702ef0ec1db090121572a45f933879e818ce6420af1372a58816cdc"
+        }
+      },
+      {
+        "name": "step09_control",
+        "workload": "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+        "binary_sha256": "4a1d939bca365f14052c0031faabd4ada40de196fd3c1573f1d9246f19b5bdcb",
+        "time_v_peak_rss_kib": 5216,
+        "python_spawn_wait4_peak_rss_kib": 26012,
+        "raw_time_file": "step09_control.time.txt",
+        "raw_time_sha256": "42cf13ca1d284cdd75683dcefe3c12b1b929b975f444faf8c0fd7cb6b4624d96",
+        "command": {
+          "argv": [
+            "/usr/bin/time",
+            "-v",
+            "-o",
+            "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/step09_control.time.txt",
+            "taskset",
+            "-c",
+            "2",
+            "/home/lhf/codes/primus_ssle/docs/step10/performance/prepare/step09-workflow-binary",
+            "--bench",
+            "--test",
+            "--noplot"
+          ],
+          "cwd": "/home/lhf/codes/primus-fhe",
+          "environment": {
+            "PATH": "/home/lhf/.local/bin:/home/lhf/.codex/tmp/arg0-linux/codex-arg0JIIXj5:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/lhf/.local/bin:/home/lhf/.nvm/versions/node/v24.19.0/bin:/home/lhf/.cargo/bin:/home/lhf/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/lhf/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+            "HOME": "/home/lhf",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C",
+            "CARGO_NET_OFFLINE": "true",
+            "CARGO_BUILD_JOBS": "2",
+            "CARGO_TARGET_DIR": "/home/lhf/codes/primus-fhe/target/step10-bgv-performance",
+            "RAYON_NUM_THREADS": "1",
+            "CRITERION_HOME": "/home/lhf/codes/primus_ssle/docs/step10/performance/memory-smoke/step09_control"
+          },
+          "started_utc": "2026-11-03T03:50:51.985160+00:00",
+          "stdout": "step09_control.stdout",
+          "stderr": "step09_control.stderr",
+          "returncode": 0,
+          "wall_seconds": 0.0016333910170942545,
+          "user_cpu_seconds": 0.000569,
+          "system_cpu_seconds": 0.000987,
+          "peak_rss_kib_linux": 26012,
+          "stdout_sha256": "76cfd8881c7d17a8671cde0dfa0ed93a6a6aed400310ca11fb98d5dc09317c49",
+          "stderr_sha256": "3f7f92052702ef0ec1db090121572a45f933879e818ce6420af1372a58816cdc"
+        }
+      }
+    ],
+    "scope": "/usr/bin/time measures its direct taskset->benchmark child after an exec boundary, excluding the Python parent pre-exec RSS floor. Correctness --test smoke includes complete context/key/operator setup, persistent storage and one complete request plus output assertions; it excludes Criterion timed sampling/statistical analysis. Neither number is incremental request allocation."
+  },
+  "raw_wait4_rss_interpretation": "All six Python-spawn wait4 observations were29184KiB. This lifetime peak includes the inherited Python pre-exec RSS floor, so it is not an isolated Rust benchmark peak. The separate /usr/bin/time -v correctness smoke measures the exec-isolated taskset->benchmark child; that smoke includes complete setup and one request but excludes Criterion timed sampling/statistical analysis. Neither RSS measurement is per-request allocation.",
+  "derived_csv_sha256": "c4611666d42ce297f9134421053ef5d4f6b3208e9788dd0dd39a5b846e1a1f26",
+  "data_format": "Original Criterion samples/estimates retained per process; derived CSV divides original elapsed nanoseconds by iterations.",
+  "source_and_binary_unchanged": true,
+  "comparison": "New capability; two independent process runs report absolute costs, no equivalent prior implementation or speedup claim.",
+  "limits": "Functional diagnostic parameters do not certify security or full evaluated noise admission. In-process confidence intervals do not cover process/machine variation. The equivalent-control averages differ by about0.04%, with no substantive speedup/regression claim."
+}

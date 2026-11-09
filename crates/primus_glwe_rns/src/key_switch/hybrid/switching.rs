@@ -6,8 +6,8 @@ use primus_reduce::FieldContext;
 use primus_rns::HybridRNS;
 
 use super::{HybridRnsGlweKeySwitchingKey, mod_down::approx_mod_down_ntt};
-use crate::parameter::validate_moduli;
-use crate::{DcrtGlweCiphertext, HybridRnsKeySwitchDomain, RnsDomainError};
+use crate::parameter::{validate_dcrt_table, validate_moduli};
+use crate::{DcrtGlweCiphertext, RnsDomainError};
 
 #[cfg(test)]
 use crate::CrtGlweCiphertext;
@@ -32,7 +32,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
             accumulator_qp,
             q_scratch,
             mod_up_limb,
-            mod_up_scratch,
+            conversion_scratch,
             ..
         } = workspace;
 
@@ -64,7 +64,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 q_scratch,
                 mod_up_limb,
                 poly_length,
-                &mut mod_up_scratch[..scratch_len],
+                &mut conversion_scratch[..scratch_len],
                 |modulus_index, converted_limb| {
                     table.ntt_tables()[modulus_index].transform_slice(converted_limb);
                     add_qp_glwe_product(
@@ -81,7 +81,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
     }
 
     /// Reduces each QP accumulator polynomial in place, copies its Q limbs to
-    /// the complete output, then negates it. All key/domain/workspace layouts and
+    /// the complete output, then negates it. All key/parameter/workspace layouts and
     /// numerical representations have been established by the caller.
     fn mod_down_and_write_negated_accumulator<M, Table>(
         &self,
@@ -96,6 +96,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         let poly_length = self.input_size.poly_length().get();
         let qp_poly_len = self.qp_size.rns_poly_len();
         let q_poly_len = self.output_size.rns_poly_len();
+        let scratch_len = hybrid_rns.mod_down_scratch_len(poly_length);
 
         for accumulator in workspace.accumulator_qp.chunks_exact_mut(qp_poly_len) {
             approx_mod_down_ntt(
@@ -104,7 +105,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 accumulator,
                 poly_length,
                 &mut workspace.q_scratch,
-                &mut workspace.mod_down_scratch,
+                &mut workspace.conversion_scratch[..scratch_len],
             );
         }
 
@@ -122,20 +123,19 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         c_out.neg_assign(poly_length, q_poly_len, hybrid_rns.q_base().moduli());
     }
 
-    /// Uses the evaluator's established key/domain/workspace binding. Operand layouts
+    /// Uses the evaluator's established key/parameter/workspace binding. Operand layouts
     /// and representation remain caller contracts; no numerical rebinding occurs here.
     fn key_switch_kernel_to<M, Table>(
         &self,
         c_in: DcrtGlweCiphertext<&[T]>,
         mut c_out: DcrtGlweCiphertext<&mut [T]>,
-        domain: &HybridRnsKeySwitchDomain<'_, T, M, Table>,
+        hybrid_rns: &HybridRNS<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut HybridRnsGlweKeySwitchingWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let hybrid_rns = domain.hybrid_rns();
-        let table = domain.table();
         let qp_gadget_len = self.qp_gadget_len;
         let (mask_in, body_in) = c_in.a_b(self.input_size.rns_poly_len());
 
@@ -165,20 +165,19 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
     }
 
     /// Coefficient-domain oracle retaining full ModUp and message transforms.
-    /// Consumes test operands with the same complete key/domain/workspace layouts.
+    /// Consumes test operands with the same complete key/parameter/workspace layouts.
     #[cfg(test)]
     fn key_switch_coeff_reference_to<M, Table>(
         &self,
         c_in: CrtGlweCiphertext<&[T]>,
         mut c_out: DcrtGlweCiphertext<&mut [T]>,
-        domain: &HybridRnsKeySwitchDomain<'_, T, M, Table>,
+        hybrid_rns: &HybridRNS<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut HybridRnsGlweKeySwitchingWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let hybrid_rns = domain.hybrid_rns();
-        let table = domain.table();
         let poly_length = self.input_size.poly_length().get();
         let qp_poly_len = self.qp_size.rns_poly_len();
         let qp_glwe_len = self.qp_size.rns_glwe_len();
@@ -198,7 +197,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                     mask_polynomial.as_slice(),
                     &mut digit_qp,
                     poly_length,
-                    &mut workspace.mod_up_scratch[..scratch_len],
+                    &mut workspace.conversion_scratch[..scratch_len],
                 );
                 table.transform_slice(&mut digit_qp);
 
@@ -264,7 +263,7 @@ fn add_qp_glwe_product<T, M>(
     }
 }
 
-/// Hybrid RNS key switching bound to its key, Q/P domain and owned workspace.
+/// Hybrid RNS key switching bound to its key, Q/P converters, table and owned workspace.
 ///
 /// The constructor checks modulus order, Q/P split and partition width once.
 /// Ciphertext secret identity and NTT representation remain caller contracts.
@@ -275,7 +274,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a HybridRnsGlweKeySwitchingKey<T>,
-    domain: &'a HybridRnsKeySwitchDomain<'a, T, M, Table>,
+    hybrid_rns: &'a HybridRNS<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: HybridRnsGlweKeySwitchingWorkspace<T>,
 }
 
@@ -285,34 +285,35 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`HybridRnsGlweKeySwitchEvaluator`] for a compatible key and domain.
+    /// Creates a new [`HybridRnsGlweKeySwitchEvaluator`] for a compatible key, hybrid RNS converters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
     pub fn new(
         key: &'a HybridRnsGlweKeySwitchingKey<T>,
-        domain: &'a HybridRnsKeySwitchDomain<'a, T, M, Table>,
+        hybrid_rns: &'a HybridRNS<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Self {
-        Self::try_new(key, domain)
+        Self::try_new(key, hybrid_rns, table)
             .unwrap_or_else(|error| panic!("invalid hybrid key-switch binding: {error}"))
     }
 
-    /// Binds the key and domain before allocating reusable scratch.
+    /// Binds the key, hybrid RNS converters and table before allocating reusable scratch.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] for a different polynomial length, ordered
     /// Q/P basis, Q/P split or partition width.
     pub fn try_new(
         key: &'a HybridRnsGlweKeySwitchingKey<T>,
-        domain: &'a HybridRnsKeySwitchDomain<'a, T, M, Table>,
+        hybrid_rns: &'a HybridRNS<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        let expected = key.input_size.poly_length().get();
-        let actual = domain.table().poly_length().get();
-        if expected != actual {
-            return Err(RnsDomainError::PolynomialLengthMismatch { expected, actual });
-        }
-        let hybrid_rns = domain.hybrid_rns();
+        validate_dcrt_table(
+            key.input_size.poly_length(),
+            hybrid_rns.qp_base().moduli(),
+            table,
+        )?;
         validate_moduli(
             key.qp_moduli.iter().copied(),
             hybrid_rns.qp_base().moduli().iter().map(|m| m.value()),
@@ -327,24 +328,20 @@ where
         if expected != actual {
             return Err(RnsDomainError::PartitionWidthMismatch { expected, actual });
         }
+        let poly_length = key.input_size.poly_length().get();
+        let conversion_scratch_len = hybrid_rns
+            .max_mod_up_scratch_len(poly_length)
+            .max(hybrid_rns.mod_down_scratch_len(poly_length));
         let workspace = HybridRnsGlweKeySwitchingWorkspace {
             accumulator_qp: vec![T::ZERO; key.qp_size.rns_glwe_len()],
             q_scratch: vec![T::ZERO; key.input_size.rns_poly_len()],
-            mod_up_limb: vec![T::ZERO; key.input_size.poly_length().get()],
-            mod_up_scratch: vec![
-                T::ZERO;
-                hybrid_rns
-                    .max_mod_up_scratch_len(key.input_size.poly_length().get())
-            ],
-            mod_down_scratch: vec![
-                T::ZERO;
-                hybrid_rns
-                    .mod_down_scratch_len(key.input_size.poly_length().get())
-            ],
+            mod_up_limb: vec![T::ZERO; poly_length],
+            conversion_scratch: vec![T::ZERO; conversion_scratch_len],
         };
         Ok(Self {
             key,
-            domain,
+            hybrid_rns,
+            table,
             workspace,
         })
     }
@@ -369,36 +366,40 @@ where
         self.key.key_switch_kernel_to(
             input.as_view(),
             output.as_mut_view(),
-            self.domain,
+            self.hybrid_rns,
+            self.table,
             &mut self.workspace,
         );
     }
 }
 
-/// Scratch overwritten by each switch; its numerical binding belongs to the evaluator.
+/// Reusable scratch whose numerical binding belongs to the evaluator.
 struct HybridRnsGlweKeySwitchingWorkspace<T: FheUint> {
     accumulator_qp: Vec<T>,
     // One coefficient-domain Q polynomial, also reused for mixed ModDown output.
     q_scratch: Vec<T>,
     // One streamed coefficient-domain ModUp limb before its forward NTT.
     mod_up_limb: Vec<T>,
-    mod_up_scratch: Vec<T>,
-    mod_down_scratch: Vec<T>,
+    // ModUp completes before ModDown starts. Each converter overwrites its
+    // required prefix before reading it; one max-sized allocation serves both.
+    conversion_scratch: Vec<T>,
 }
 
 #[cfg(test)]
 mod tests {
-    use primus_lattice::GlweDimension;
     use primus_lattice::glwe::DcrtGlwe;
+    use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
     use primus_modulus::BarrettModulus;
     use primus_ntt::UintDcrtTable;
-    use primus_poly::Polynomial;
+    use primus_poly::CrtPolynomial;
+    use primus_rns::RNSBase;
     use primus_shape::PolyLength;
     use rand::{SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::{
-        CrtGlweParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+        CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
+        SecretKeyDistr,
     };
 
     #[test]
@@ -406,27 +407,18 @@ mod tests {
         type Value = u64;
 
         let dimension = 2;
-        // Small ring; three Q limbs retain wide arithmetic and an uneven partition.
         let poly_length = PolyLength::new(32);
-        let plaintext_modulus = BarrettModulus::new(12289);
-        let gamma = BarrettModulus::new(2305843009213554689);
         let q_moduli =
             [1125899906826241, 1125899906629633, 1125899906031617].map(BarrettModulus::new);
-        let p_moduli = [1125899905036289].map(BarrettModulus::new);
-        let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_moduli).copied().collect();
         let q_table = UintDcrtTable::new(poly_length, &q_moduli).unwrap();
-        let qp_table = UintDcrtTable::new(poly_length, &qp_moduli).unwrap();
-        let parameters = CrtGlweParameters::new(
-            GlweDimension::new(dimension),
-            poly_length,
-            plaintext_modulus,
-            gamma,
-            &q_moduli,
-            SecretKeyDistr::SparseTernary,
-            3.20,
+        let base = RNSBase::new(&q_moduli).unwrap();
+        let size = RnsGlweSize::new(
+            GlweSize::new(GlweDimension::new(dimension), poly_length),
+            base.moduli_count(),
         );
-        let hybrid = HybridRNS::new(&q_moduli, &p_moduli, 2).unwrap();
-        let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &qp_table).unwrap();
+        let parameters =
+            CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+                .unwrap();
         let mut rng = StdRng::seed_from_u64(0x4859_4252_4944);
         let input_key = GlweSecretKey::generate(
             parameters.size().glwe_size(),
@@ -439,35 +431,67 @@ mod tests {
             &mut rng,
         );
         let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, &q_table);
-        let switching_key = HybridRnsGlweKeySwitchingKey::generate(
-            &input_key,
-            parameters.encryption_parameters(),
-            &output_key,
-            &domain,
-            &mut rng,
-        );
+        let context = input_dcrt_key
+            .try_bind_raw(&parameters, &base, &q_table)
+            .unwrap();
 
-        let plaintext: Polynomial<Vec<Value>> =
-            Polynomial::random(poly_length.get(), plaintext_modulus, &mut rng);
-        let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
-        let input_dcrt_key_context = input_dcrt_key.try_bind(&parameters, &q_table).unwrap();
-        input_dcrt_key_context.encrypt_to(&plaintext, &mut input, &mut rng);
-        let input_coeff = input.clone().into_coeff_form(&q_table);
-        let mut from_ntt: DcrtGlwe<Vec<Value>> =
-            DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
-        let mut from_coeff: DcrtGlwe<Vec<Value>> =
-            DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
-        let mut ntt_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &domain);
-        let mut coeff_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &domain);
+        // Exercise a zero ModDown workspace, then U>D, U=D and U<D. The
+        // uneven two-partition case and single-input conversion remain covered.
+        for (decomposition_count, p_count) in [(2, 1), (1, 2), (2, 2), (3, 2)] {
+            let p_moduli = [1125899905036289, 1125899904679937].map(BarrettModulus::new);
+            let p_moduli = &p_moduli[..p_count];
+            let qp_moduli: Vec<_> = q_moduli.iter().chain(p_moduli).copied().collect();
+            let qp_table = UintDcrtTable::new(poly_length, &qp_moduli).unwrap();
+            let hybrid = HybridRNS::new(&q_moduli, p_moduli, decomposition_count).unwrap();
+            let switching_key = HybridRnsGlweKeySwitchingKey::generate(
+                &input_key,
+                &parameters,
+                &output_key,
+                &hybrid,
+                &qp_table,
+                &mut rng,
+            );
+            let encoded = CrtPolynomial::new(
+                (0..size.rns_poly_len())
+                    .map(|i| (i % 17) as Value)
+                    .collect::<Vec<_>>(),
+            );
+            let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            context.encrypt_encoded_crt_to(&encoded, &mut input, &mut rng);
+            let mut input_coeff = input.clone().into_coeff_form(&q_table);
+            let mut from_ntt: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            let mut from_coeff: DcrtGlwe<Vec<Value>> =
+                DcrtGlweCiphertext::zero(size.rns_glwe_len());
+            let mut ntt_evaluator =
+                HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
+            let mut coeff_evaluator =
+                HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid, &qp_table);
+            ntt_evaluator.workspace.conversion_scratch.fill(Value::MAX);
+            coeff_evaluator
+                .workspace
+                .conversion_scratch
+                .fill(Value::MAX);
 
-        ntt_evaluator.key_switch_to(&input, &mut from_ntt);
-        switching_key.key_switch_coeff_reference_to(
-            input_coeff.as_view(),
-            from_coeff.as_mut_view(),
-            &domain,
-            &mut coeff_evaluator.workspace,
-        );
-
-        assert_eq!(from_ntt.as_ref(), from_coeff.as_ref());
+            for zero_input in [false, true] {
+                if zero_input {
+                    input.as_mut().fill(0);
+                    input_coeff.as_mut().fill(0);
+                }
+                from_ntt.as_mut().fill(Value::MAX);
+                from_coeff.as_mut().fill(Value::MAX);
+                ntt_evaluator.key_switch_to(&input, &mut from_ntt);
+                switching_key.key_switch_coeff_reference_to(
+                    input_coeff.as_view(),
+                    from_coeff.as_mut_view(),
+                    &hybrid,
+                    &qp_table,
+                    &mut coeff_evaluator.workspace,
+                );
+                assert_eq!(from_ntt.as_ref(), from_coeff.as_ref());
+                if zero_input {
+                    assert!(from_ntt.as_ref().iter().all(|&value| value == 0));
+                }
+            }
+        }
     }
 }
