@@ -21,13 +21,14 @@ primus_shape = { path = "../primus_shape" }
 rand = { workspace = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
+dashu-int = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-dashu-int = { workspace = true }
 
 [features]
 default = []
+parallel = ["primus_ntt/parallel", "primus_glwe_rns/parallel", "primus_lattice/parallel"]
 batching = ["primus_encoding/batching"]
 simd = ["primus_glwe_rns/simd", "primus_encoding/simd"]
 

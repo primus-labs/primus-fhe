@@ -8,6 +8,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use primus_bfv::{BfvClient, BfvContext, BfvParameters};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
@@ -17,13 +18,15 @@ fn bench_public_encryption(c: &mut Criterion) {
     const N: usize = 1024;
     const T: u64 = 12_289;
     const SEED: u64 = 0x5353_4c45_0000_0001;
-    let parameters = BfvParameters::try_new(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(T),
         BarrettModulus::new(2_199_023_190_017),
         &[1_125_899_906_826_241_u64, 1_125_899_906_629_633].map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        3.2,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.2,
+        },
     )
     .unwrap();
     let context = BfvContext::try_new(parameters).unwrap();
@@ -38,7 +41,7 @@ fn bench_public_encryption(c: &mut Criterion) {
     let mut output = context.new_ciphertext(0);
 
     encryptor.encrypt_to(&message, &mut output, &mut rng);
-    assert_eq!(client.decrypt(&output, 0), message);
+    assert_eq!(client.decrypt_at_level(&output, 0), message);
 
     let mut group = c.benchmark_group("public_encryption/N1024/u64/rank1");
     group.bench_function("ordinary_coefficients_to", |b| {

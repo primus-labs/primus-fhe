@@ -9,7 +9,9 @@ use crate::{BfvCiphertext, BfvContext, PlaintextEmbedding};
 /// Level zero is the context's complete Q basis; later levels use its ordered
 /// prefixes. The evaluator borrows the unique codec/tables and owns one reusable
 /// plaintext polynomial. No secret, public key or RNG state is retained.
-/// All operations allocate nothing after construction.
+/// All operations allocate nothing after construction. Bound operands must use
+/// this exact local context and level; mismatches are rejected before writes.
+/// Explicit raw operands retain caller-attested representation contracts.
 ///
 /// # Correctness
 /// Ciphertexts must use this level's ordered basis, canonical NTT residues and
@@ -38,16 +40,10 @@ impl<'a> BfvEvaluator<'a> {
         }
     }
 
-    /// Returns the bound level, with zero denoting the complete Q basis.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.level
-    }
-
     /// Writes the component-wise ciphertext sum.
     ///
     /// # Panics
-    /// Every complete input/output length is checked before any output writes.
+    /// Rejects recorded context/level conflicts and incorrect complete lengths before writes.
     pub fn add_to<A, B, C>(
         &self,
         lhs: &BfvCiphertext<A>,
@@ -58,6 +54,9 @@ impl<'a> BfvEvaluator<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (lhs0, lhs1) = lhs.c0_c1(length);
         let (rhs0, rhs1) = rhs.c0_c1(length);
@@ -71,12 +70,14 @@ impl<'a> BfvEvaluator<'a> {
     /// Adds `rhs` to both components of `input` in place.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level conflicts or either incorrect length before writes.
     pub fn add_assign<A, B>(&self, input: &mut BfvCiphertext<A>, rhs: &BfvCiphertext<B>)
     where
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        rhs.check_binding(self.context, self.level);
+        input.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
@@ -89,7 +90,7 @@ impl<'a> BfvEvaluator<'a> {
     /// Writes the component-wise ciphertext difference.
     ///
     /// # Panics
-    /// Every complete input/output length is checked before any output writes.
+    /// Rejects recorded context/level conflicts and incorrect complete lengths before writes.
     pub fn sub_to<A, B, C>(
         &self,
         lhs: &BfvCiphertext<A>,
@@ -100,6 +101,9 @@ impl<'a> BfvEvaluator<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (lhs0, lhs1) = lhs.c0_c1(length);
         let (rhs0, rhs1) = rhs.c0_c1(length);
@@ -113,12 +117,14 @@ impl<'a> BfvEvaluator<'a> {
     /// Subtracts `rhs` from both components of `input` in place.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level conflicts or either incorrect length before writes.
     pub fn sub_assign<A, B>(&self, input: &mut BfvCiphertext<A>, rhs: &BfvCiphertext<B>)
     where
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        rhs.check_binding(self.context, self.level);
+        input.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
@@ -131,12 +137,14 @@ impl<'a> BfvEvaluator<'a> {
     /// Writes the component-wise ciphertext negation.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level conflicts or either incorrect length before writes.
     pub fn neg_to<A, B>(&self, input: &BfvCiphertext<A>, output: &mut BfvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
@@ -149,11 +157,12 @@ impl<'a> BfvEvaluator<'a> {
     /// Negates both ciphertext components in place.
     ///
     /// # Panics
-    /// Rejects an incorrect complete length before writes.
+    /// Rejects recorded context/level conflicts or an incorrect length before writes.
     pub fn neg_assign<A>(&self, input: &mut BfvCiphertext<A>)
     where
         A: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.codec(self.level).base_q().moduli();
@@ -167,8 +176,8 @@ impl<'a> BfvEvaluator<'a> {
     /// Its unsigned/centered lift is selected by `embedding`.
     ///
     /// # Panics
-    /// Complete ciphertext/plaintext lengths and all plaintext values are checked
-    /// before writes to output or scratch. Transform panics can modify scratch.
+    /// Recorded context/level, complete ciphertext/plaintext lengths and all
+    /// plaintext values are checked before writes to output or scratch. Transform panics can modify scratch.
     pub fn add_plain_to<A, B, C>(
         &mut self,
         input: &BfvCiphertext<A>,
@@ -180,6 +189,8 @@ impl<'a> BfvEvaluator<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
@@ -204,6 +215,7 @@ impl<'a> BfvEvaluator<'a> {
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, _) = input.c0_c1_mut(self.plaintext.as_ref().len());
         self.prepare_plaintext(plain, embedding, true);
         input0.add_assign(
@@ -229,10 +241,11 @@ impl<'a> BfvEvaluator<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
-        self.validate_plaintext(plain.as_ref());
         self.prepare_plaintext(plain, embedding, false);
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.codec(self.level).base_q().moduli();
@@ -251,8 +264,8 @@ impl<'a> BfvEvaluator<'a> {
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
-        self.validate_plaintext(plain.as_ref());
         self.prepare_plaintext(plain, embedding, false);
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.codec(self.level).base_q().moduli();
@@ -290,6 +303,7 @@ impl<'a> BfvEvaluator<'a> {
                 embedding,
             );
         } else {
+            self.validate_plaintext(plain.as_ref());
             let t = codec.t();
             let half = t.div_ceil(2);
             for (limb, &q) in self

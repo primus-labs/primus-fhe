@@ -21,7 +21,7 @@ const Q: [u64; 3] = [
 ];
 fn context(count: usize, error: ErrorDistribution) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q[..count]
@@ -191,7 +191,7 @@ fn public_key_and_public_encryption_use_p_scaled_error_and_full_ring_secret() {
             );
         }
     }
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
     let ephemeral_pointer = encryptor.workspace.as_mut_slice().as_ptr();
     let ephemeral_length = encryptor.workspace.as_mut_slice().len();
     encryptor.zeroize();
@@ -208,7 +208,7 @@ fn public_key_and_public_encryption_use_p_scaled_error_and_full_ring_secret() {
             .all(|&value| value == 0)
     );
     encryptor.encrypt_to(&message, &mut ciphertext, &mut rng);
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
 }
 
 #[test]

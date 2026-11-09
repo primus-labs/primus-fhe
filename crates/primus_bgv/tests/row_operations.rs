@@ -1,9 +1,9 @@
 #![cfg(feature = "batching")]
 //! Signed row operations bind an encoder's geometry without changing full-ring secrets.
 
-use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyError, BgvModulusSwitch, BgvParameters,
-};
+use primus_bgv::evaluation::{BgvAutomorphism, BgvModulusSwitch};
+use primus_bgv::keys::BgvEvaluationKeyError;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_encoding::BatchingEncoder;
@@ -21,7 +21,7 @@ const Q: [u64; 3] = [
 
 fn context(n: usize) -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -86,7 +86,7 @@ fn signed_rotations_and_swaps_preserve_full_ring_and_subring_slots_at_each_level
                 BgvAutomorphism::try_new(&context, &key)
                     .unwrap()
                     .apply_to(&input, &mut output);
-                let recovered = client.decrypt(&output, level);
+                let recovered = client.decrypt_at_level(&output, level);
                 let mut small = vec![0; CAPACITY];
                 batching.extract_to(recovered.as_ref(), &mut small);
                 let actual = batching.decode(&small);
@@ -102,7 +102,7 @@ fn signed_rotations_and_swaps_preserve_full_ring_and_subring_slots_at_each_level
             BgvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&input, &mut output);
-            let recovered = client.decrypt(&output, level);
+            let recovered = client.decrypt_at_level(&output, level);
             let mut small = vec![0; CAPACITY];
             batching.extract_to(recovered.as_ref(), &mut small);
             let actual = batching.decode(&small);
@@ -117,7 +117,7 @@ fn signed_rotations_and_swaps_preserve_full_ring_and_subring_slots_at_each_level
 #[test]
 fn row_keys_reject_wrong_plaintext_modulus_and_excess_capacity_before_sampling() {
     let context = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(32),
             BarrettModulus::new(12_289),
             &[1_125_899_426_789_377, 1_125_899_326_117_889].map(BarrettModulus::new),

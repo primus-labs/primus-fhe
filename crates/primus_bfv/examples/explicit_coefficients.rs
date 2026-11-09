@@ -3,10 +3,9 @@
 //! Run: cargo run -p primus_bfv --example explicit_coefficients
 //! This small ring is an API example, not a security parameter preset.
 
-use primus_bfv::{
-    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
-    BfvPublicKeyEncryptor, BfvSecretKeyContext,
-};
+use primus_bfv::advanced::{BfvDecryptWorkspace, BfvSecretKeyContext};
+use primus_bfv::keys::BfvPublicKey;
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters, ErrorDistribution};
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -14,13 +13,15 @@ use primus_shape::PolyLength;
 use zeroize::Zeroize;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let parameters = BfvParameters::try_new(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(32),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
         &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        3.2,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.2,
+        },
     )?;
     let context = BfvContext::try_new(parameters)?;
     let parameters = context.parameters();
@@ -34,9 +35,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
     let client = BfvSecretKeyContext::try_new(&key, &context)?;
     let public = BfvPublicKey::new(&client, &mut rng);
-    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &context)?;
+    let mut encryptor = context.public_key_encryptor(&public)?;
     let mut workspace = BfvDecryptWorkspace::new(parameters);
-    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
     let mut decoded = Polynomial::<Vec<u64>>::zero(parameters.poly_length().get());
 
     for value in [3, 256] {
@@ -56,6 +57,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     workspace.zeroize();
     client.decrypt_to(&ciphertext, &mut decoded, &mut workspace);
     assert!(decoded.as_ref().iter().all(|&value| value == 256));
-    println!("BFV private/public coefficient encryption and workspace reuse verified");
+
+    // This array was produced with the context's actual transform and key.
+    // Checked binding validates storage/canonicality; that provenance remains
+    // our caller contract. The ordinary client then infers the bound level.
+    let ciphertext = context.try_bind_ciphertext(ciphertext, 0)?;
+    let mut owner = BfvClient::try_from_secret_key(&context, key)?;
+    assert_eq!(owner.decrypt(&ciphertext), decoded);
+    println!("BFV raw workspace reuse and checked ordinary recovery verified");
     Ok(())
 }

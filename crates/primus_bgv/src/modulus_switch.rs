@@ -1,18 +1,18 @@
 use primus_data::{Data, DataMut};
 use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_ntt::NttTable;
-use primus_reduce::{Reduce, ReduceInv, ReduceSub, ReduceSubSlice};
+use primus_reduce::{Reduce, ReduceInv, ReduceMul, ReduceSub, ReduceSubSlice};
 
 use crate::{BgvCiphertext, BgvContext};
 
-/// Prepared exact, plaintext-preserving switching to the adjacent BGV level.
+/// Prepared exact switching to the adjacent BGV level with correction tracking.
 ///
 /// Let `q` be the source basis's final prime and `p` the plaintext modulus.
 /// For each native component coefficient this computes
 /// `y = (x - p * center_q(x * p^-1 mod q)) / q mod (Q/q)`.
-/// The numerator is exactly divisible by q. Since q is one modulo p, the
-/// integer quotient has the same plaintext congruence class as x; ordinary
-/// nearest division by q would not preserve it.
+/// The numerator is exactly divisible by q. The plaintext correction becomes
+/// `f*q^-1 mod p`; no factor change occurs in the special q=1 modulo p family.
+/// Ordinary nearest division by q would not preserve this congruence.
 ///
 /// Only the dropped limb is inverse transformed. Retained limbs remain in NTT
 /// form, and the output temporarily stores the transformed p-scaled correction.
@@ -23,6 +23,7 @@ pub struct BgvModulusSwitch<'a> {
     context: &'a BgvContext,
     source_level: usize,
     inverse_plaintext: ShoupFactor<u64>,
+    inverse_prime_mod_plaintext: u64,
     inverse_prime: Vec<ShoupFactor<u64>>,
     plain_factors: Vec<ShoupFactor<u64>>,
     prime_mod_q: Vec<u64>,
@@ -46,6 +47,8 @@ impl<'a> BgvModulusSwitch<'a> {
         let prime = *source.moduli().last().expect("nonempty BGV basis");
         let p = context.parameters().plain_modulus().value();
         let inverse_plaintext = ShoupFactor::new(prime.reduce_inv(p), prime.value());
+        let plaintext = context.parameters().plain_modulus();
+        let inverse_prime_mod_plaintext = plaintext.reduce_inv(plaintext.reduce(prime.value()));
         let prime_mod_q: Vec<_> = target
             .moduli()
             .iter()
@@ -68,6 +71,7 @@ impl<'a> BgvModulusSwitch<'a> {
             context,
             source_level,
             inverse_plaintext,
+            inverse_prime_mod_plaintext,
             inverse_prime,
             plain_factors,
             prime_mod_q,
@@ -78,36 +82,49 @@ impl<'a> BgvModulusSwitch<'a> {
     /// Overwrites a complete adjacent-level ciphertext without allocating.
     ///
     /// Both native components are switched with the same actual secret. If an
-    /// intended integer phase is `z = m + p*e` and `r_i` are the centered
+    /// intended integer phase is `z = lift(f*m) + p*e` and `r_i` are the centered
     /// inverse-p residues of its components, the new phase modulo `Q/q` is
-    /// `z' = (z - p*(r_0 + r_1*s))/q`. Thus
-    /// `e' = e/q - (r_0+r_1*s)/q + (1/q-1)*m/p` is an integer; the last term
-    /// accounts for the chosen message representative. Products with s are
-    /// negacyclic. No additional plaintext correction factor is needed in the
-    /// supported q = 1 modulo p family.
+    /// `z' = (z - p*(r_0 + r_1*s))/q`. Products with s are negacyclic. Its message
+    /// factor is `f*q^-1 mod p`; the decoder removes that factor only after
+    /// centered phase recovery. This metadata does not replace the full phase
+    /// and component-rounding error bound.
     ///
     /// # Correctness
     /// Input and output use this context's source/adjacent ordered bases and
     /// NTT convention, with canonical residues and the same actual secret.
-    /// Length checks cannot establish these identities. The intended new phase
+    /// Local context/level provenance is checked when present; explicit raw
+    /// storage attests it. Neither provenance nor length proves the secret.
+    /// The intended new phase
     /// must lie in the target centered interval for exact BGV recovery; this
     /// operation does not establish an evaluated noise bound. It accepts
     /// ordinary two-component ciphertexts, not unrelinearized quadratic ones.
     ///
     /// # Panics
-    /// Both complete ciphertext lengths are checked before any output or
+    /// Recorded context/level and both complete lengths are checked before output or
     /// scratch writes. A transform panic may leave partially written buffers.
     pub fn switch_to<A, B>(&mut self, input: &BgvCiphertext<A>, output: &mut BgvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.source_level);
+        output.check_binding(self.context, self.source_level + 1);
         let source_len = self.context.rns_poly_len(self.source_level);
         let target_len = self.context.rns_poly_len(self.source_level + 1);
         let (c0, c1) = input.c0_c1(source_len);
         let (mut output_c0, mut output_c1) = output.c0_c1_mut(target_len);
         self.switch_component(c0.as_ref(), output_c0.as_mut());
         self.switch_component(c1.as_ref(), output_c1.as_mut());
+        let factor = input.correction_factor();
+        let factor = if self.inverse_prime_mod_plaintext == 1 {
+            factor
+        } else {
+            self.context
+                .parameters()
+                .plain_modulus()
+                .reduce_mul(factor, self.inverse_prime_mod_plaintext)
+        };
+        output.set_correction_factor(factor);
     }
 
     // The discarded residue alone determines the exact p-constrained remainder.

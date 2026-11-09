@@ -1,8 +1,17 @@
 //! One fresh prepared request; immutable setup and buffer allocation are outside timing.
 use criterion::{Criterion, criterion_group, criterion_main};
-use primus_bfv::*;
+use primus_bfv::evaluation::{
+    BfvLeveledMultiplication, BfvMultiplication, BfvMultiplicationBackend,
+};
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::planning::{BfvLeveledKeyBackend, BfvLeveledParameters};
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
+use primus_glwe_rns::SecretKeyDistr;
+use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
+use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::hint::black_box;
 
@@ -30,12 +39,27 @@ impl Multiplications<'_> {
     }
 }
 fn benchmark(c: &mut Criterion) {
+    let q = [
+        1152921422732787713,
+        1152921409847689217,
+        1152921396962590721,
+        1152921311061934081,
+    ]
+    .map(BarrettModulus::new);
     for backend in [
         BfvLeveledKeyBackend::Radix16,
         BfvLeveledKeyBackend::HybridAlpha1,
     ] {
         for planned in [false, true] {
-            let context = BfvLeveledProfile::N16384Q240.create_context(65537).unwrap();
+            let parameters = BfvParameters::try_coefficients(
+                PolyLength::new(16384),
+                BarrettModulus::new(65537),
+                &q,
+                SecretKeyDistr::SparseTernary,
+                ErrorDistribution::CenteredBinomial { eta: 21 },
+            )
+            .unwrap();
+            let context = BfvContext::try_with_levels(parameters, q.len()).unwrap();
             let plan = BfvLeveledParameters::try_new(&context, 2, backend).unwrap();
             let mut rng = StdRng::seed_from_u64(0x26_2026);
             let mut client = BfvClient::generate(&context, &mut rng);
@@ -99,7 +123,7 @@ fn benchmark(c: &mut Criterion) {
                     encryptor.encrypt_centered_to(&a, &mut ca, &mut rng);
                     encryptor.encrypt_centered_to(&b, &mut cb, &mut rng);
                     operations.apply(&ca, &cb, &mut out);
-                    client.decrypt_to(&out, 0, &mut recovered);
+                    client.decrypt_at_level_to(&out, 0, &mut recovered);
                     assert_eq!(&recovered.as_ref()[..5], &[36, 12, 65526, 65535, 1]);
                     assert!(recovered.as_ref()[5..].iter().all(|&x| x == 0));
                     black_box(&out);

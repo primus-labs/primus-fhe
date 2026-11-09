@@ -1,10 +1,10 @@
 //! Public evaluation-key binding and pre-write rejection boundaries.
 
 use dashu_int::IBig;
-use primus_bfv::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvKeySwitcher, BfvParameters,
-    BfvQuadraticCiphertext, BfvRelinearizer,
-};
+use primus_bfv::advanced::BfvQuadraticCiphertext;
+use primus_bfv::evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvRelinearizer};
+use primus_bfv::keys::BfvEvaluationKeyError;
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -23,10 +23,9 @@ const Q: [u64; 3] = [
 
 fn make_context(p: u64, moduli: &[u64], n: usize) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(p),
-            BarrettModulus::new((1 << 61) - 1),
             &moduli
                 .iter()
                 .copied()
@@ -99,13 +98,13 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         let relin = client.relinearization_key(level, config, &mut rng).unwrap();
         let auto = client.automorphism_key(level, 5, config, &mut rng).unwrap();
         assert!(
-            matches!(BfvKeySwitcher::try_new(&limited, &switch), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+            matches!(BfvKeySwitcher::try_new(&limited, &switch), Err(BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
         );
         assert!(
-            matches!(BfvRelinearizer::try_new(&limited, &relin), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+            matches!(BfvRelinearizer::try_new(&limited, &relin), Err(BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
         );
         assert!(
-            matches!(BfvAutomorphism::try_new(&limited, &auto), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+            matches!(BfvAutomorphism::try_new(&limited, &auto), Err(BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
         );
     }
     for exponent in [0, 2, 2 * N, usize::MAX] {
@@ -120,16 +119,16 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
     let mut auto = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
     let length = context.rns_poly_len(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
-        let input = BfvCiphertext::new(vec![0; bad_length]);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BfvCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
     for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
-        let input = BfvQuadraticCiphertext::new(vec![0; bad_length]);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BfvQuadraticCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(
             catch_unwind(AssertUnwindSafe(
                 || relin.relinearize_to(&input, &mut output)
@@ -139,9 +138,9 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
     let input = context.new_ciphertext(0);
-    let quadratic = BfvQuadraticCiphertext::zero(3 * length);
+    let quadratic = BfvQuadraticCiphertext::zero_raw(3 * length);
     for bad_length in [0, 2 * length - 1, 2 * length + 1] {
-        let mut output = BfvCiphertext::new(vec![0xfeed; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; bad_length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());

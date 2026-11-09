@@ -11,7 +11,9 @@ use zeroize::Zeroizing;
 use primus_decompose::DecompositionConfig;
 use primus_factor::{FactorMul, ShoupFactor};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{NttError, NttTable, U64DcrtTable};
+use primus_ntt::{
+    NttError, NttTable, U64DcrtTable, U64NttPrimeBasisError, validate_u64_ntt_primes,
+};
 use primus_reduce::{Reduce, ReduceAdd, ReduceInv, ReduceMul, ReduceSub};
 use primus_rns::{
     CenteredBaseConverter, CenteredConversionWorkspace, HybridRNS, HybridRNSPartitioning, RNSBase,
@@ -63,12 +65,9 @@ pub enum NativeHybridError {
     /// A complete array length cannot be represented.
     #[error("native Hybrid storage length overflow")]
     LengthOverflow,
-    /// A modulus is outside the optimized NTT range or lacks the ring root.
-    #[error("invalid native Hybrid modulus {modulus}")]
-    Modulus {
-        /// Supplied modulus.
-        modulus: u64,
-    },
+    /// Q or P fails native NTT prime validation.
+    #[error(transparent)]
+    PrimeBasis(#[from] U64NttPrimeBasisError),
     /// Actual Q NTT tables do not match the prepared ring and ordered prefix.
     #[error("native Hybrid Q NTT table mismatch")]
     TableMismatch,
@@ -100,17 +99,41 @@ pub enum NativeHybridError {
     Transform(#[from] NttError<u64>),
 }
 
-/// Immutable QP basis and P NTT resources for one actual active Q level.
+/// Immutable auxiliary P basis and transforms shared by active Q levels.
+pub struct NativeHybridAuxiliary {
+    base: Base,
+    table: U64DcrtTable,
+}
+
+impl NativeHybridAuxiliary {
+    /// Prepares P once for several active Q levels in the same ring.
+    ///
+    /// # Errors
+    /// Rejects invalid NTT prime bases or unsupported transforms.
+    pub fn try_new(
+        poly_length: PolyLength,
+        auxiliary_moduli: &[u64],
+    ) -> Result<Self, NativeHybridError> {
+        validate_u64_ntt_primes(poly_length, auxiliary_moduli)?;
+        Self::from_base(poly_length, auxiliary_base(auxiliary_moduli)?)
+    }
+
+    fn from_base(poly_length: PolyLength, base: Base) -> Result<Self, NativeHybridError> {
+        let table = U64DcrtTable::new(poly_length, base.moduli())?;
+        Ok(Self { base, table })
+    }
+}
+
+/// Immutable QP basis and arithmetic for one actual active Q level.
 ///
 /// The Q base shares its existing CRT allocation; Q NTT tables stay with the
-/// scheme context and are borrowed by operations. Only P tables are constructed
-/// here. Different role keys can share this owner through [`Arc`].
+/// scheme context and are borrowed by operations. Different levels can share
+/// their P basis and tables, and role keys can share this owner through [`Arc`].
 /// No size relation P>Q or P>partition-product is imposed: callers budget the
 /// true digit and key errors for their selected P.
 pub struct NativeHybridParameters {
-    poly_length: PolyLength,
     hybrid: HybridRNS<u64, BarrettModulus<u64>>,
-    table_p: U64DcrtTable,
+    auxiliary: Arc<NativeHybridAuxiliary>,
     p_to_q: CenteredBaseConverter,
     weights: Vec<u64>,
     q_len: usize,
@@ -122,9 +145,8 @@ impl NativeHybridParameters {
     /// Prepares one active prefix using fixed full-chain partition geometry.
     ///
     /// Explicit auxiliary primes are computation/key moduli, distinct from
-    /// multiplication-only auxiliary bases. They must be actual NTT primes;
-    /// finding roots is not a primality certificate. No security or noise bound
-    /// follows from successful construction.
+    /// multiplication-only auxiliary bases. Both bases must contain actual NTT
+    /// primes. Successful construction establishes numerical compatibility.
     ///
     /// # Errors
     /// Rejects invalid moduli/partitions, noncoprime bases, unsupported transforms
@@ -136,23 +158,42 @@ impl NativeHybridParameters {
         auxiliary_moduli: &[u64],
         decomposition_count: usize,
     ) -> Result<Self, NativeHybridError> {
-        let n = poly_length.get();
-        let two_n = n.checked_mul(2).ok_or(NativeHybridError::LengthOverflow)?;
-        for &modulus in base_q.moduli_values().iter().chain(auxiliary_moduli) {
-            if !(3..(1 << 62)).contains(&modulus) || modulus % two_n as u64 != 1 {
-                return Err(NativeHybridError::Modulus { modulus });
-            }
-        }
+        validate_u64_ntt_primes(poly_length, base_q.moduli_values())?;
+        validate_u64_ntt_primes(poly_length, auxiliary_moduli)?;
         let partitioning = HybridRNSPartitioning::new(full_q_moduli_count, decomposition_count)?;
-        let moduli_p: Vec<_> = auxiliary_moduli
-            .iter()
-            .copied()
-            .map(BarrettModulus::new)
-            .collect();
-        let base_p = Base::new(&moduli_p)?;
+        let base_p = auxiliary_base(auxiliary_moduli)?;
         let hybrid = HybridRNS::from_bases(base_q, &base_p, partitioning)?;
+        let auxiliary = Arc::new(NativeHybridAuxiliary::from_base(poly_length, base_p)?);
+        Self::from_hybrid(hybrid, auxiliary)
+    }
+
+    /// Prepares an active Q prefix using an existing P basis and transforms.
+    ///
+    /// The ring length comes from the prepared auxiliary resources. The active
+    /// Q basis must be the actual ordered prefix of the full chain.
+    ///
+    /// # Errors
+    /// Rejects invalid Q moduli, incompatible Q/P bases or partitions, and
+    /// overflowing complete storage geometry.
+    pub fn try_with_auxiliary(
+        base_q: &Base,
+        full_q_moduli_count: usize,
+        auxiliary: Arc<NativeHybridAuxiliary>,
+        decomposition_count: usize,
+    ) -> Result<Self, NativeHybridError> {
+        validate_u64_ntt_primes(auxiliary.table.poly_length(), base_q.moduli_values())?;
+        let partitioning = HybridRNSPartitioning::new(full_q_moduli_count, decomposition_count)?;
+        let hybrid = HybridRNS::from_bases(base_q, &auxiliary.base, partitioning)?;
+        Self::from_hybrid(hybrid, auxiliary)
+    }
+
+    fn from_hybrid(
+        hybrid: HybridRNS<u64, BarrettModulus<u64>>,
+        auxiliary: Arc<NativeHybridAuxiliary>,
+    ) -> Result<Self, NativeHybridError> {
+        let n = auxiliary.table.poly_length().get();
         let q_len = n
-            .checked_mul(base_q.moduli_count())
+            .checked_mul(hybrid.q_moduli_count())
             .ok_or(NativeHybridError::LengthOverflow)?;
         let qp_len = n
             .checked_mul(hybrid.qp_moduli_count())
@@ -175,8 +216,7 @@ impl NativeHybridParameters {
             }
         }
         Ok(Self {
-            poly_length,
-            table_p: U64DcrtTable::new(poly_length, base_p.moduli())?,
+            auxiliary,
             p_to_q: CenteredBaseConverter::try_from_converter(hybrid.mod_down_converter().clone())?,
             hybrid,
             weights,
@@ -188,17 +228,22 @@ impl NativeHybridParameters {
     /// Returns this full ciphertext ring length.
     #[must_use]
     pub fn poly_length(&self) -> PolyLength {
-        self.poly_length
+        self.auxiliary.table.poly_length()
     }
     /// Borrows the actual Q/P bases and fixed partition geometry.
     #[must_use]
     pub fn hybrid_rns(&self) -> &HybridRNS<u64, BarrettModulus<u64>> {
         &self.hybrid
     }
-    /// Borrows the owned auxiliary P NTT tables.
+    /// Borrows the shared auxiliary P basis and transforms.
+    #[must_use]
+    pub fn auxiliary(&self) -> &Arc<NativeHybridAuxiliary> {
+        &self.auxiliary
+    }
+    /// Borrows the auxiliary P NTT tables.
     #[must_use]
     pub fn table_p(&self) -> &U64DcrtTable {
-        &self.table_p
+        &self.auxiliary.table
     }
     /// Returns one Q polynomial's complete length.
     #[must_use]
@@ -243,7 +288,7 @@ impl NativeHybridParameters {
     /// # Errors
     /// Returns an error for a different ring, too few tables or a modulus mismatch.
     pub fn validate_table(&self, table_q: &U64DcrtTable) -> Result<(), NativeHybridError> {
-        if table_q.poly_length() != self.poly_length
+        if table_q.poly_length() != self.poly_length()
             || table_q.moduli_count() < self.hybrid.q_moduli_count()
         {
             return Err(NativeHybridError::TableMismatch);
@@ -324,7 +369,7 @@ impl NativeHybridParameters {
         source_table: &U64DcrtTable,
         bound: u64,
     ) -> Result<Zeroizing<Vec<u64>>, NativeHybridError> {
-        let n = self.poly_length.get();
+        let n = self.poly_length().get();
         self.validate_table(source_table)?;
         let count = source_base.moduli_count();
         if count != source_table.moduli_count()
@@ -420,7 +465,7 @@ impl NativeHybridParameters {
         let mut output = Zeroizing::new(vec![0u64; self.qp_len]);
         output[..self.q_len].copy_from_slice(&source_ntt[..self.q_len]);
         for ((table, q), limb) in self
-            .table_p
+            .table_p()
             .iter()
             .zip(self.hybrid.p_base().moduli())
             .zip(output[self.q_len..].chunks_exact_mut(n))
@@ -431,20 +476,19 @@ impl NativeHybridParameters {
         Ok(output)
     }
     fn transform_qp_kernel(&self, table_q: &U64DcrtTable, polynomial: &mut [u64], inverse: bool) {
-        let n = self.poly_length.get();
-        for (table, values) in table_q
-            .iter()
-            .take(self.hybrid.q_moduli_count())
-            .chain(self.table_p.iter())
-            .zip(polynomial.chunks_exact_mut(n))
-        {
-            if inverse {
-                table.inverse_transform_slice(values)
-            } else {
-                table.transform_slice(values)
-            }
+        let (q, p) = polynomial.split_at_mut(self.q_len);
+        if inverse {
+            table_q.inverse_transform_prefix_slice(q);
+            self.table_p().inverse_transform_prefix_slice(p);
+        } else {
+            table_q.transform_prefix_slice(q);
+            self.table_p().transform_prefix_slice(p);
         }
     }
+}
+
+fn auxiliary_base(moduli: &[u64]) -> Result<Base, RnsError> {
+    Base::from_owned_moduli(moduli.iter().copied().map(BarrettModulus::new).collect())
 }
 
 /// One native two-component Hybrid gadget-product request and its scratch.
@@ -460,11 +504,12 @@ pub struct NativeHybridProduct<'a> {
     t_inv_p: Vec<ShoupFactor<u64>>,
     t_mod_q: Vec<ShoupFactor<u64>>,
     p_inv_q: Vec<ShoupFactor<u64>>,
-    q_coefficients: Vec<u64>,
+    // Partition ModUp reads Q coefficients before ModDown overwrites this
+    // complete buffer with each component's P-to-Q correction.
+    q_scratch: Vec<u64>,
     accumulator: Vec<u64>,
     mod_up_limb: Vec<u64>,
     mod_up_scratch: Vec<u64>,
-    correction_q: Vec<u64>,
     conversion: CenteredConversionWorkspace,
 }
 impl<'a> NativeHybridProduct<'a> {
@@ -512,17 +557,16 @@ impl<'a> NativeHybridProduct<'a> {
             t_inv_p,
             t_mod_q,
             p_inv_q,
-            q_coefficients: vec![0; parameters.q_len],
+            q_scratch: vec![0; parameters.q_len],
             accumulator: vec![0; 2 * parameters.qp_len],
-            mod_up_limb: vec![0; parameters.poly_length.get()],
+            mod_up_limb: vec![0; parameters.poly_length().get()],
             mod_up_scratch: vec![
                 0;
                 parameters
                     .hybrid
-                    .max_mod_up_scratch_len(parameters.poly_length.get())
+                    .max_mod_up_scratch_len(parameters.poly_length().get())
             ],
-            correction_q: vec![0; parameters.q_len],
-            conversion: parameters.p_to_q.workspace(parameters.poly_length.get()),
+            conversion: parameters.p_to_q.workspace(parameters.poly_length().get()),
         })
     }
     /// Writes a complete native `[c0,c1]` gadget product in Q NTT representation.
@@ -539,14 +583,11 @@ impl<'a> NativeHybridProduct<'a> {
         assert_eq!(input.len(), p.q_len);
         assert_eq!(columns.len(), p.key_len);
         assert_eq!(output.len(), 2 * p.q_len);
-        let n = p.poly_length.get();
-        self.q_coefficients.copy_from_slice(input);
+        let n = p.poly_length().get();
+        let table_p = p.table_p();
+        self.q_scratch.copy_from_slice(input);
         self.accumulator.fill(0);
-        for (table, values) in self
-            .table_q
-            .iter()
-            .zip(self.q_coefficients.chunks_exact_mut(n))
-        {
+        for (table, values) in self.table_q.iter().zip(self.q_scratch.chunks_exact_mut(n)) {
             table.inverse_transform_slice(values)
         }
         for (partition, column) in p
@@ -566,7 +607,7 @@ impl<'a> NativeHybridProduct<'a> {
             }
             let scratch_len = partition.mod_up_scratch_len(n);
             partition.for_each_approx_mod_up_complement_limb(
-                &self.q_coefficients,
+                &self.q_scratch,
                 &mut self.mod_up_limb,
                 n,
                 &mut self.mod_up_scratch[..scratch_len],
@@ -574,7 +615,7 @@ impl<'a> NativeHybridProduct<'a> {
                     let table = if index < p.hybrid.q_moduli_count() {
                         &self.table_q.ntt_tables()[index]
                     } else {
-                        &p.table_p.ntt_tables()[index - p.hybrid.q_moduli_count()]
+                        &table_p.ntt_tables()[index - p.hybrid.q_moduli_count()]
                     };
                     table.transform_slice(limb);
                     add_limb(
@@ -594,8 +635,7 @@ impl<'a> NativeHybridProduct<'a> {
             .zip(output.chunks_exact_mut(p.q_len))
         {
             let (acc_q, acc_p) = accumulator.split_at_mut(p.q_len);
-            for ((table, limb), factor) in p
-                .table_p
+            for ((table, limb), factor) in table_p
                 .iter()
                 .zip(acc_p.chunks_exact_mut(n))
                 .zip(&self.t_inv_p)
@@ -608,11 +648,11 @@ impl<'a> NativeHybridProduct<'a> {
                 }
             }
             p.p_to_q
-                .convert_to(acc_p, &mut self.correction_q, n, &mut self.conversion);
+                .convert_to(acc_p, &mut self.q_scratch, n, &mut self.conversion);
             for (index, ((((table, correction), acc), out), (scale, inverse))) in self
                 .table_q
                 .iter()
-                .zip(self.correction_q.chunks_exact_mut(n))
+                .zip(self.q_scratch.chunks_exact_mut(n))
                 .zip(acc_q.chunks_exact(n))
                 .zip(output.chunks_exact_mut(n))
                 .zip(self.t_mod_q.iter().zip(&self.p_inv_q))

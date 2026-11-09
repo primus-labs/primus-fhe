@@ -7,8 +7,11 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use primus_bfv::{BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvKeySwitcher, BfvParameters};
+use primus_bfv::evaluation::BfvKeySwitcher;
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
@@ -19,13 +22,15 @@ fn bench_key_switching(c: &mut Criterion) {
     const T: u64 = 2;
     const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
     const P: [u64; 2] = [1_125_899_906_031_617, 1_125_899_904_679_937];
-    let parameters = BfvParameters::try_new(
+    let parameters = BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(T),
         BarrettModulus::new(2_305_843_009_213_554_689),
         &Q.map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        3.2,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 3.2,
+        },
     )
     .unwrap();
     let context = BfvContext::try_new(parameters).unwrap();
@@ -65,7 +70,7 @@ fn bench_key_switching(c: &mut Criterion) {
         let key = bob.key_switching_key(&alice, 0, config, &mut rng).unwrap();
         let mut switcher = BfvKeySwitcher::try_new(&context, &key).unwrap();
         switcher.switch_to(&input, &mut output);
-        bob.decrypt_to(&output, 0, &mut recovered);
+        bob.decrypt_at_level_to(&output, 0, &mut recovered);
         assert_eq!(recovered, message);
 
         group.bench_function(label, |b| {

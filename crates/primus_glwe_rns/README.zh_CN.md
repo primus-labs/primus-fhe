@@ -36,7 +36,7 @@ cargo run -p primus_glwe_rns --example gadget_encryption
 
 ## 公钥加密与预分配资源
 
-生成一次 `DcrtGlwePublicKey`，再准备
+用已检查的私钥绑定 `secret.public_key(&mut rng)` 生成 `DcrtGlwePublicKey`，再准备
 `public.try_bind_raw(&sampling,&base,&table)`。可变 encryptor 借用公钥并拥有一份
 ephemeral workspace，通过同一组 `_to` 方法复用调用方输出。Encoded CRT 输入在
 component 原有的一次 NTT 前加入系数噪声，不增加缩放或变换。
@@ -117,10 +117,29 @@ Reverse trace 是**模 Q 除2**，不是舍入或 modulus switch；后续 switch
 并行展开使用正的 `worker_count` scratch 预算和调用方 Rayon pool，不创建内部pool。
 预算不必等于线程数；写入前检查完整输入/输出 geometry。
 
+## 普通 RLWE 参数准备
+
+`rlwe_parameters` 提供冷构造时的自选 u64 素数验证和有界 NTT 素数搜索，
+可额外要求 `q ≡ 1 (mod t)`。验证不同素数、`q < 2^62` 和 `2N | q-1`；
+明文条件和误差预算仍由 BFV/BGV 负责。
+
+`security_input` 为外部审查记录每个实际含秘密的 Q 或 Hybrid QP 域、精确乘积
+及真实采样分布。它直接借用已准备的 rank-one 采样参数，不将分布字段拆开后重建
+Gaussian 表。报告的 basis 可异于原采样 basis；该诊断不建立 context/key 绑定。
+结果始终为 `NotEvaluated`：该函数不运行安全估算器，
+也没有证明所请求的128位目标。BFV 计算用 tensor/HPS 素数不计入密钥曝光。
+保留的顶层 Q 公开材料和各 working-basis 密钥需要分别列出；drop 不会撤销已有
+曝光。环行的独立性、联合材料和 circular/KDM 假设仍需审查。
+
 ## Feature 与进一步阅读
 
 默认 features 为空；已启用所需 RNS 依赖，无需另设 `rns` 开关。`simd` 转发 nightly
 SIMD feature。Runtime NTT intrinsic dispatch 独立于此 flag，关闭它不表示强制 scalar NTT。
+
+`parallel` 启用共享 GLev/Hybrid 路径中的有界 DCRT prefix 正逆 NTT 调度。每次
+prefix 的 N≥4096 且至少两条 limb 时使用至多4个连续任务；总线程数须由
+`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 路径保持串行
+且不初始化 pool；随机采样不并行。
 
 [公开 API 源码](src/lib.rs) · [库使用导航](../../guides/development/README.zh_CN.md)
 · [测试与 feature 边界](../../guides/development/testing.md)

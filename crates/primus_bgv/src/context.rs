@@ -1,7 +1,8 @@
-use crate::{
-    BgvCiphertext, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError,
-    BgvQuadraticCiphertext,
-};
+use crate::correction::is_unit;
+use crate::keys::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
+use crate::quadratic::BgvQuadraticCiphertext;
+use crate::{BgvCiphertext, BgvCiphertextBindingError, BgvParameters};
+use primus_data::Data;
 use primus_glwe_rns::RnsDomainError;
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
@@ -39,6 +40,8 @@ struct LowerLevel {
 /// One immutable owner of full-ring BGV parameters and a shared DCRT NTT table.
 /// Clients, evaluators and public encryptors borrow this owner without cloning.
 pub struct BgvContext {
+    identity: Arc<()>,
+    pub(crate) public_descriptor: std::sync::OnceLock<Vec<u8>>,
     parameters: BgvParameters,
     table: Arc<U64DcrtTable>,
     lower_levels: Vec<LowerLevel>,
@@ -125,10 +128,16 @@ impl BgvContext {
             });
         }
         Self {
+            identity: Arc::new(()),
+            public_descriptor: std::sync::OnceLock::new(),
             parameters,
             table,
             lower_levels,
         }
+    }
+
+    pub(crate) fn identity(&self) -> &Arc<()> {
+        &self.identity
     }
 
     /// Borrows the unique parameters and sampler state.
@@ -147,36 +156,6 @@ impl BgvContext {
     #[must_use]
     pub fn shared_table(&self) -> Arc<U64DcrtTable> {
         Arc::clone(&self.table)
-    }
-
-    /// Prepares one native Hybrid key domain using this context's actual prefix.
-    ///
-    /// The auxiliary QP basis is for evaluation keys, not ciphertext encryption.
-    /// Construction establishes arithmetic geometry, not a security or noise budget.
-    /// # Correctness
-    /// Auxiliary moduli must be actual NTT primes; transform preparation does not
-    /// certify primality. See [`primus_lattice::hybrid::NativeHybridParameters::try_new`].
-    /// # Errors
-    /// Rejects an unprepared level or invalid Hybrid bases/partition/transforms.
-    pub fn hybrid_key_parameters(
-        &self,
-        level: usize,
-        decomposition_count: usize,
-        auxiliary_moduli: &[u64],
-    ) -> Result<
-        std::sync::Arc<primus_lattice::hybrid::NativeHybridParameters>,
-        crate::BgvEvaluationKeyError,
-    > {
-        super::evaluation_key::validate_level(self, level)?;
-        Ok(std::sync::Arc::new(
-            primus_lattice::hybrid::NativeHybridParameters::try_new(
-                self.parameters().poly_length(),
-                self.base_q(level),
-                self.parameters().base_q().moduli_count(),
-                auxiliary_moduli,
-                decomposition_count,
-            )?,
-        ))
     }
 
     /// Returns the number of prepared levels, including level zero.
@@ -241,7 +220,118 @@ impl BgvContext {
     /// Rejects an unprepared level.
     #[must_use]
     pub fn new_ciphertext(&self, level: usize) -> BgvCiphertext<Vec<u64>> {
-        BgvCiphertext::zero(2 * self.rns_poly_len(level))
+        BgvCiphertext::from_bound(vec![0; 2 * self.rns_poly_len(level)], self, level)
+    }
+
+    /// Imports canonical native storage with its declared plaintext correction.
+    ///
+    /// `correction_factor` must be a canonical unit modulo p. The caller declares
+    /// that the centered phase encodes `correction_factor*m` modulo p under this
+    /// context's actual secret and NTT convention. Validating public residues
+    /// and this scalar does not prove that semantic or secret relationship.
+    ///
+    /// # Errors
+    /// Rejects a noncanonical/noninvertible factor, an unavailable level,
+    /// incorrect complete geometry or noncanonical native residues.
+    pub fn try_import_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        data: C,
+        level: usize,
+        correction_factor: u64,
+    ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
+        let mut ciphertext = BgvCiphertext::from_raw(data);
+        ciphertext.set_correction_factor(correction_factor);
+        self.try_bind_ciphertext(ciphertext, level)
+    }
+
+    /// Consumes complete native storage and binds it to this context and level.
+    ///
+    /// Existing context/level provenance must match; this never retags a foreign
+    /// bound object. Checks the factor and public residues without copying or
+    /// allocating storage. Raw input asserts this context's actual NTT order
+    /// and intended secret.
+    ///
+    /// # Errors
+    /// Rejects an unavailable level, conflicting provenance, wrong complete
+    /// geometry, nonunit factor or first noncanonical residue before binding.
+    pub fn try_bind_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        mut ciphertext: BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
+        self.validate_canonical_ciphertext(&ciphertext, level)?;
+        ciphertext.bind_context(self, level);
+        Ok(ciphertext)
+    }
+
+    pub(crate) fn validate_correction_factor(
+        &self,
+        factor: u64,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        let plaintext_modulus = self.parameters.plain_modulus().value();
+        if !is_unit(factor, plaintext_modulus) {
+            return Err(BgvCiphertextBindingError::CorrectionFactor {
+                factor,
+                plaintext_modulus,
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_canonical_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        ciphertext: &BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        self.check_ciphertext(ciphertext, level)?;
+        self.validate_correction_factor(ciphertext.correction_factor())?;
+        let n = self.parameters().poly_length().get();
+        let qs = self.base_q(level).moduli_values();
+        for (limb_index, (limb, &modulus)) in ciphertext
+            .as_ref()
+            .chunks_exact(n)
+            .zip(qs.iter().cycle())
+            .enumerate()
+        {
+            for (offset, &value) in limb.iter().enumerate() {
+                if value >= modulus {
+                    return Err(BgvCiphertextBindingError::NonCanonical {
+                        index: limb_index * n + offset,
+                        value,
+                        modulus,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks complete geometry and any recorded context/level without scanning residues.
+    ///
+    /// Raw storage explicitly attests this context, level, NTT convention and
+    /// intended secret; this check does not establish those raw properties.
+    /// Canonical residues remain an arithmetic caller contract, or can be
+    /// checked once with [`Self::try_bind_ciphertext`].
+    /// # Errors
+    /// Rejects an unavailable level, foreign recorded provenance or wrong full length.
+    pub fn check_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        ciphertext: &BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        if level >= self.level_count() {
+            return Err(BgvCiphertextBindingError::Level {
+                requested: level,
+                available: self.level_count(),
+            });
+        }
+        ciphertext.validate_binding(self, level)?;
+        let expected = 2 * self.rns_poly_len(level);
+        let actual = ciphertext.as_ref().len();
+        if actual != expected {
+            return Err(BgvCiphertextBindingError::Length { expected, actual });
+        }
+        Ok(())
     }
 
     /// Allocates a degree-two tensor output with phase `c0+c1*s+c2*s²`.
@@ -250,10 +340,15 @@ impl BgvContext {
     /// Rejects an unprepared level or overflowing storage length.
     #[must_use]
     pub fn new_quadratic_ciphertext(&self, level: usize) -> BgvQuadraticCiphertext<Vec<u64>> {
-        BgvQuadraticCiphertext::zero(
-            self.rns_poly_len(level)
-                .checked_mul(3)
-                .expect("BGV quadratic length overflow"),
+        BgvQuadraticCiphertext::from_bound(
+            vec![
+                0;
+                self.rns_poly_len(level)
+                    .checked_mul(3)
+                    .expect("BGV quadratic length overflow")
+            ],
+            self,
+            level,
         )
     }
 

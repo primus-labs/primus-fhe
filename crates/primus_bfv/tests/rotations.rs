@@ -1,9 +1,10 @@
 #![cfg(feature = "batching")]
 
-use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluationKeyError, BfvModulusSwitch, BfvParameters,
-};
+use primus_bfv::evaluation::{BfvAutomorphism, BfvModulusSwitch};
+use primus_bfv::keys::BfvEvaluationKeyError;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -17,7 +18,9 @@ fn context(n: usize, p: u64) -> BfvContext {
             BarrettModulus::new(p),
             &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         2,
@@ -66,7 +69,7 @@ fn signed_row_keys_preserve_full_ring_and_subring_slot_maps_at_each_level() {
                 BfvAutomorphism::try_new(&context, &key)
                     .unwrap()
                     .apply_to(&input, &mut output);
-                let recovered = client.decrypt(&output, level);
+                let recovered = client.decrypt_at_level(&output, level);
                 encoder.extract_to(recovered.as_ref(), &mut small);
                 let actual = encoder.decode(&small);
                 let shift = steps.rem_euclid(half as isize) as usize;
@@ -84,7 +87,7 @@ fn signed_row_keys_preserve_full_ring_and_subring_slot_maps_at_each_level() {
             BfvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&input, &mut output);
-            encoder.extract_to(client.decrypt(&output, level).as_ref(), &mut small);
+            encoder.extract_to(client.decrypt_at_level(&output, level).as_ref(), &mut small);
             let expected: Vec<_> = (0..capacity)
                 .map(|i| values[(i + half) % capacity])
                 .collect();

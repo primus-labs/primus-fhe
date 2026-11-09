@@ -1,8 +1,10 @@
 //! Basic BFV slots: public encryption, plaintext addition/multiplication and recovery.
 //! Run: cargo run -p primus_bfv --example slots --features batching
 
-use primus_bfv::{BfvClient, BfvContext, BfvEvaluator, BfvParameters, PlaintextEmbedding};
-use primus_glwe_rns::SecretKeyDistr;
+use primus_bfv::evaluation::BfvEvaluator;
+use primus_bfv::{
+    BfvClient, BfvContext, BfvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
+};
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -23,7 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BarrettModulus::new(P),
         &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )?)?;
     let batching = context.batching_encoder()?;
     let mut rng = StdRng::seed_from_u64(0x12bf_5107);
@@ -60,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut product,
             PlaintextEmbedding::Centered,
         );
-        let slots = batching.decode(client.decrypt(&product, 0).as_ref());
+        let slots = batching.decode(client.decrypt(&product).as_ref());
         for (&actual, &value) in slots.iter().zip(&values) {
             assert_eq!(actual, scalar * (value + 1) % P);
         }

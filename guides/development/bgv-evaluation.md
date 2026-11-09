@@ -3,15 +3,31 @@
 [Library guide](README.md) · [BGV workflow](../../crates/primus_bgv/README.md)
 · [Representation boundaries](rns-phase-conventions.md)
 
-The fixed-u64 rank-one backend uses `R_Q=Z_Q[X]/(X^N+1)`, native `[c0,c1]`,
-and phase `c0+c1*s=lift(m)+p*e`. Every q_i is 1 modulo p. Equations below are
-negacyclic polynomial identities; evaluating them in one agreed NTT convention
-does not change their signs. Actual secret identity, canonical ciphertext
-residues and transform identity remain caller contracts after numerical checks.
+The fixed-u64 rank-one backend uses `R_Q=Z_Q[X]/(X^N+1)` and native `[c0,c1]`,
+with phase `c0+c1*s` modulo Q. Its intended integer representative is
+`z=lift(f*m mod p)+p*e`, where f is a canonical unit modulo p. Every q_i is
+coprime to p; q_i need not be 1 modulo p. Recovery requires this intended z to
+lie in `(-Q/2,Q/2)`, so centering the native phase recovers z. It then reduces
+z modulo p and multiplies by `f^-1 mod p`.
+
+Fresh ciphertexts have f=1. The factor follows each ciphertext's operation
+history, not just its level: tensor multiplication multiplies the factors,
+while relinearization, key switching, automorphisms and plaintext multiplication
+preserve them. Addition/subtraction at one level uses public centered scalars
+a,b satisfying `a*f_left=b*f_right mod p`, then combines the scaled components
+and records this common factor. Plaintext addition lifts `f*plaintext mod p`.
+These scalars and lifts contribute to the full integer-phase bound below.
+
+Equations below are negacyclic polynomial identities; evaluating them in one
+agreed NTT convention does not change their signs. Actual secret identity,
+canonical ciphertext residues, the declared factor and transform identity
+remain caller contracts after numerical checks. See the
+[BGV workflow](../../crates/primus_bgv/README.md#levels-slots-and-numerical-contracts)
+and [`BgvCiphertext` contract](../../crates/primus_bgv/src/ciphertext.rs).
 
 ## Tensor and degree lifecycle
 
-Ordinary requests prepare `BgvMultiplication::try_new(context,&relinearization_key)`.
+Ordinary requests prepare `evaluation::BgvMultiplication::try_new(context,&relinearization_key)`.
 The operation derives the actual level from the key and owns reusable quadratic
 and relinearization scratch. `multiply_to` and `square_to` write ordinary
 degree-one ciphertexts; `square_assign` overwrites one input after its tensor
@@ -20,13 +36,13 @@ not require the caller to manage an intermediate degree-two buffer. Public and
 private encryptors also provide allocating `encrypt`/`encrypt_centered` methods;
 prepared `*_to` entries retain explicit output reuse.
 
-The advanced split lifecycle remains available for callers that need its actual
-unscaled quadratic intermediate:
-
-`BgvEvaluator::mul_to` writes `[c0*d0,c0*d1+c1*d0,c1*d1]`; `square_to` uses
-`[c0²,2*c0*c1,c1²]`. Their phase is the product of the input phases. This is
-ordinary multiplication in R_Q, with no BFV scale-and-round. If integer message
-lifts satisfy `u*v=m_out+p*k`, the intended product error is
+For explicit quadratic output, `advanced::tensor_to` writes
+`[c0*d0,c0*d1+c1*d0,c1*d1]` and `advanced::square_to` writes
+`[c0²,2*c0*c1,c1²]`. Neither needs plaintext scratch. Their phase is the
+product of the input phases. This is
+ordinary multiplication in R_Q, with no BFV scale-and-round. If the actual
+factor-encoded integer message lifts satisfy `u*v=lift(f_out*m_out mod p)+p*k`,
+where `f_out=f_left*f_right mod p`, the intended product error is
 `k+u*e_v+v*e_u+p*e_u*e_v`. Message carry belongs in the noise analysis.
 
 `BgvQuadraticCiphertext` represents `t0+t1*s+t2*s²`, not two independent secrets.
@@ -81,15 +97,20 @@ instead gives the p-preserving residual identity.
 not necessarily zero residual. Q's bit width need not be divisible by log_basis.
 Each key privately owns its actual basis and columns. Radix Q/weights/drop bits
 change at lower levels. The API binds keys to their actual level; slicing a
-matrix is not a supported constructor for a new radix or Hybrid key. The distinct role types prevent passing
-a key with the wrong semantic role; binding checks N,p,ordered Q and level index.
-Those checks cannot authenticate same-parameter actual secrets or NTT conventions.
+matrix is not a supported constructor for a new radix or Hybrid key. The distinct
+role types prevent passing a key with the wrong semantic role; binding checks its
+local context, N,p,ordered Q and level index. That relation does not authenticate
+same-context actual secrets or the mathematical provenance of raw imported data.
 
 `BgvRelinearizer::try_new(context,key)`, `BgvKeySwitcher::try_new(context,key)`
 and `BgvAutomorphism::try_new(context,key)` derive the level from the key, just
-like `BgvMultiplication`. The context must prepare that level and match N, p and
-ordered Q. Key generation, linear evaluators, decryption and modulus switching
-still require an explicit level; storage alone cannot establish one.
+like `BgvMultiplication`. The key must belong to that context and its actual level
+must be prepared. Key generation, linear evaluators and modulus switching still
+select an explicit level. Context-created ciphertexts and their views retain the
+context/level; `client.decrypt(ciphertext)` / `decrypt_to(ciphertext,output)` use
+it directly. Advanced raw recovery uses `decrypt_at_level` / `decrypt_at_level_to`.
+See [context binding and raw interoperability](scheme-context-binding.md) for
+checked adoption and the remaining same-secret/NTT caller contracts.
 
 With `batching`, use `context.batching_encoder()` for full-ring slots without
 repeating N/p. A smaller encoder remains an explicit advanced choice.
@@ -116,7 +137,7 @@ from its actual highest Q. It also distinguishes key P from multiplication-only
 bases and describes QP collective linear/S² contributions. Choosing a key backend
 does not establish security, complete noise or a valid recovery/drop schedule.
 
-## Exact plaintext-preserving prime drop
+## Exact prime drop and logical message preservation
 
 Let q be the last prime, Q'=Q/q and x any coefficient lift of a component.
 Choose `r=center_q((x mod q)*p^-1 mod q)`. The map is
@@ -126,35 +147,123 @@ F_q(x) = (x-p*r)/q mod Q'.
 ```
 
 The numerator is exactly divisible by q. Its integer quotient is congruent to
-x modulo p because q≡1 modulo p. Replacing x by x+kQ only adds kQ' to the
-output; canonical and centered input lifts therefore give the same Q' residue.
-This is nearest division constrained to the required plaintext congruence,
-not BFV's ordinary nearest rounding. No correction factor is necessary within
-the supported family; general-prime chains remain rejected.
+`q^-1*x` modulo p. Replacing x by x+kQ only adds kQ' to the output; canonical
+and centered input lifts therefore give the same Q' residue. The ciphertext
+factor changes to `f'=f*q^-1 mod p`, preserving its logical message. This is
+nearest division constrained to that congruence, not BFV's ordinary nearest
+rounding. When q≡1 modulo p, f is unchanged; the native component kernel is
+the same for both families.
 
 Only the discarded limb needs an INTT. Compute its inverse-p centered residue,
 lift it into each retained modulus, multiply by p there, transform that correction,
 subtract from the retained NTT input, and multiply by q^-1. The potentially wide
 integer p*r is never formed in u64. Total Q is never reconstructed on this path.
 
-For native phase z=m+p*e, let component remainders be r0,r1. The intended new
-phase is `z'=(z-p*(r0+r1*s))/q`, modulo Q'. In particular,
+For intended phase `z=lift(f*m mod p)+p*e`, let component remainders be r0,r1.
+The intended new phase is `z'=(z-p*(r0+r1*s))/q`, modulo Q'. Its message
+congruence is `z'=f'*m mod p`, and its integer error can be written as
 
 ```text
-e' = e/q - (r0+r1*s)/q + (1/q-1)*m/p.
+e' = (z' - lift(f'*m mod p))/p.
 ```
 
-The total is an integer; fractional terms are a noise-analysis identity, not a
-floating-point implementation. A conservative phase bound includes
+This includes any carry from the changed factor-encoded message lift. A
+conservative phase bound includes
 `||z||_infinity/q + p*(q-1)/(2*q)*(1+||s||_1)`. Require this intended new phase
 to lie in (-Q'/2,Q'/2) before applying centered recovery. Reduction by Q' can
 otherwise change its message modulo p. Apply a complete bound at every level.
 
-For consecutive supported odd divisors a,b, the centered correction sum obeys
+For consecutive coprime-to-p odd divisors a,b, the centered correction sum obeys
 `(a-1)/2+a*(b-1)/2=(a*b-1)/2`; inverse-p residues give
 `F_b(F_a(x))=F_(a*b)(x)` modulo the final prefix. Independent tests compare the
 actual component quotients with arbitrary-width integer arithmetic, including
 canonical/centered boundaries, p2/p254 and 150-bit Q.
+
+## Public static circuit budgets
+
+`BgvParameterRequest::create_context` generates validated NTT primes from explicit
+N, p, prime width/count, levels and secret/error laws. Q primes support the
+full-ring NTT (`q=1 mod 2N`) and are coprime to p, including composite coefficient
+p; generation does not impose `q=1 mod p`.
+Generation and `BgvCircuitPlan::try_new` are separate: the latter validates all
+actual caller-selected Q/key-P primes and admits a topologically ordered ordinary
+static circuit. It is a bounded resource/admission workflow, not a search for an
+optimal Q or an automatic security certificate. A rejection identifies the first
+node, its actual prefix level, phase bound, capacity and required Q bit width.
+
+The budget tracks an intended integer phase z congruent to the ciphertext phase
+modulo the actual Q, and `Z >= ||z||_infinity`. At every node it checks
+`Z <= floor(Q/2)`, equivalently `2Z<Q` for odd Q. The recorded error envelope
+relative to the centered factor-encoded output message is
+`floor((Z+floor(p/2))/p)`. Each node records its actual correction factor.
+This keeps message carries in tensor/plaintext operations instead of silently
+replacing each integer product by a reduced message with zero carry.
+
+Admission reads each level's centered capacity from its prepared context.
+Operations at that level reuse its key-error terms and key configuration.
+Hybrid levels share the key P basis and transform tables.
+
+Let E be the actual error sampler's maximum magnitude, B_s the secret sampler's
+hard coefficient support, and H=N*B_s. These supports include Gaussian truncation
+as implemented; no independence, standard-deviation heuristic or tail-event
+estimate is used. Public encryption's ephemeral is always CBD1, even when the
+actual secret is Gaussian or follows another supported law. Full-range message
+lift M is `floor(p/2)` for centered and `p-1` for unsigned embedding.
+
+| Node | Sufficient full integer-phase bound |
+| --- | --- |
+| Fresh private | `M+p*E` |
+| Fresh public | `M+p*(N*E+E+H*E)` from `e_pk*r+e0+e1*s` |
+| Ciphertext add/subtract | `abs(a)*Z_left+abs(b)*Z_right` for the actual centered factor-alignment scalars, at one level and under the same actual secret |
+| Add public plaintext a | `Z+norm_infinity(lift(a))` if f=1; otherwise `Z+M` for the selected embedding |
+| Multiply public plaintext a | `norm_1(lift(a))*Z` |
+| Tensor plus relin | `N*Z_left*Z_right` plus the actual relin-key terms below |
+| Automorphism | `Z` plus the actual automorphism-key terms |
+| Source-to-target switch | `Z` plus the actual switching-key terms |
+| Drop last q | `ceil(Z/q)+ceil(p*(q-1)*(1+H)/(2q))` |
+
+Public plaintext norms are scanned from the same canonical polynomial and lift
+passed to evaluation. Plaintext multiplication uses its actual unscaled l1 norm.
+Plaintext addition uses the actual infinity norm when f=1; for a non-one factor,
+the planner does not retain or rescan the factor-weighted polynomial and instead
+uses the full-range bound M of the selected embedding. Reusing a norm description
+for a different, larger plaintext violates the declared circuit contract. `Multiply` includes ordinary
+relinearization; using equal operand indices represents squaring. The bounds
+cover correlated inputs and reusing one actual role key across nodes.
+
+For signed radix B with L actual retained digits and circular residual R, the
+added phase contributions are `p*N*L*(B/2)*E` and `p*R*H_source`. The role norm
+is H for source switching/automorphism and H² for relinearization. The planner
+uses the actual level's prepared decomposition, including nonzero residual even
+when `level_count=None`. For Hybrid, let `Q_j` be the product in actual partition
+I_j and `A=N*sum_j(|I_j|*Q_j*E)`. It records
+`ceil(p*A/P)` plus `ceil(p*(P-1)*(1+H)/(2P))`. These follow the QP/centered
+ModDown identities above; it does not insert the radix branch's p^-1 preprocessor.
+The separate integer ceilings intentionally give a conservative sufficient bound.
+
+`plan.key_config(level)` returns the actual prepared Radix/Hybrid configuration
+used by these formulas. Pass it to the ordinary role-key generators rather than
+creating a different backend or smaller P. The plan borrows context and owns only
+public diagnostics and used numerical key configurations; it does not retain
+clients, secret observations or ciphertext scratch. Per-step terms sum to the
+reported full phase, and the exact remaining margin is `floor(Q/2)-Z`.
+
+The first security input records data Q; additional inputs record each actually
+used Hybrid key-level QP domain with the actual secret/error laws. Multiplying a
+BGV zero-encryption sample by p^-1 modulo its coprime modulus gives the unscaled
+error law recorded for RLWE attack estimation. Successful admission leaves these
+inputs `NotEvaluated`; a separate estimator result and correlated/circular-key
+assumptions remain necessary. This budget excludes collective/raw/SSLE keys,
+privacy flooding/openings, arbitrary imported secrets and arbitrary programs.
+General coprime Q chains and their dynamic correction factors belong to this
+ordinary workflow. Flexilect separately retains per-prime q_i≡1 modulo p,
+factor-one ciphertexts and its `Q=p*Delta+1` bridge/noise contracts; ordinary
+BGV admission does not replace that protocol's parameter admission.
+
+The [leveled coefficient example](../../crates/primus_bgv/examples/leveled_coefficients.rs)
+consumes this plan for `(a*b)^2`, two prime drops, an automorphism, source-to-target
+switching and a plaintext addition using the actual planned keys. Its small N
+demonstrates functionality and public admission, not cryptographic hardness.
 
 ## Representation reuse and resource ownership
 

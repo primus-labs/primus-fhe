@@ -1,5 +1,7 @@
-use primus_bgv::{BgvContext, BgvContextError, BgvParameters};
-use primus_glwe_rns::SecretKeyDistr;
+use primus_bgv::{
+    BgvContext, BgvContextError, BgvParameters, BgvParametersError, ErrorDistribution,
+};
+use primus_glwe_rns::{SecretKeyDistr, rlwe_parameters::RlweParameterError};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_shape::PolyLength;
@@ -17,9 +19,40 @@ fn parameters() -> BgvParameters {
         BarrettModulus::new(193),
         &Q.map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )
     .unwrap()
+}
+
+#[test]
+fn coefficient_parameters_require_ntt_primes_but_accept_composite_plaintext() {
+    let parameters = |q| {
+        BgvParameters::try_coefficients(
+            PolyLength::new(32),
+            BarrettModulus::new(14),
+            &[BarrettModulus::new(q)],
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 1 },
+        )
+    };
+    assert!(matches!(
+        parameters(49_601),
+        Err(BgvParametersError::PrimeBasis(
+            RlweParameterError::NotPrime { modulus: 49_601 }
+        ))
+    ));
+    assert!(matches!(
+        parameters(97),
+        Err(BgvParametersError::PrimeBasis(
+            RlweParameterError::NttOrder {
+                modulus: 97,
+                order: 64
+            }
+        ))
+    ));
+    assert!(BgvContext::try_new(parameters(193).unwrap()).is_ok());
 }
 
 #[test]

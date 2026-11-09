@@ -2,9 +2,10 @@
 //! Optional native key backend: append `-- --hybrid`.
 //! Run: cargo run -p primus_bfv --example ciphertext_multiplication
 
-use primus_bfv::{BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvMultiplication, BfvParameters};
+use primus_bfv::evaluation::BfvMultiplication;
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvClient, BfvContext, BfvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -18,7 +19,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BarrettModulus::new(193),
         &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
-        0.849,
+        ErrorDistribution::Gaussian {
+            standard_deviation: 0.849,
+        },
     )?;
     let context = BfvContext::try_new(parameters)?;
     let mut rng = StdRng::seed_from_u64(0x12bf_c0ef);
@@ -55,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
         let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
         multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
-        let recovered = client.decrypt(&product, 0);
+        let recovered = client.decrypt(&product);
         expected.as_mut()[..3].copy_from_slice(&[scalar, 2 * scalar, 3 * scalar]);
         assert_eq!(recovered, expected);
     }

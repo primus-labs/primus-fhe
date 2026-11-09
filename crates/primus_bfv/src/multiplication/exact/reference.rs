@@ -6,9 +6,11 @@ use primus_ntt::NttTable;
 use primus_reduce::{Reduce, ReduceNeg};
 use primus_rns::Residues;
 
-use crate::{BfvCiphertext, BfvContext, BfvQuadraticCiphertext};
+use crate::{BfvCiphertext, BfvContext, advanced::BfvQuadraticCiphertext};
 
-use super::{add_words_assign, cmp_words, half, mul_scalar_to, shift_left, sub_words_assign};
+use crate::multiplication::words::{
+    add_words_assign, cmp_words, half, mul_scalar_to, shift_left, sub_words_assign,
+};
 
 /// Prepared exact integer schoolbook reference for BFV multiplication.
 ///

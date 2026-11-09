@@ -90,8 +90,9 @@ signed decomposition、已检查的列 geometry 和 CRT weights。它绑定 N �
 
 启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
-CRT bases，仅自持 P NTT tables，实际 Q NTT 资源仍由方案拥有。Prepared product
-共享该参数 owner，并复用全部可变 scratch。`HybridModDown::Centered` 和
+CRT bases。`NativeHybridAuxiliary` 持有一个环的有序 P 基与 NTT 表。多个活跃 Q 层
+可以通过 `NativeHybridParameters::try_with_auxiliary` 复用它。方案层持有 Q NTT 表。
+Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridModDown::Centered` 和
 `PlaintextPreserving(p)` 保持不同 correction；不新增密文类型族或 raw GLWE bridge。
 方案层仍生成/检查角色 keys 并建立完整误差与安全条件；共享 setup 扩展先恢复唯一
 受支撑的实际系数秘密，再构造 P limbs。详见[Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
@@ -151,6 +152,11 @@ assert_eq!(sample.b(), 76);
 - `fourier` 启用对应的 Fourier 泛型接口，不选择具体 FFT 引擎。
 - `rustfft` / `tfhe-fft` 同时启用 `fourier` 和对应 FFT 实现，可叠加使用。
 - `rns` 启用 CRT/DCRT 密文及乘法工作区；DCRT 需要的 `ntt` 一并启用。
+- `parallel` 向已启用的 NTT 依赖转发有界 prefix 正逆变换调度，涵盖 GLev product
+  和 Hybrid Q/P 变换；它不激活 `ntt` 或 `rns`，须另行选择所需表示。每次 prefix
+  的 N≥4096 且至少两条 limb 时使用至多4个连续任务，总线程数须由
+  `RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 串行路径
+  不初始化 pool，随机采样不并行。
 - `simd` 仅向已启用的算术依赖传播 nightly SIMD，不激活后端、FFT 引擎或 `rns`。
 - `RnsGlweSize` 和 `RnsGadgetSize` 不依赖 `rns` feature。
 

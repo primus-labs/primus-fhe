@@ -1,8 +1,14 @@
-use super::*;
-use crate::BgvParameters;
-use primus_decompose::DecompositionBaseLog;
+use super::{
+    BgvCollectiveAutomorphismKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey,
+};
+use crate::{
+    BgvClient, BgvContext, BgvParameters, ErrorDistribution, SecretKeyDistr,
+    evaluation_key::material::NativeEvaluationKey,
+};
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey};
 use primus_modulus::BarrettModulus;
+use primus_ntt::NttTable;
 use primus_rns::Residues;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -12,7 +18,7 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899906248961, 1125899906051329, 1125899904322049];
 fn context() -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -58,7 +64,7 @@ fn sum(shares: &[Vec<i64>]) -> Vec<i64> {
 }
 fn inverse(context: &BgvContext, input: &[u64]) -> Vec<u64> {
     let mut values = input.to_vec();
-    for (table, limb) in context.table().iter().zip(values.chunks_exact_mut(N)) {
+    for (table, limb) in context.table().iter().zip(values.as_chunks_mut::<N>().0) {
         table.inverse_transform_slice(limb)
     }
     values
@@ -86,8 +92,10 @@ fn phase_coefficients(
     let len = context.rns_poly_len(level);
     let c0 = inverse(context, &cipher[..len]);
     let c1 = inverse(context, &cipher[len..]);
-    c0.chunks_exact(N)
-        .zip(c1.chunks_exact(N))
+    c0.as_chunks::<N>()
+        .0
+        .iter()
+        .zip(c1.as_chunks::<N>().0)
         .zip(context.base_q(level).moduli_values())
         .map(|((c0, c1), &q)| {
             let product = convolution(

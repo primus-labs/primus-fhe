@@ -43,6 +43,7 @@ mod config;
 mod modulus_switch;
 mod native;
 mod power_of_two;
+mod prime;
 mod uint;
 
 #[cfg(feature = "derive")]
@@ -54,6 +55,7 @@ pub use config::{ModulusConfig, ModulusConfigError};
 
 pub use native::NativeModulus;
 pub use power_of_two::PowOf2Modulus;
+pub use prime::is_prime_u64;
 pub use uint::UintModulus;
 
 #[cfg(feature = "simd")]

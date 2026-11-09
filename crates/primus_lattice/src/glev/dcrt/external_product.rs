@@ -295,13 +295,7 @@ impl<T: FheUint> DcrtGlwe<&mut [T]> {
 
             // A leveled caller may borrow one full-basis table while using a
             // shorter ordered RNS prefix. Transform only the retained limbs.
-            for (table, limb) in table
-                .ntt_tables()
-                .iter()
-                .zip(multi_residues.chunks_exact_mut(poly_length))
-            {
-                table.transform_slice(limb);
-            }
+            table.transform_prefix_slice(multi_residues);
 
             self.add_mul_dcrt_polynomial_assign(
                 &dcrt_glwe,

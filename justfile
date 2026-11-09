@@ -4,7 +4,7 @@ export RUSTDOCFLAGS := "-D warnings"
 default: fmt-check (lint "*" "ntt,fourier,rustfft,tfhe-fft") (test "*" "ntt,fourier,rustfft,tfhe-fft")
 
 # CI selects stable; local commands use the active toolchain.
-ci: default test-doc schemes
+ci: default test-doc schemes parallel
   cargo check -p primus_data --lib --no-default-features
   cargo check -p primus_fft -p primus_lwe -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
@@ -48,7 +48,7 @@ simd package="*":
   cargo +nightly nextest run -p '{{package}}' --lib --tests --all-features
 
 # TFHE examples, libraries and small numerical regressions, including both FFT engines.
-tfhe: (lint "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft") (test "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft")
+tfhe: (lint "primus_tfhe*" "rustfft,tfhe-fft") (test "primus_tfhe*" "rustfft,tfhe-fft")
 
 tfhe-simd: (simd "primus_tfhe*")
 
@@ -76,6 +76,11 @@ schemes:
   cargo run -p primus_glwe_rns --example public_encryption
   cargo run -p primus_glwe_rns --example gadget_encryption
   python3 scripts/check_scheme_consumers.py
+
+# Optional stable scheduling; exercise actual prefix sizes, not SIMD-only paths.
+parallel:
+  cargo clippy -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv --all-targets --features rns,batching,parallel -- -D warnings
+  env RAYON_NUM_THREADS=4 cargo nextest run -p primus_ntt -p primus_lattice -p primus_bfv -p primus_bgv --lib --tests --features rns,batching,parallel
 
 # Explicit crate-local workload.
 bench package target *cargo-args:

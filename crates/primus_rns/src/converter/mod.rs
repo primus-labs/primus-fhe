@@ -144,6 +144,12 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
         self.output_base.moduli_count()
     }
 
+    /// Borrows the ordered destination basis and its immutable precomputation.
+    #[must_use]
+    pub fn output_base(&self) -> &RNSBase<T, M> {
+        &self.output_base
+    }
+
     /// Iterates over the output-by-input base-change matrix rows.
     ///
     /// The iterator yields `output_moduli_count()` rows. Each row has

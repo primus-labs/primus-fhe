@@ -1,12 +1,11 @@
 //! Complete leveled BFV slots in a plaintext subring with full-ring secrets.
 
-use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
-    BfvParameters,
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
 };
+use primus_bfv::{BfvClient, BfvContext, BfvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
-use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
@@ -29,7 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )?,
         3,
     )?;
@@ -79,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     swap.apply_to(&rotated, &mut swapped);
     switch.switch_to(&swapped, &mut switched);
     drop_second.switch_to(&switched, &mut lowest);
-    let recovered = bob.decrypt(&lowest, 2);
+    let recovered = bob.decrypt(&lowest);
     assert!(
         recovered
             .as_ref()

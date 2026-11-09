@@ -3,8 +3,8 @@ mod support;
 
 use primus_decompose::{DecompositionBaseLog, big_integer::BigUintApproxSignedBasis};
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey,
-    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_lattice::{glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
@@ -50,7 +50,10 @@ fn test_external_product() {
     let glev_params = CrtGlevParameters::try_from_parts(inner.size(), base_q, basis).unwrap();
     let sk = GlweSecretKey::generate(size.glwe_size(), inner.secret_key_sampler(), &mut rng);
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
-    let pk = DcrtGlwePublicKey::new(&dcrt_sk, &inner, glev_params.base_q(), &table, &mut rng);
+    let dcrt_sk_context = dcrt_sk
+        .try_bind_raw(&inner, glev_params.base_q(), &table)
+        .unwrap();
+    let pk = dcrt_sk_context.public_key(&mut rng);
 
     let parameters = support::RawParameters {
         core: Arc::clone(&inner),
@@ -64,13 +67,6 @@ fn test_external_product() {
 
     let mut glev_workspace = DcrtGlevMulWorkspace::new(glev_params.size(), glev_params.base_q());
 
-    let dcrt_sk_context = dcrt_sk
-        .try_bind_raw(
-            parameters.encryption_parameters(),
-            parameters.base_q(),
-            &table,
-        )
-        .unwrap();
     dcrt_sk_context.encrypt_encoded_crt_to(
         &support::encode_probe(&input, &moduli_values),
         &mut c1,

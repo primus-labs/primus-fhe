@@ -1,10 +1,11 @@
 //! One complete fresh leveled slot request; keys/setup/allocations stay outside timing.
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvKeySwitcher,
-    BgvModulusSwitch, BgvMultiplication, BgvParameters,
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::keys::BgvEvaluationKeyConfig;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
@@ -36,7 +37,9 @@ fn leveled_backend(c: &mut Criterion, hybrid: bool) {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         3,
@@ -115,7 +118,7 @@ fn leveled_backend(c: &mut Criterion, hybrid: bool) {
             rotate.apply_to(&lower, &mut rotated);
             switch.switch_to(&rotated, &mut switched);
             drop_second.switch_to(&switched, &mut lowest);
-            bob.decrypt_to(&lowest, 2, &mut recovered);
+            bob.decrypt_at_level_to(&lowest, 2, &mut recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
             batching.decode_to(&small, &mut slots, &mut scratch);
             black_box(&slots);

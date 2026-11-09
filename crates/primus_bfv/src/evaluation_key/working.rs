@@ -1,8 +1,14 @@
 //! Temporarily reduce only a switched component, then restore its key product.
-use super::*;
-use crate::working_basis::WorkingBasis;
+use primus_modulus::BarrettModulus;
+use primus_ntt::NttAutomorphismPermutation;
+use primus_reduce::ReduceAdd;
+
+use crate::{BfvCiphertext, BfvContext, working_basis::WorkingBasis};
+
+use super::{BfvEvaluationKeyError, material::NativeEvaluationKey, product::NativeGadgetProduct};
 
 pub(super) struct WorkingKeyProduct<'a> {
+    key: &'a NativeEvaluationKey,
     product: NativeGadgetProduct<'a>,
     reduced: Option<ReducedProduct<'a>>,
 }
@@ -19,20 +25,24 @@ impl<'a> WorkingKeyProduct<'a> {
         external_level: usize,
         key: &'a NativeEvaluationKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
-        let product = NativeGadgetProduct::try_new(context, key)?;
-        // Validate even the identity case. No smaller-context/key projection is
-        // inferred from an equal storage length or an unrelated key's metadata.
-        let basis = WorkingBasis::try_new(context, external_level, key.level)?;
+        key.validate(context)?;
         let reduced = if external_level == key.level {
+            // Key binding already established the level and its numerical basis.
             None
         } else {
+            let basis = WorkingBasis::try_new(context, external_level, key.level)?;
             Some(ReducedProduct {
                 component: vec![0; basis.working_poly_len()],
                 product: context.new_ciphertext(key.level),
                 basis,
             })
         };
-        Ok(Self { product, reduced })
+        let product = NativeGadgetProduct::try_from_validated_key(context, key)?;
+        Ok(Self {
+            key,
+            product,
+            reduced,
+        })
     }
 
     pub(super) fn poly_len(&self) -> usize {
@@ -45,32 +55,42 @@ impl<'a> WorkingKeyProduct<'a> {
     pub(super) fn external_level(&self) -> usize {
         self.reduced
             .as_ref()
-            .map_or(self.product.key.level, |reduced| {
-                reduced.basis.external_level()
-            })
+            .map_or(self.key.level, |reduced| reduced.basis.external_level())
     }
 
     pub(super) fn context(&self) -> &'a BfvContext {
         self.product.context
     }
 
-    pub(super) fn product_to<B: DataMut<Elem = u64>>(
+    pub(super) fn moduli(&self) -> &'a [BarrettModulus<u64>] {
+        self.context()
+            .codec(self.external_level())
+            .base_q()
+            .moduli()
+    }
+
+    pub(super) fn product_to(
         &mut self,
         input: &[u64],
         permutation: Option<&NttAutomorphismPermutation>,
-        output: &mut BfvCiphertext<B>,
+        output: &mut [u64],
     ) {
         if let Some(reduced) = &mut self.reduced {
             reduced
                 .basis
                 .shrink_polynomial_to(input, &mut reduced.component);
-            self.product
-                .product_to(&reduced.component, permutation, &mut reduced.product);
+            self.product.product_to(
+                self.key,
+                &reduced.component,
+                permutation,
+                reduced.product.as_mut(),
+            );
             reduced
                 .basis
-                .restore_polynomials_to(reduced.product.as_ref(), output.as_mut(), 2);
+                .restore_ciphertext_to(reduced.product.as_ref(), output);
         } else {
-            self.product.product_to(input, permutation, output);
+            self.product
+                .product_to(self.key, input, permutation, output);
         }
     }
 
@@ -83,12 +103,7 @@ impl<'a> WorkingKeyProduct<'a> {
         output: &mut [u64],
     ) {
         let n = self.product.context.parameters().poly_length().get();
-        let moduli = self
-            .product
-            .context
-            .codec(self.external_level())
-            .base_q()
-            .moduli();
+        let moduli = self.moduli();
         let scratch = &mut self.product.coefficient[..n];
         for ((input, output), &q) in input
             .chunks_exact(n)

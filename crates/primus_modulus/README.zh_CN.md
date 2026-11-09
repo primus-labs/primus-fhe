@@ -45,6 +45,12 @@ assert_eq!(output, [11, 6, 50]);
 
 带检查的构造器会验证文档规定的范围。直接构造或更新 `CompactModulus`、`UintModulus` 的 `.0` 字段时，必须保持该范围，算术方法通常不重新验证。Raw Barrett 构造器还要求正确的倒数；小端表示和精确范围见 [`BarrettModulus` 及 `from_parts`](src/barrett/mod.rs)。
 
+## 素数准备
+
+`is_prime_u64(value)` 对完整 u64 范围进行确定性素性判定，用于公开参数构造。
+它不改变 reducer 构造器或 `FieldContext` 的契约：这些入口仍不证明素性。
+素性本身也不证明 NTT 兼容性或密码学安全等级。
+
 ## Feature
 
 - `derive` 重新导出用于编译期常量模数的 `Barrett` derive 宏。参见 [`primus_barrett_derive`](../primus_barrett_derive/README.zh_CN.md)。

@@ -68,13 +68,13 @@ Mathematical independence comes from the separate algorithm, rather than public
 visibility of keys or raw buffers. The production path uses exact RNS NTT.
 
 For ordinary degree-one requests, prepare
-`BfvMultiplication::try_new(context,&relinearization_key)`. It derives the actual
+`evaluation::BfvMultiplication::try_new(context,&relinearization_key)`. It derives the actual
 level from the key, selects compatible computation-only primes and owns the scaled
 quadratic/relinearization scratch. `multiply_to` and `square_to` return degree-one
 outputs; `square_assign` overwrites one ciphertext using the same internal scratch.
 Advanced callers can explicitly choose the auxiliary basis with
-`try_with_auxiliary_moduli(context,key,&primes)`, or retain the separate
-`BfvMultiplier` → scaled quadratic → `BfvRelinearizer` flow.
+`try_with_backend_and_auxiliary_moduli(context,key,backend,&primes)`, or use
+the `advanced::BfvMultiplier` → scaled quadratic → `evaluation::BfvRelinearizer` flow.
 The [multiplication benchmark](../../crates/primus_bfv/benches/multiplication.rs)
 uses the combined public request for both backends. Its exact branch retains
 explicit historical P for comparison; the HPSPOVERQ branch uses its own prepared basis. It does not expose internal oracles solely for measurement.
@@ -198,19 +198,23 @@ decomposition residual is real BFV error. Relinearization adds this product to
 `[u0,u1]`. Key switching adds it to `[c0,0]`. An automorphism first permutes the
 NTT values to obtain phase under sigma(s), then switches back to s.
 
-Keys bind role, N, t, level, ordered Q and actual gadget basis. Prepared operations
-check complete shapes before writes. Equal numerical parameters do not authenticate
-the actual secret, canonical residues or NTT convention; those remain caller
-contracts. Source and destination clients may share immutable context resources.
+Keys bind their local context, role, N, t, level, ordered Q and actual gadget basis.
+Prepared operations reject a different context and check complete shapes before
+writes. Context-created ciphertexts and their views retain the context and level;
+ordinary recovery derives the level from that binding. This does not authenticate
+the actual same-secret relation or edited raw residues. Explicit raw storage and
+checked adoption are described in [context binding](scheme-context-binding.md).
+Source and destination clients may share immutable context resources.
 The shared GLev kernel only decomposes and accumulates components; it does not
 interpret a native BFV ciphertext as raw GLWE or apply a phase sign conversion.
 
 `BfvRelinearizer::try_new(context,key)`, `BfvKeySwitcher::try_new(context,key)`
 and `BfvAutomorphism::try_new(context,key)` derive the level from the bound key,
-as does `BfvMultiplication`. The context must have prepared that level and match
-the key's N, t and ordered Q. Key generation, ordinary linear evaluation,
-decryption and prime drop still select their levels explicitly; ciphertext
-storage does not carry the metadata needed to infer them.
+as does `BfvMultiplication`. The key must belong to that context and its actual
+level must be prepared. Key generation, ordinary linear evaluation and prime drop
+still select their levels explicitly. `client.decrypt(ciphertext)` and
+`decrypt_to(ciphertext,output)` use the ciphertext's bound level; advanced raw
+recovery selects it explicitly with `decrypt_at_level` / `decrypt_at_level_to`.
 
 For Hybrid keys, prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)`
 and pass its shared `Arc` to the same role-key constructors. QP columns have

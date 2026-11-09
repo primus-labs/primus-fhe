@@ -1,7 +1,6 @@
 //! Exact native phases and component products, without production transforms/codecs.
-use primus_bgv::{
-    BgvCiphertext, BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding,
-};
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -21,7 +20,7 @@ const SECRET: [i128; N] = [
 
 fn context(p: u64) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(p),
             &Q.map(BarrettModulus::new),
@@ -139,7 +138,7 @@ fn fixture(
         ciphertext[limb * N..(limb + 1) * N].copy_from_slice(&dft(&c0, limb));
         ciphertext[(2 + limb) * N..(3 + limb) * N].copy_from_slice(&dft(&c1, limb));
     }
-    (BgvCiphertext::new(ciphertext), phase)
+    (BgvCiphertext::from_raw(ciphertext), phase)
 }
 fn phase(ciphertext: &BgvCiphertext<Vec<u64>>, limb: usize) -> Vec<i128> {
     let q = Q[limb];
@@ -163,7 +162,7 @@ fn check(
         assert_eq!(phase(ciphertext, limb), expected);
     }
     assert_eq!(
-        client.decrypt(ciphertext, 0).as_ref(),
+        client.decrypt_at_level(ciphertext, 0).as_ref(),
         expected
             .iter()
             .map(|value| value.rem_euclid(i128::from(p)) as u64)
@@ -187,11 +186,11 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
         check(&mut client, &lhs, &lhs_phase, p);
         check(&mut client, &rhs, &rhs_phase, p);
 
-        evaluator.add_to(&lhs.as_view(), &rhs.as_view(), &mut output.as_mut_view());
+        evaluator.add_to(&lhs, &rhs, &mut output);
         check(&mut client, &output, &combine(&lhs_phase, &rhs_phase, 1), p);
         let mut assigned = lhs.clone();
         evaluator.add_assign(&mut assigned, &rhs);
-        assert_eq!(assigned, output);
+        assert_eq!(assigned.as_ref(), output.as_ref());
         evaluator.sub_to(&lhs, &rhs, &mut output);
         check(
             &mut client,
@@ -201,12 +200,12 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
         );
         assigned = lhs.clone();
         evaluator.sub_assign(&mut assigned, &rhs);
-        assert_eq!(assigned, output);
+        assert_eq!(assigned.as_ref(), output.as_ref());
         evaluator.neg_to(&lhs, &mut output);
         check(&mut client, &output, &combine(&[0; N], &lhs_phase, -1), p);
         assigned = lhs.clone();
         evaluator.neg_assign(&mut assigned);
-        assert_eq!(assigned, output);
+        assert_eq!(assigned.as_ref(), output.as_ref());
 
         let plain = Polynomial(rhs_message.to_vec());
         for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
@@ -216,7 +215,7 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
             assert_eq!(&output.as_ref()[2 * N..], &lhs.as_ref()[2 * N..]);
             assigned = lhs.clone();
             evaluator.add_plain_assign(&mut assigned, &plain, embedding);
-            assert_eq!(assigned, output);
+            assert_eq!(assigned.as_ref(), output.as_ref());
 
             evaluator.mul_plain_to(&lhs, &plain, &mut output, embedding);
             check(&mut client, &output, &product(&lhs_phase, &lifted), p);
@@ -234,9 +233,46 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
             }
             assigned = lhs.clone();
             evaluator.mul_plain_assign(&mut assigned, &plain, embedding);
-            assert_eq!(assigned, output);
+            assert_eq!(assigned.as_ref(), output.as_ref());
         }
     }
+}
+
+#[test]
+fn borrowed_plaintext_storage_checks_geometry_and_preserves_dirty_linear_scratch() {
+    let context = context(257);
+    let len = context.rns_poly_len(0);
+    let (input, _) = fixture(&[3; N], 257, PlaintextEmbedding::Centered, 7);
+    let mut output = context.new_ciphertext(0);
+    let mut storage = vec![u64::MAX; len + 1];
+    for length in [0, len - 1, len + 1] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = BgvEvaluator::with_plaintext_scratch(&context, 0, &mut storage[..length]);
+            }))
+            .is_err()
+        );
+        assert!(storage.iter().all(|&value| value == u64::MAX));
+    }
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            let _ = BgvEvaluator::with_plaintext_scratch(
+                &context,
+                context.level_count(),
+                &mut storage[..len],
+            );
+        }))
+        .is_err()
+    );
+    {
+        let evaluator = BgvEvaluator::with_plaintext_scratch(&context, 0, &mut storage[..len]);
+        evaluator.add_to(&input, &input, &mut output);
+        for (index, (&input, &actual)) in input.as_ref().iter().zip(output.as_ref()).enumerate() {
+            let q = Q[(index / N) % Q.len()];
+            assert_eq!(actual, (2 * u128::from(input) % u128::from(q)) as u64);
+        }
+    }
+    assert!(storage.iter().all(|&value| value == u64::MAX));
 }
 
 #[test]
@@ -247,8 +283,8 @@ fn invalid_lengths_and_plaintext_values_leave_outputs_unchanged() {
     let plain = Polynomial(vec![1; N]);
     let embedding = PlaintextEmbedding::Centered;
     for length in [0, 4 * N - 1, 4 * N + 1, 8 * N] {
-        let wrong = BgvCiphertext::new(vec![0; length]);
-        let mut output = BgvCiphertext::new(vec![0xfeed; 4 * N]);
+        let wrong = BgvCiphertext::from_raw(vec![0; length]);
+        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 4 * N]);
         let before = output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_to(
@@ -280,7 +316,7 @@ fn invalid_lengths_and_plaintext_values_leave_outputs_unchanged() {
             .is_err()
         );
         assert_eq!(output, before);
-        let mut wrong_output = BgvCiphertext::new(vec![0xfeed; length]);
+        let mut wrong_output = BgvCiphertext::from_raw(vec![0xfeed; length]);
         let before = wrong_output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_to(
@@ -329,7 +365,7 @@ fn invalid_lengths_and_plaintext_values_leave_outputs_unchanged() {
     }
     for values in [vec![], vec![0; N - 1], vec![0; N + 1], vec![257; N]] {
         let wrong = Polynomial(values);
-        let mut output = BgvCiphertext::new(vec![0xfeed; 4 * N]);
+        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 4 * N]);
         let before = output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_plain_to(

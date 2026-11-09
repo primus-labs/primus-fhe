@@ -10,7 +10,7 @@ const Q: [u64; 3] = [1125899906248961, 1125899906051329, 1125899904322049];
 
 fn context(n: usize, p: u64, q: &[u64]) -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(p),
             &q.iter()

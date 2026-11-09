@@ -91,7 +91,38 @@ where
         let gamma = gamma_modulus.value();
 
         Self::validate_moduli(t, base_q.moduli_values(), gamma)?;
+        let base_t_gamma = RNSBase::new(&[t_modulus, gamma_modulus]).unwrap();
+        let inv_gamma_mod_t = ShoupFactor::new(t_modulus.reduce_inv(t_modulus.reduce(gamma)), t);
+        Self::from_bases(base_q, base_t_gamma, inv_gamma_mod_t)
+    }
 
+    /// Prepares a codec for an ordered prefix of this ciphertext basis.
+    /// The destination basis and inverse of `gamma` modulo `t` are shared.
+    /// Scaling, conversion and recovery bounds are evaluated for the prefix.
+    ///
+    /// # Errors
+    /// Returns an error if the prefix fails the noiseless recovery bound.
+    ///
+    /// # Panics
+    /// Panics if `moduli_count` is outside `1..=self.moduli_count()`.
+    pub fn try_prefix(&self, moduli_count: usize) -> Result<Self, BfvRnsCodecError<T>> {
+        // The modulus checks and gamma > 4*k carry over to any shorter prefix.
+        Self::from_bases(
+            self.base_q.prefix(moduli_count),
+            self.converter_q_to_t_gamma.output_base().clone(),
+            self.inv_gamma_mod_t,
+        )
+    }
+
+    fn from_bases(
+        base_q: RNSBase<T, M>,
+        base_t_gamma: RNSBase<T, M>,
+        inv_gamma_mod_t: ShoupFactor<T>,
+    ) -> Result<Self, BfvRnsCodecError<T>> {
+        let t_modulus = base_t_gamma.moduli()[0];
+        let gamma_modulus = base_t_gamma.moduli()[1];
+        let t = t_modulus.value();
+        let gamma = gamma_modulus.value();
         let cipher_modulus = base_q.moduli_product();
 
         let mut delta = BigUint(vec![T::ZERO; cipher_modulus.len()]);
@@ -111,19 +142,13 @@ where
 
         let delta_factor_mod_q = base_q.decompose_factors(delta.view());
 
-        let t_gamma = [t_modulus, gamma_modulus];
-        let base_t_gamma = RNSBase::new(&t_gamma).unwrap();
-        let q_mod_t_gamma = base_t_gamma.decompose(cipher_modulus.view());
-        let minus_inv_q_mod_t_gamma: [T; 2] = core::array::from_fn(|i| {
-            t_gamma[i].reduce_neg(t_gamma[i].reduce_inv(q_mod_t_gamma.as_ref()[i]))
-        });
-        let inv_gamma_mod_t = ShoupFactor::new(t_modulus.reduce_inv(t_modulus.reduce(gamma)), t);
+        let [minus_inv_q_mod_t, minus_inv_q_mod_gamma] =
+            [t_modulus, gamma_modulus].map(|modulus| {
+                modulus.reduce_neg(modulus.reduce_inv(modulus.reduce(cipher_modulus.digits())))
+            });
         let decode_factor_mod_t_gamma = [
-            ShoupFactor::new(
-                inv_gamma_mod_t.factor_mul_modulo(minus_inv_q_mod_t_gamma[0], t),
-                t,
-            ),
-            ShoupFactor::new(minus_inv_q_mod_t_gamma[1], gamma),
+            ShoupFactor::new(inv_gamma_mod_t.factor_mul_modulo(minus_inv_q_mod_t, t), t),
+            ShoupFactor::new(minus_inv_q_mod_gamma, gamma),
         ];
         let t_gamma_factor_mod_q = base_q.decompose_factors(base_t_gamma.moduli_product());
 

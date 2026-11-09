@@ -1,11 +1,72 @@
-use primus_data::{Data, DataMut};
+//! Prepared multiplication and the computation-only resources it owns.
 
-use crate::multiply::hps::HpsMultiplier;
+mod auxiliary;
+mod exact;
+mod hps;
+mod leveled;
+mod words;
+
+use primus_data::{Data, DataMut};
+use primus_ntt::NttError;
+use primus_rns::RnsError;
 
 use crate::{
-    BfvCiphertext, BfvContext, BfvMultiplier, BfvMultiplyError, BfvQuadraticCiphertext,
-    BfvRelinearizationKey, BfvRelinearizer,
+    BfvCiphertext, BfvContext, advanced::BfvQuadraticCiphertext, evaluation::BfvRelinearizer,
+    keys::BfvRelinearizationKey,
 };
+
+use self::hps::HpsMultiplier;
+pub use self::{exact::BfvMultiplier, leveled::BfvLeveledMultiplication};
+
+/// Invalid level or computation-only basis for ordinary BFV multiplication.
+#[derive(Debug, thiserror::Error)]
+pub enum BfvMultiplyError {
+    /// The requested ciphertext level was not prepared.
+    #[error("BFV multiplication level {requested} is outside 0..{maximum}")]
+    Level {
+        /// Requested level.
+        requested: usize,
+        /// Number of prepared levels.
+        maximum: usize,
+    },
+    /// Auxiliary moduli must be odd, below 2^62 and support a 2N-th root.
+    #[error("invalid BFV multiplication auxiliary modulus {modulus} at index {index}")]
+    AuxiliaryModulus {
+        /// Position in the auxiliary basis.
+        index: usize,
+        /// Supplied modulus.
+        modulus: u64,
+    },
+    /// An auxiliary modulus is not coprime to the ciphertext basis.
+    #[error("BFV multiplication auxiliary modulus {auxiliary} is not coprime to {ciphertext}")]
+    NonCoprime {
+        /// Auxiliary modulus.
+        auxiliary: u64,
+        /// Ciphertext modulus.
+        ciphertext: u64,
+    },
+    /// The auxiliary product must be strictly greater than NQ.
+    #[error("BFV multiplication auxiliary product must be greater than NQ")]
+    InsufficientAuxiliaryProduct,
+    /// HPS's auxiliary product must exceed twice the ciphertext-prime count.
+    #[error("BFV HPS multiplication auxiliary product must exceed twice the Q prime count")]
+    InsufficientHpsAuxiliaryProduct,
+    /// No further NTT primes were found in the automatic 60-bit search range.
+    #[error("BFV multiplication could not prepare a sufficient automatic auxiliary basis")]
+    AuxiliarySearchExhausted,
+    /// An evaluation key is incompatible with the requested computation.
+    #[error(transparent)]
+    EvaluationKey(#[from] crate::keys::BfvEvaluationKeyError),
+    /// A complete prepared storage length is not representable.
+    #[error("BFV multiplication workspace length overflow")]
+    LengthOverflow,
+    /// Invalid auxiliary RNS basis.
+    #[error(transparent)]
+    Rns(#[from] RnsError),
+    /// Invalid auxiliary NTT parameters.
+    #[error(transparent)]
+    Transform(#[from] NttError<u64>),
+}
 
 /// Arithmetic backend used by a prepared ordinary BFV multiplication request.
 ///
@@ -25,12 +86,30 @@ enum MultiplicationKernel<'a> {
     HpsPOverQ(HpsMultiplier<'a>),
 }
 
+impl MultiplicationKernel<'_> {
+    fn multiply_scaled_to(&mut self, lhs: &[u64], rhs: &[u64], output: &mut [u64]) {
+        match self {
+            Self::Exact(multiplier) => multiplier.multiply_scaled_to(lhs, rhs, output),
+            Self::HpsPOverQ(multiplier) => multiplier.multiply_scaled_to(lhs, rhs, output),
+        }
+    }
+
+    fn square_scaled_to(&mut self, input: &[u64], output: &mut [u64]) {
+        match self {
+            Self::Exact(multiplier) => multiplier.square_scaled_to(input, output),
+            Self::HpsPOverQ(multiplier) => multiplier.square_scaled_to(input, output),
+        }
+    }
+}
+
 /// Prepared BFV multiplication followed by relinearization under one key.
 ///
 /// The key determines the level. This owner keeps one scaled quadratic buffer,
 /// the selected backend's multiplication resources and the relinearization scratch.
 /// Online methods allocate nothing and return ordinary degree-one ciphertexts;
-/// no modulus drop or noise-dependent policy is implicit.
+/// no modulus drop or noise-dependent policy is implicit. Bound operands must
+/// use this local context and the key's level; explicit raw operands retain
+/// caller-attested representation and actual-secret contracts.
 ///
 /// # Correctness
 /// Inputs must use the key's actual secret, ordered Q basis and NTT convention.
@@ -75,40 +154,7 @@ impl<'a> BfvMultiplication<'a> {
         key: &'a BfvRelinearizationKey,
         backend: BfvMultiplicationBackend,
     ) -> Result<Self, BfvMultiplyError> {
-        let relinearizer = BfvRelinearizer::try_new(context, key)?;
-        let multiplier = match backend {
-            BfvMultiplicationBackend::Exact => MultiplicationKernel::Exact(
-                BfvMultiplier::try_with_default_basis(context, key.level())?,
-            ),
-            BfvMultiplicationBackend::HpsPOverQ => MultiplicationKernel::HpsPOverQ(
-                HpsMultiplier::try_with_default_basis(context, key.level())?,
-            ),
-        };
-        Ok(Self {
-            multiplier,
-            relinearizer,
-            quadratic: context.new_quadratic_ciphertext(key.level()),
-        })
-    }
-
-    /// Prepares the exact backend with explicitly selected computation-only P.
-    ///
-    /// Inherits [`BfvMultiplier::try_new`]'s exact P>NQ and transform
-    /// requirements. It never changes the encryption or key modulus.
-    ///
-    /// # Errors
-    /// See [`Self::try_with_backend_and_auxiliary_moduli`].
-    pub fn try_with_auxiliary_moduli(
-        context: &'a BfvContext,
-        key: &'a BfvRelinearizationKey,
-        auxiliary_moduli: &[u64],
-    ) -> Result<Self, BfvMultiplyError> {
-        Self::try_with_backend_and_auxiliary_moduli(
-            context,
-            key,
-            BfvMultiplicationBackend::Exact,
-            auxiliary_moduli,
-        )
+        Self::prepare(context, key, backend, None)
     }
 
     /// Prepares one backend with explicit ordered computation-only P moduli.
@@ -129,20 +175,30 @@ impl<'a> BfvMultiplication<'a> {
         backend: BfvMultiplicationBackend,
         auxiliary_moduli: &[u64],
     ) -> Result<Self, BfvMultiplyError> {
+        Self::prepare(context, key, backend, Some(auxiliary_moduli))
+    }
+
+    fn prepare(
+        context: &'a BfvContext,
+        key: &'a BfvRelinearizationKey,
+        backend: BfvMultiplicationBackend,
+        auxiliary_moduli: Option<&[u64]>,
+    ) -> Result<Self, BfvMultiplyError> {
+        let level = key.level();
         let relinearizer = BfvRelinearizer::try_new(context, key)?;
         let multiplier =
             match backend {
                 BfvMultiplicationBackend::Exact => MultiplicationKernel::Exact(
-                    BfvMultiplier::try_new(context, key.level(), auxiliary_moduli)?,
+                    BfvMultiplier::prepare(context, level, auxiliary_moduli)?,
                 ),
                 BfvMultiplicationBackend::HpsPOverQ => MultiplicationKernel::HpsPOverQ(
-                    HpsMultiplier::try_new(context, key.level(), auxiliary_moduli)?,
+                    HpsMultiplier::prepare(context, level, auxiliary_moduli)?,
                 ),
             };
         Ok(Self {
             multiplier,
             relinearizer,
-            quadratic: context.new_quadratic_ciphertext(key.level()),
+            quadratic: context.new_quadratic_ciphertext(level),
         })
     }
 
@@ -167,8 +223,9 @@ impl<'a> BfvMultiplication<'a> {
     /// Writes the scaled and relinearized product, reusing prepared storage.
     ///
     /// # Panics
-    /// All complete input/output lengths are checked before output or scratch
-    /// writes. A transform panic can leave intermediate scratch modified.
+    /// Recorded context/level conflicts and all complete input/output lengths
+    /// are checked before output or scratch writes. A transform panic can leave
+    /// intermediate scratch modified.
     pub fn multiply_to<A, B, C>(
         &mut self,
         lhs: &BfvCiphertext<A>,
@@ -179,16 +236,13 @@ impl<'a> BfvMultiplication<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
-        self.validate_output(output.as_ref());
-        match &mut self.multiplier {
-            MultiplicationKernel::Exact(multiplier) => {
-                multiplier.multiply_to(lhs, rhs, &mut self.quadratic)
-            }
-            MultiplicationKernel::HpsPOverQ(multiplier) => {
-                multiplier.multiply_to(lhs, rhs, &mut self.quadratic)
-            }
-        }
-        self.relinearizer.relinearize_to(&self.quadratic, output);
+        self.check_ciphertext(lhs);
+        self.check_ciphertext(rhs);
+        self.check_ciphertext(output);
+        self.multiplier
+            .multiply_scaled_to(lhs.as_ref(), rhs.as_ref(), self.quadratic.as_mut());
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, output);
     }
 
     /// Writes the scaled and relinearized square with prepared storage.
@@ -199,16 +253,12 @@ impl<'a> BfvMultiplication<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        self.validate_output(output.as_ref());
-        match &mut self.multiplier {
-            MultiplicationKernel::Exact(multiplier) => {
-                multiplier.square_to(input, &mut self.quadratic)
-            }
-            MultiplicationKernel::HpsPOverQ(multiplier) => {
-                multiplier.square_to(input, &mut self.quadratic)
-            }
-        }
-        self.relinearizer.relinearize_to(&self.quadratic, output);
+        self.check_ciphertext(input);
+        self.check_ciphertext(output);
+        self.multiplier
+            .square_scaled_to(input.as_ref(), self.quadratic.as_mut());
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, output);
     }
 
     /// Squares and relinearizes in place without another ciphertext allocation.
@@ -217,23 +267,37 @@ impl<'a> BfvMultiplication<'a> {
     /// first write to it. Inherits [`Self::multiply_to`]'s representation contract.
     ///
     /// # Panics
-    /// Rejects an incorrect complete length before output or scratch writes.
+    /// Rejects recorded context/level conflicts or incorrect lengths before
+    /// output or scratch writes.
     pub fn square_assign<A>(&mut self, input: &mut BfvCiphertext<A>)
     where
         A: DataMut<Elem = u64>,
     {
-        match &mut self.multiplier {
-            MultiplicationKernel::Exact(multiplier) => {
-                multiplier.square_to(input, &mut self.quadratic)
-            }
-            MultiplicationKernel::HpsPOverQ(multiplier) => {
-                multiplier.square_to(input, &mut self.quadratic)
-            }
-        }
-        self.relinearizer.relinearize_to(&self.quadratic, input);
+        self.check_ciphertext(input);
+        self.multiplier
+            .square_scaled_to(input.as_ref(), self.quadratic.as_mut());
+        self.relinearizer
+            .relinearize_validated_to(&self.quadratic, input);
     }
 
-    fn validate_output(&self, output: &[u64]) {
-        assert_eq!(output.len(), self.quadratic.as_ref().len() / 3 * 2);
+    fn check_ciphertext<C: Data<Elem = u64>>(&self, ciphertext: &BfvCiphertext<C>) {
+        check_ciphertext(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+            ciphertext,
+        );
     }
+}
+
+fn check_ciphertext<C: Data<Elem = u64>>(
+    context: &BfvContext,
+    level: usize,
+    ciphertext: &BfvCiphertext<C>,
+) {
+    ciphertext.check_binding(context, level);
+    assert_eq!(
+        ciphertext.as_ref().len(),
+        2 * context.rns_poly_len(level),
+        "BFV ciphertext length mismatch"
+    );
 }

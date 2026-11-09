@@ -1,6 +1,9 @@
 //! Independent integer oracle for native plus Hybrid products and both reductions.
 use dashu_int::IBig;
-use primus_lattice::hybrid::{HybridModDown, NativeHybridParameters, NativeHybridProduct};
+use primus_lattice::hybrid::{
+    HybridModDown, NativeHybridAuxiliary, NativeHybridError, NativeHybridParameters,
+    NativeHybridProduct,
+};
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttTable, U64DcrtTable};
 use primus_rns::RNSBase;
@@ -104,6 +107,8 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             2,
         ),
     ] {
+        let auxiliary =
+            Arc::new(NativeHybridAuxiliary::try_new(PolyLength::new(N), &p_values).unwrap());
         for count in 1..=q_values.len() {
             let q_moduli = &q_values[..count];
             let q = product(q_moduli);
@@ -119,15 +124,15 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             )
             .unwrap();
             let parameters = Arc::new(
-                NativeHybridParameters::try_new(
-                    PolyLength::new(N),
+                NativeHybridParameters::try_with_auxiliary(
                     &make_base(q_moduli),
                     q_values.len(),
-                    &p_values,
+                    Arc::clone(&auxiliary),
                     dnum,
                 )
                 .unwrap(),
             );
+            assert!(Arc::ptr_eq(parameters.auxiliary(), &auxiliary));
             let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_values).copied().collect();
             let a = input_coefficients(&q);
             let mut a_ntt = residues(&a, q_moduli);
@@ -279,6 +284,12 @@ fn native_hybrid_parameter_binding_and_complete_shapes_reject_before_writes() {
     let params =
         Arc::new(NativeHybridParameters::try_new(PolyLength::new(N), &base, 2, &[449], 2).unwrap());
     assert!(NativeHybridParameters::try_new(PolyLength::new(N), &base, 2, &[193], 2).is_err());
+    assert!(matches!(
+        NativeHybridAuxiliary::try_new(PolyLength::new(N), &[49_601]),
+        Err(NativeHybridError::PrimeBasis(
+            primus_ntt::U64NttPrimeBasisError::NotPrime { modulus: 49_601 }
+        ))
+    ));
     assert!(NativeHybridParameters::try_new(PolyLength::new(N), &base, 2, &[449], 0).is_err());
     assert!(NativeHybridParameters::try_new(PolyLength::new(N), &base, 1, &[449], 1).is_err());
     assert!(
@@ -323,7 +334,6 @@ fn native_hybrid_parameter_binding_and_complete_shapes_reject_before_writes() {
 
 #[test]
 fn bounded_secret_extension_uses_highest_q_and_rejects_ambiguous_or_incoherent_lifts() {
-    use primus_lattice::hybrid::NativeHybridError;
     let full_q = [449, 577];
     let base = make_base(&full_q);
     let table = U64DcrtTable::new(PolyLength::new(N), base.moduli()).unwrap();

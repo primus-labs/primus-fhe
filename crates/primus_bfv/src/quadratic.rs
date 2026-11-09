@@ -5,7 +5,7 @@ use primus_poly::DcrtPolynomial;
 ///
 /// Each component has undergone the selected ordinary BFV backend's scaling:
 /// the exact backend uses `round(t*T/Q)` on its integer tensor, whereas
-/// [`crate::BfvMultiplicationBackend::HpsPOverQ`] uses one-sided P/Q scaling
+/// [`crate::evaluation::BfvMultiplicationBackend::HpsPOverQ`] uses one-sided P/Q scaling
 /// before tensoring and exact `round(t*T/P)` afterward.
 /// This is a degree-two ciphertext under one secret, not rank-two GLWE.
 /// The unscaled integer tensor is private to the multiplication owner; only
@@ -16,19 +16,43 @@ use primus_poly::DcrtPolynomial;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BfvQuadraticCiphertext<C> {
     data: C,
+    binding: Option<crate::ciphertext::Binding>,
 }
 
 impl<C: Data<Elem = u64>> BfvQuadraticCiphertext<C> {
-    /// Wraps storage with the native degree-two interpretation.
+    /// Wraps explicit raw storage with the native degree-two interpretation.
+    ///
+    /// The caller attests the ordered Q, actual NTT, BFV scaling and secret;
+    /// no local provenance is inferred. Normal multiplication outputs use
+    /// [`crate::BfvContext::new_quadratic_ciphertext`].
     #[must_use]
-    pub fn new(data: C) -> Self {
-        Self { data }
+    pub fn from_raw(data: C) -> Self {
+        Self {
+            data,
+            binding: None,
+        }
+    }
+
+    pub(crate) fn bound(data: C, context: &crate::BfvContext, level: usize) -> Self {
+        Self {
+            data,
+            binding: Some(crate::ciphertext::Binding::new(context, level)),
+        }
+    }
+
+    pub(crate) fn check_binding(&self, context: &crate::BfvContext, level: usize) {
+        if let Some(binding) = &self.binding {
+            binding.check(context, level);
+        }
     }
 
     /// Borrows storage without copying or changing its representation.
     #[must_use]
     pub fn as_view(&self) -> BfvQuadraticCiphertext<&[u64]> {
-        BfvQuadraticCiphertext::new(self.as_ref())
+        BfvQuadraticCiphertext {
+            data: self.as_ref(),
+            binding: self.binding.clone(),
+        }
     }
 
     /// Borrows all three complete DCRT components.
@@ -53,10 +77,10 @@ impl<C: Data<Elem = u64>> BfvQuadraticCiphertext<C> {
 }
 
 impl BfvQuadraticCiphertext<Vec<u64>> {
-    /// Allocates zeroed native tensor storage.
+    /// Allocates explicit unbound raw native tensor storage.
     #[must_use]
-    pub fn zero(length: usize) -> Self {
-        Self::new(vec![0; length])
+    pub fn zero_raw(length: usize) -> Self {
+        Self::from_raw(vec![0; length])
     }
 }
 
@@ -64,7 +88,11 @@ impl<C: DataMut<Elem = u64>> BfvQuadraticCiphertext<C> {
     /// Borrows mutable degree-two storage.
     #[must_use]
     pub fn as_mut_view(&mut self) -> BfvQuadraticCiphertext<&mut [u64]> {
-        BfvQuadraticCiphertext::new(self.as_mut())
+        let binding = self.binding.clone();
+        BfvQuadraticCiphertext {
+            data: self.data.as_mut_slice(),
+            binding,
+        }
     }
 
     /// Borrows three mutable components after checking the complete length.

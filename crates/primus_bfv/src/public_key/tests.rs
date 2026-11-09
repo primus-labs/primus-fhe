@@ -1,9 +1,8 @@
 //! Scheme-boundary identities and independent integer/DFT recovery oracles.
 
-use crate::{
-    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
-    BfvPublicKeyEncryptor, BfvSecretKeyContext,
-};
+use crate::advanced::{BfvDecryptWorkspace, BfvSecretKeyContext};
+use crate::keys::BfvPublicKey;
+use crate::{BfvCiphertext, BfvContext, BfvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -20,7 +19,7 @@ const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
 const ROOTS: [u64; 2] = [18_105_782_770_620, 34_361_371_622_355];
 
 fn parameters(count: usize, t: u64, error: ErrorDistribution) -> BfvParameters {
-    BfvParameters::try_with_error_distribution(
+    BfvParameters::try_with_decoder_modulus(
         PolyLength::new(N),
         BarrettModulus::new(t),
         BarrettModulus::new(2_199_023_190_017),
@@ -128,7 +127,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
         (1, 254, SecretKeyDistr::UniformBinary),
         (2, 257, SecretKeyDistr::gaussian(3.2)),
     ] {
-        let parameters = BfvParameters::try_new(
+        let parameters = BfvParameters::try_with_decoder_modulus(
             PolyLength::new(N),
             BarrettModulus::new(t),
             BarrettModulus::new(2_199_023_190_017),
@@ -138,7 +137,9 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
                 .map(BarrettModulus::new)
                 .collect::<Vec<_>>(),
             secret_distribution,
-            3.2,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 3.2,
+            },
         )
         .unwrap();
         let owner = BfvContext::try_new(parameters).unwrap();
@@ -167,7 +168,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             let error = compose(&pk_phase, degree, count);
             assert!(error.min(product - error) <= error_bound);
         }
-        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
+        let mut encryptor = owner.public_key_encryptor(&public).unwrap();
         let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
         let mut workspace = BfvDecryptWorkspace::new(parameters);
         let message = Polynomial(
@@ -175,7 +176,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
                 .collect::<Vec<_>>(),
         );
-        let mut output = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+        let mut output = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
         for centered in [false, true] {
             let lifted = CrtPolynomial(
                 Q[..count]
@@ -203,7 +204,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             } else {
                 encryptor.encrypt(&message, &mut crt_rng)
             };
-            let mut lifted_ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+            let mut lifted_ciphertext = BfvCiphertext::zero_raw(parameters.size().rns_glwe_len());
             encryptor.encrypt_plaintext_lift_crt_to(
                 &lifted,
                 &mut lifted_ciphertext,
@@ -260,14 +261,15 @@ fn noncanonical_coefficients_preserve_randomness_output_and_public_scratch() {
             &mut setup_rng,
         );
         let secret = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
-        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
+        let mut encryptor = owner.public_key_encryptor(&public).unwrap();
         for (index, value) in [(0, 257), (N - 1, u64::MAX)] {
             let mut input = Polynomial(vec![1; N]);
             input.as_mut()[index] = value;
             for mode in 0..6 {
                 let mut rng = StdRng::seed_from_u64(0x4246_5683);
                 let mut reference_rng = StdRng::seed_from_u64(0x4246_5683);
-                let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
+                let mut output =
+                    BfvCiphertext::from_raw(vec![99; parameters.size().rns_glwe_len()]);
                 let workspace = encryptor.workspace.as_mut_slice();
                 workspace.fill(73);
                 let workspace_pointer = workspace.as_ptr();

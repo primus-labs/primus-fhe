@@ -1,8 +1,12 @@
-use primus_bgv::{
-    BgvAutomorphism, BgvCiphertext, BgvClient, BgvCollectiveAutomorphismKey, BgvCollectiveError,
-    BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey, BgvContext,
-    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvParameters, BgvRelinearizer, BgvSeededInput,
+use primus_bgv::advanced::{BgvSeededInput, square_to};
+use primus_bgv::collective::{
+    BgvCollectiveAutomorphismKey, BgvCollectiveError, BgvCollectivePublicKey,
+    BgvCollectiveRelinearization, BgvCollectiveSwitchingKey, raw_unflooded_partial_phase_to,
 };
+use primus_bgv::evaluation::{
+    BgvAutomorphism, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvRelinearizer,
+};
+use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters};
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::DecompositionConfig;
 use primus_distr::ErrorDistribution;
@@ -19,7 +23,7 @@ const P: u64 = 193;
 const Q: [u64; 3] = [1125899906248961, 1125899906051329, 1125899904322049];
 fn context() -> BgvContext {
     BgvContext::try_with_levels(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
@@ -179,12 +183,12 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
         input.common_mask()
     );
     let mut oracle = owner(&context, &secret);
-    assert_eq!(oracle.decrypt(&cipher, 0).as_ref(), expected);
+    assert_eq!(oracle.decrypt_at_level(&cipher, 0).as_ref(), expected);
     let len = context.rns_poly_len(0);
     let mut total = DcrtPolynomial(cipher.as_ref()[..len].to_vec());
     let mut partial = DcrtPolynomial(vec![0; len]);
     for client in &clients {
-        client.partial_phase_to(&cipher, 0, &mut partial).unwrap();
+        raw_unflooded_partial_phase_to(client, &cipher, 0, &mut partial).unwrap();
         total.add_assign(&partial, N, context.base_q(0).moduli())
     }
     let phase = phase_coefficients(&context, cipher.as_ref(), &secret, 0);
@@ -205,7 +209,10 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
     let mut encryptor = context.public_key_encryptor(&key).unwrap();
     let message = Polynomial::new((0..N).map(|i| i as u64).collect::<Vec<_>>());
     let cipher = encryptor.encrypt(&message, &mut rng);
-    assert_eq!(oracle.decrypt(&cipher, 0).as_ref(), message.as_ref());
+    assert_eq!(
+        oracle.decrypt_at_level(&cipher, 0).as_ref(),
+        message.as_ref()
+    );
 }
 
 #[test]
@@ -225,7 +232,7 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
     let mut states = Vec::new();
     for client in &clients {
         let (message, state) = setup.start(client, &mut rng).unwrap();
-        first.add(&message).unwrap();
+        first.add_imported(message.into_residues()).unwrap();
         states.push(state)
     }
     let frozen = setup.freeze_round_one(first).unwrap();
@@ -242,7 +249,7 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
     );
     let cipher = oracle.encrypt(&message, &mut rng);
     let mut quadratic = context.new_quadratic_ciphertext(0);
-    BgvEvaluator::new(&context, 0).square_to(&cipher, &mut quadratic);
+    square_to(&context, 0, &cipher, &mut quadratic);
     let mut output = context.new_ciphertext(0);
     BgvRelinearizer::try_new(&context, &key)
         .unwrap()
@@ -260,12 +267,113 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
             .collect::<Vec<_>>(),
     );
     assert_eq!(
-        oracle.decrypt(&output, 0).as_ref(),
+        oracle.decrypt_at_level(&output, 0).as_ref(),
         expected
             .iter()
             .map(|x| x.rem_euclid(i128::from(P)) as u64)
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn collective_partial_recovery_preserves_general_prime_drop_correction() {
+    let qs = [1_125_899_905_351_681, 1_125_899_905_744_897];
+    assert!(qs.iter().all(|&q| q % P != 1));
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_coefficients(
+            PolyLength::new(N),
+            BarrettModulus::new(P),
+            &qs.map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )
+        .unwrap(),
+        2,
+    )
+    .unwrap();
+    let shares = fixture();
+    let combined = sum(&shares);
+    let mut oracle = owner(&context, &combined);
+    let keys = shares
+        .iter()
+        .map(|coefficients| share(&context, coefficients))
+        .collect::<Vec<_>>();
+    let mut rng = StdRng::seed_from_u64(0x22_c011);
+
+    let public_setup = BgvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
+    let mut public_sum = public_setup.aggregate();
+    for key in &keys {
+        public_sum
+            .add(&public_setup.contribute(key, &mut rng).unwrap())
+            .unwrap();
+    }
+    let public_key = public_setup.finalize(public_sum).unwrap();
+
+    let setup = BgvCollectiveRelinearization::try_new(&context, 0, config(), &mut rng).unwrap();
+    let mut first = setup.round_one_aggregate();
+    let mut states = Vec::new();
+    for key in &keys {
+        let (message, state) = setup.start(key, &mut rng).unwrap();
+        first.add(&message).unwrap();
+        states.push(state);
+    }
+    let frozen = setup.freeze_round_one(first).unwrap();
+    let mut second = setup.round_two_aggregate(&frozen).unwrap();
+    for state in states {
+        second
+            .add(&state.round2(&frozen, &mut rng).unwrap())
+            .unwrap();
+    }
+    let relinearization = setup.finalize(&frozen, second).unwrap();
+    let clients = keys
+        .into_iter()
+        .map(|key| BgvClient::try_from_secret_key(&context, key).unwrap())
+        .collect::<Vec<_>>();
+    let mut message = context.new_plaintext();
+    message.as_mut()[0] = 3;
+    message.as_mut()[N - 1] = P - 2;
+    let input = context
+        .public_key_encryptor(&public_key)
+        .unwrap()
+        .encrypt_centered(&message, &mut rng);
+    let mut squared = context.new_ciphertext(0);
+    BgvMultiplication::try_new(&context, &relinearization)
+        .unwrap()
+        .square_to(&input, &mut squared);
+    let mut output = context.new_ciphertext(1);
+    BgvModulusSwitch::new(&context, 0).switch_to(&squared, &mut output);
+    assert_ne!(output.correction_factor(), 1);
+
+    let len = context.rns_poly_len(1);
+    let mut phase = DcrtPolynomial(output.as_ref()[..len].to_vec());
+    let mut partial = DcrtPolynomial(vec![0; len]);
+    for client in &clients {
+        raw_unflooded_partial_phase_to(client, &output, 1, &mut partial).unwrap();
+        phase.add_assign(&partial, N, context.base_q(1).moduli());
+    }
+    context.table().ntt_tables()[0].inverse_transform_slice(phase.as_mut());
+    // P is the fixed prime193. Fermat inversion and a single-limb centered
+    // decoder are independent of the production client's CRT/factor decoder.
+    let inverse_factor = (0..P - 2).fold(1, |value, _| value * output.correction_factor() % P);
+    assert_eq!(inverse_factor * output.correction_factor() % P, 1);
+    let q = qs[0];
+    let decoded = phase
+        .as_ref()
+        .iter()
+        .map(|&value| centered(i128::from(value), q).rem_euclid(i128::from(P)) as u64)
+        .map(|value| value * inverse_factor % P)
+        .collect::<Vec<_>>();
+    let coefficients = message
+        .as_ref()
+        .iter()
+        .map(|&value| i128::from(value))
+        .collect::<Vec<_>>();
+    let expected = convolution(&coefficients, &coefficients)
+        .into_iter()
+        .map(|value| value.rem_euclid(i128::from(P)) as u64)
+        .collect::<Vec<_>>();
+    assert_eq!(decoded, expected);
+    assert_eq!(oracle.decrypt_at_level(&output, 1).as_ref(), decoded);
 }
 
 #[test]
@@ -315,7 +423,10 @@ fn collective_linear_keys_and_rejection_boundaries() {
     BgvKeySwitcher::try_new(&context, &key)
         .unwrap()
         .switch_to(&input, &mut output);
-    assert_eq!(target.decrypt(&output, 1).as_ref(), message.as_ref());
+    assert_eq!(
+        target.decrypt_at_level(&output, 1).as_ref(),
+        message.as_ref()
+    );
     let auto = BgvCollectiveAutomorphismKey::try_new(&context, 1, 5, config(), &mut rng).unwrap();
     let mut aggregate = auto.aggregate();
     for client in &clients {
@@ -336,7 +447,10 @@ fn collective_linear_keys_and_rejection_boundaries() {
     BgvAutomorphism::try_new(&context, &key)
         .unwrap()
         .apply_to(&input, &mut output);
-    assert_eq!(source.decrypt(&output, 1).as_ref(), transformed_message);
+    assert_eq!(
+        source.decrypt_at_level(&output, 1).as_ref(),
+        transformed_message
+    );
     let pk = BgvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
     assert!(pk.finalize(pk.aggregate()).is_err());
     assert!(pk.try_import(vec![]).is_err());
@@ -378,21 +492,29 @@ fn collective_linear_keys_and_rejection_boundaries() {
             .is_err()
     );
     assert!(relin.try_import_round_two(&frozen, vec![]).is_err());
+    let other_relin = BgvCollectiveRelinearization::try_from_common_masks(
+        &context,
+        1,
+        config(),
+        relin.common_masks().to_vec(),
+    )
+    .unwrap();
+    let foreign_frozen = other_relin
+        .try_import_frozen_round_one(frozen.as_residues().to_vec(), 1)
+        .unwrap();
+    let (_, pending) = relin.start(&clients[0], &mut rng).unwrap();
+    assert!(matches!(
+        pending.round2(&foreign_frozen, &mut request_rng),
+        Err(BgvCollectiveError::Binding)
+    ));
+    assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
     let mut partial = DcrtPolynomial(vec![17; context.rns_poly_len(1)]);
     let before = partial.as_ref().to_vec();
-    let mut bad_input = BgvCiphertext::new(input.as_ref().to_vec());
+    let mut bad_input = BgvCiphertext::from_raw(input.as_ref().to_vec());
     bad_input.as_mut()[0] = Q[0];
-    assert!(
-        source
-            .partial_phase_to(&bad_input, 1, &mut partial)
-            .is_err()
-    );
+    assert!(raw_unflooded_partial_phase_to(&source, &bad_input, 1, &mut partial).is_err());
     assert_eq!(partial.as_ref(), before);
-    assert!(
-        source
-            .partial_phase_to(&input, usize::MAX, &mut partial)
-            .is_err()
-    );
+    assert!(raw_unflooded_partial_phase_to(&source, &input, usize::MAX, &mut partial).is_err());
     assert_eq!(partial.as_ref(), before);
     let gaussian = BgvContext::try_new(
         BgvParameters::try_coefficients(
@@ -400,7 +522,9 @@ fn collective_linear_keys_and_rejection_boundaries() {
             BarrettModulus::new(P),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            1.0,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 1.0,
+            },
         )
         .unwrap(),
     )
@@ -452,4 +576,77 @@ fn fresh_input_masks_use_exact_full_limb_rejection_and_own_one_context() {
     let mut malformed = input.common_mask().to_vec();
     malformed[N] = Q[1];
     assert!(BgvSeededInput::try_from_common_mask(&context, malformed).is_err());
+}
+
+#[test]
+fn streaming_import_matches_modular_sum_and_permanently_rejects_interrupted_bodies() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let context = context();
+    let len = context.rns_poly_len(0);
+    let plan = BgvSeededInput::try_from_common_mask(&context, vec![0; len]).unwrap();
+    let body: Vec<_> = Q
+        .iter()
+        .flat_map(|&q| (0..N).map(move |j| if j % 2 == 0 { q - 1 } else { j as u64 }))
+        .collect();
+    let message = plan.try_import(body.clone()).unwrap();
+    let mut streamed = plan.aggregate();
+    let mut ordinary = plan.aggregate();
+    for _ in 0..2 {
+        streamed.add_imported(body.iter().copied()).unwrap();
+        ordinary.add(&message).unwrap();
+    }
+    let streamed = plan.finalize(streamed).unwrap();
+    let ordinary = plan.finalize(ordinary).unwrap();
+    assert_eq!(streamed.as_ref(), ordinary.as_ref());
+    for ((actual, source), &q) in streamed.as_ref()[..len]
+        .as_chunks::<N>()
+        .0
+        .iter()
+        .zip(body.as_chunks::<N>().0)
+        .zip(&Q)
+    {
+        for (&actual, &value) in actual.iter().zip(source) {
+            assert_eq!(actual, (2 * u128::from(value) % u128::from(q)) as u64);
+        }
+    }
+    for mut invalid in [
+        body[..len - 1].to_vec(),
+        [body.clone(), vec![0]].concat(),
+        body.clone(),
+    ] {
+        if invalid.len() == len {
+            invalid[len - 1] = Q[Q.len() - 1];
+        }
+        let mut aggregate = plan.aggregate();
+        assert!(aggregate.add_imported(invalid).is_err());
+        assert!(matches!(
+            aggregate.add(&message),
+            Err(BgvCollectiveError::Aborted)
+        ));
+        assert!(matches!(
+            aggregate.add_imported(body.iter().copied()),
+            Err(BgvCollectiveError::Aborted)
+        ));
+        assert!(matches!(
+            plan.finalize(aggregate),
+            Err(BgvCollectiveError::Aborted)
+        ));
+    }
+    let mut aggregate = plan.aggregate();
+    let mut index = 0;
+    let interrupted = std::iter::from_fn(|| {
+        assert!(index + 1 < len, "interrupted importer");
+        let value = body[index];
+        index += 1;
+        Some(value)
+    });
+    assert!(catch_unwind(AssertUnwindSafe(|| aggregate.add_imported(interrupted))).is_err());
+    assert!(matches!(
+        aggregate.add(&message),
+        Err(BgvCollectiveError::Aborted)
+    ));
+    assert!(matches!(
+        plan.finalize(aggregate),
+        Err(BgvCollectiveError::Aborted)
+    ));
 }

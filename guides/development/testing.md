@@ -15,9 +15,10 @@
 | `just test-doc [package]` | doctest，与 nextest 分开执行 |
 | `just simd [package]` | nightly、all-features 的 Clippy 与普通测试 |
 | `just schemes` | BFV/BGV 与共享编码的 batching 编译/lint/普通测试，并执行普通系数/槽、高级子环示例及独立普通依赖消费者 |
+| `just parallel` | stable 的可选 limb 并行：NTT、lattice、BFV/BGV 的 all-targets lint 和普通测试，选择 `rns,batching,parallel`，每个测试进程的Rayon pool为4线程 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | 在 `just` 之上执行 doctest、BFV/BGV batching 流程、可选依赖隔离编译和 Barrett derive 回归 |
+| `just ci` | 在 `just` 之上执行 doctest、BFV/BGV batching 流程、stable parallel、可选依赖隔离编译和 Barrett derive 回归 |
 | `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -44,6 +45,12 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 | GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`；GLWE Fourier 本身包含系数建钥用的内部辅助 NTT/CRT 依赖，不启用 NTT GLWE API |
 
 稳定工具链上的其他可选功能包括 `primus_data/aligned-vec`、integer/lattice 的 `serde`、`primus_modulus/derive`、`primus_distr/high_precision` 及 lattice/encoding 的 `rns`。独立包验证须显式选择需要的功能，不能依赖其他 workspace 消费者合并 features。
+
+`primus_ntt/parallel`显式启用有界limb调度，经lattice、raw RNS GLWE与BFV/BGV转发，
+默认关闭。`just parallel`在stable上独立验证，不能用nightly的all-features结果代替。
+N4096的prefix测试比较T1/T2/T4正逆变换、坏geometry写前拒绝，以及pool准备后的
+跨线程零分配；任务借用互不重叠的limbs，不各自复制整套密码scratch。该测试不是完整算法的并行性能保证，
+总线程仍须由`RAYON_NUM_THREADS`或调用方既有pool约束。
 
 `just ci` 对 `primus_modulus --features derive` 做 all-targets 编译，并单独运行
 `derives` 测试目标；不启用 Cargo `simd`，与 nightly 的 portable-SIMD 派生路径分开覆盖。
@@ -136,7 +143,8 @@ schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配�
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
 `just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
 只用 examples 实际所需的普通依赖执行四个基础流程、两方案的密文乘法双后端和 BFV
-working-basis 双后端，避免 dev-dependencies 或 workspace feature 合并掩盖接口问题。
+working-basis 双后端，另用一个BGV三层预算系数流程覆盖两后端的drop、自同构与换钥，共8个独立包、12次执行。
+这避免 dev-dependencies 或 workspace feature 合并掩盖接口问题，不展开完整参数矩阵。
 系数消费者不启用 batching；槽消费者只需
 启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 
@@ -145,7 +153,7 @@ working-basis 双后端，避免 dev-dependencies 或 workspace feature 合并�
 `working_evaluation_keys`用独立整数CRT/nearest-round/scaled-embed oracle检查全部prefix、
 Radix/Hybrid及selected-component relin/switch/auto。`leveled_multiplication`核对真实
 multiply/square/alias与恢复外部Q；`leveled_parameters`检查有限family/depth准入与实际
-ordinary client/key绑定。分配检查复用allocation test的既有harness。
+ordinary client/key绑定、自选prime/law准入及公开分项账本。分配检查复用allocation test的既有harness。
 
 ```sh
 cargo test -p primus_bfv --test working_evaluation_keys --test leveled_multiplication --test leveled_parameters
@@ -153,9 +161,19 @@ cargo run -p primus_bfv --example working_basis
 cargo bench -p primus_bfv --bench working_basis -- --test
 ```
 
-普通行为主要用小环；工厂绑定与示例需要一份实际N16384 family。外部consumer额外复制
-该例子，以正常依赖验证两keybackend。BFV的dashu-int现用于精确冷参数认证，是正常
-运行依赖；BGV仍独立，不依赖BFV planner。Criterion不进入任何normal tree。
+普通行为主要用小环；shipped profile回归保留实际N16384/N32768几何。外部consumer复制
+现有例子，以正常依赖验证两keybackend。BFV和BGV各自使用dashu-int进行精确冷参数预算，
+BGV仍独立，不依赖BFV planner。Criterion不进入任何normal tree。
+参数生成、支持的电路族、公开预算和独立安全参考见[参数指南](ordinary-parameter-budgets.md)。
+
+## Context/level 与 raw 边界
+
+普通密文由context分配，clone和借用view保留本地context/level；自动恢复从密文取level。
+同形不同context、错level、错误输出在写入/RNG前拒绝。`from_raw` / `zero_raw`及显式
+level恢复仍有独立caller合同，`try_bind_ciphertext`对已知来源的raw数组执行一次完整
+长度/canonical检查，不证明真实secret或外部NTT来源。普通role key的prepare也检查
+同一context，但同context不同actual secret仍由调用方匹配，详见
+[方案绑定与互操作](scheme-context-binding.md)。
 
 工作基不是永久modulus drop。普通参数证书不涵盖collective/raw/mixed输入，增加其他
 运算后须重计噪声，见[完整契约](bfv-working-basis.md)。

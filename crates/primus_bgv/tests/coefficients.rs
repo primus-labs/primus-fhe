@@ -18,7 +18,7 @@ const Q: [u64; 3] = [
 ];
 fn context(count: usize, error: ErrorDistribution) -> BgvContext {
     BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(P),
             &Q[..count]
@@ -141,7 +141,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                 if centered {
                     client.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
                 } else {
-                    client.encrypt_to(&message.as_view(), &mut ciphertext.as_mut_view(), &mut rng);
+                    client.encrypt_to(&message.as_view(), &mut ciphertext, &mut rng);
                 }
                 let phase = phase_oracle(ciphertext.as_ref(), &secret, count);
                 for limb in phase.as_chunks::<N>().0.iter() {
@@ -154,7 +154,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                         assert_eq!(actual, m + i128::from(P) * i128::from(e));
                     }
                 }
-                assert_eq!(client.decrypt(&ciphertext, 0), message);
+                assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
             }
         }
     }
@@ -199,26 +199,24 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
         }
     }
     context.table().transform_slice(c0.as_mut());
-    assert_eq!(client.decrypt(&ciphertext, 0), expected);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), expected);
     assert_eq!(expected.as_ref()[5], P - 1); // canonical Q-1 modulo p is zero; centered phase is -1.
 }
 
 #[test]
 fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
-    let moduli = Q[..1]
-        .iter()
-        .copied()
-        .map(BarrettModulus::new)
-        .collect::<Vec<_>>();
+    let moduli = [BarrettModulus::new(35)];
     assert!(matches!(
         BgvParameters::try_coefficients(
             PolyLength::new(N),
-            BarrettModulus::new(17),
+            BarrettModulus::new(15),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            1.0
+            ErrorDistribution::Gaussian {
+                standard_deviation: 1.0
+            }
         ),
-        Err(BgvParametersError::PrimeCongruence { .. })
+        Err(BgvParametersError::PlaintextNotCoprime { .. })
     ));
     let context = context(1, ErrorDistribution::CenteredBinomial { eta: 1 });
     let mut rng = StdRng::seed_from_u64(2);
@@ -239,7 +237,7 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
     assert!(output.as_ref().iter().all(|&x| x == 77));
     assert_eq!(rng.next_u64(), expected_rng.next_u64());
     let valid = Polynomial(vec![1u64; N]);
-    let mut short = BgvCiphertext::new(vec![77; 2 * context.rns_poly_len(0) - 1]);
+    let mut short = BgvCiphertext::from_raw(vec![77; 2 * context.rns_poly_len(0) - 1]);
     let mut rng = StdRng::seed_from_u64(4);
     let mut expected_rng = StdRng::seed_from_u64(4);
     assert!(
@@ -268,13 +266,13 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
 
 #[test]
 fn public_binding_rejects_different_plaintext_error_scale_on_the_same_basis() {
-    use primus_bgv::BgvPublicKeyError;
+    use primus_bgv::keys::BgvPublicKeyError;
     let context = context(1, ErrorDistribution::CenteredBinomial { eta: 1 });
     let mut rng = StdRng::seed_from_u64(45);
     let client = BgvClient::generate(&context, &mut rng);
     let public = client.public_key(&mut rng);
     let other = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(2),
             &[BarrettModulus::new(Q[0])],
@@ -297,7 +295,7 @@ fn public_binding_rejects_different_plaintext_error_scale_on_the_same_basis() {
 fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     let p = 2;
     let context = BgvContext::try_new(
-        BgvParameters::try_with_error_distribution(
+        BgvParameters::try_coefficients(
             PolyLength::new(N),
             BarrettModulus::new(p),
             &[BarrettModulus::new(Q[0])],
@@ -324,5 +322,5 @@ fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     for (&actual, &error) in phase.iter().zip(&errors) {
         assert_eq!(actual, -1 + i128::from(p) * i128::from(error));
     }
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
 }

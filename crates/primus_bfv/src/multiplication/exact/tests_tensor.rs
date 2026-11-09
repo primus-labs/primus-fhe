@@ -1,7 +1,10 @@
 //! Exact BFV tensor/scaling semantics, independent of production CRT and NTT.
 
-use super::reference::BfvReferenceMultiplier;
-use crate::{BfvCiphertext, BfvContext, BfvMultiplier, BfvParameters, BfvQuadraticCiphertext};
+use super::{check_ciphertext, reference::BfvReferenceMultiplier};
+use crate::{
+    BfvCiphertext, BfvContext, BfvParameters,
+    advanced::{BfvMultiplier, BfvQuadraticCiphertext},
+};
 use dashu_int::IBig;
 use primus_data::{Data, DataMut};
 use primus_distr::ErrorDistribution;
@@ -110,8 +113,8 @@ impl BfvMultiplier<'_> {
         A: Data<Elem = u64>,
         B: Data<Elem = u64>,
     {
-        self.validate_input(lhs.as_ref());
-        self.validate_input(rhs.as_ref());
+        check_ciphertext(self.context, self.level, lhs);
+        check_ciphertext(self.context, self.level, rhs);
         self.validate_raw(output);
         self.workspace.tensor(
             self.context,
@@ -131,7 +134,7 @@ impl BfvMultiplier<'_> {
     where
         A: Data<Elem = u64>,
     {
-        self.validate_input(input.as_ref());
+        check_ciphertext(self.context, self.level, input);
         self.validate_raw(output);
         self.workspace.tensor(
             self.context,
@@ -161,7 +164,7 @@ impl BfvMultiplier<'_> {
         C: DataMut<Elem = u64>,
     {
         self.validate_raw(input);
-        self.validate_output(output.as_ref());
+        self.check_output(output);
         // Preserve the test's NTT tensor for its independent component oracle.
         // Production consumes its own tensor in place; this test reuses that
         // existing allocation rather than adding a production-only copy buffer.
@@ -205,7 +208,7 @@ const P: [u64; 4] = [
 
 fn context(t: u64) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(N),
             BarrettModulus::new(t),
             BarrettModulus::new(2_199_023_190_017),
@@ -339,7 +342,7 @@ fn scaled(raw: &[Vec<IBig>; 3], t: u64, q: &IBig) -> [Vec<IBig>; 3] {
 }
 
 fn ciphertext(components: &[Vec<IBig>; 2], moduli: &[u64]) -> BfvCiphertext<Vec<u64>> {
-    BfvCiphertext::new(
+    BfvCiphertext::from_raw(
         components
             .iter()
             .flat_map(|component| moduli.iter().flat_map(|&q| dft(component, q)))
@@ -486,9 +489,9 @@ fn dense_monomial_and_square_products_match_exact_integer_tensor_at_all_levels()
                 verify_components(output.as_ref(), &expected, moduli);
                 verify_phase(&output, &expected, moduli);
                 reference.multiply_to(&left, &right, &mut reference_output);
-                assert_eq!(output, reference_output);
+                assert_eq!(output.as_ref(), reference_output.as_ref());
                 multiplier.multiply_to(&left, &right, &mut reference_output);
-                assert_eq!(output, reference_output);
+                assert_eq!(output.as_ref(), reference_output.as_ref());
 
                 multiplier.square_raw_to(&left, &mut raw);
                 let expected_square_raw = tensor(&lhs, &lhs);
@@ -497,9 +500,9 @@ fn dense_monomial_and_square_products_match_exact_integer_tensor_at_all_levels()
                 multiplier.square_to(&left, &mut output);
                 verify_components(output.as_ref(), &expected_square, moduli);
                 reference.square_to(&left, &mut reference_output);
-                assert_eq!(output, reference_output);
+                assert_eq!(output.as_ref(), reference_output.as_ref());
                 multiplier.multiply_to(&left, &left, &mut reference_output);
-                assert_eq!(output, reference_output);
+                assert_eq!(output.as_ref(), reference_output.as_ref());
             }
         }
     }
@@ -585,7 +588,7 @@ fn insufficient_lift_and_malformed_or_foreign_storage_are_rejected_before_writes
         let mut raw = multiplier.new_raw_tensor();
         let before = raw.as_ref().to_vec();
         for length in [0, input.as_ref().len() - 1, input.as_ref().len() + 1] {
-            let malformed = BfvCiphertext::zero(length);
+            let malformed = BfvCiphertext::zero_raw(length);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
                     multiplier.mul_raw_to(&malformed, &input, &mut raw);
@@ -594,7 +597,8 @@ fn insufficient_lift_and_malformed_or_foreign_storage_are_rejected_before_writes
             );
             assert_eq!(raw.as_ref(), before);
         }
-        let mut output = BfvQuadraticCiphertext::new(vec![17; 3 * context.rns_poly_len(level)]);
+        let mut output =
+            BfvQuadraticCiphertext::from_raw(vec![17; 3 * context.rns_poly_len(level)]);
         let before = output.clone();
         let other_context = self::context(2);
         let other = BfvMultiplier::try_new(&other_context, level, &P).unwrap();
@@ -606,7 +610,8 @@ fn insufficient_lift_and_malformed_or_foreign_storage_are_rejected_before_writes
             .is_err()
         );
         assert_eq!(output, before);
-        let mut malformed_output = BfvQuadraticCiphertext::new(vec![17; output.as_ref().len() - 1]);
+        let mut malformed_output =
+            BfvQuadraticCiphertext::from_raw(vec![17; output.as_ref().len() - 1]);
         let before = malformed_output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
@@ -652,21 +657,4 @@ fn automatic_basis_is_disjoint_and_exact_at_every_level() {
         verify_components(output.as_ref(), &expected, moduli);
     }
     assert!(BfvMultiplier::try_with_default_basis(&context, usize::MAX).is_err());
-}
-
-#[test]
-fn prime_selection_rejects_strong_pseudoprimes() {
-    for n in 0u64..4096 {
-        let trial_division = n >= 2
-            && !(2..)
-                .take_while(|d| d * d <= n)
-                .any(|d| n.is_multiple_of(d));
-        assert_eq!(super::is_prime(n), trial_division, "n={n}");
-    }
-    for composite in [341_550_071_728_321, 3_825_123_056_546_413_051] {
-        assert!(!super::is_prime(composite));
-    }
-    for prime in Q.into_iter().chain(P).chain([2_305_843_009_213_693_951]) {
-        assert!(super::is_prime(prime));
-    }
 }

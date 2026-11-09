@@ -1,11 +1,12 @@
 use primus_data::{Data, DataMut};
 
-use crate::multiply::hps::HpsMultiplier;
 use crate::working_basis::WorkingBasis;
 use crate::{
-    BfvCiphertext, BfvContext, BfvMultiplyError, BfvQuadraticCiphertext, BfvRelinearizationKey,
-    BfvRelinearizer,
+    BfvCiphertext, BfvContext, advanced::BfvQuadraticCiphertext, evaluation::BfvRelinearizer,
+    keys::BfvRelinearizationKey,
 };
+
+use super::{BfvMultiplyError, check_ciphertext, hps::HpsMultiplier};
 
 /// HPSPOVERQLEVELED multiplication with a smaller internal working basis.
 ///
@@ -20,6 +21,8 @@ use crate::{
 /// Mutable buffers belong to this operation; NTT tables and key columns are
 /// borrowed. Online methods allocate nothing. The working basis is explicit:
 /// no noise estimate, remaining-depth guess or empirical cushion is inferred.
+/// Bound input/output storage keeps this context and the external level; the
+/// internal working level is never used to retag the caller's ciphertext.
 ///
 /// # Correctness
 /// Inputs must use the key's actual coefficient secret, external ordered Q
@@ -52,10 +55,7 @@ impl<'a> BfvLeveledMultiplication<'a> {
         external_level: usize,
         key: &'a BfvRelinearizationKey,
     ) -> Result<Self, BfvMultiplyError> {
-        let basis = WorkingBasis::try_new(context, external_level, key.level())?;
-        let relinearizer = BfvRelinearizer::try_new(context, key)?;
-        let multiplier = HpsMultiplier::try_with_default_basis(context, key.level())?;
-        Ok(Self::from_parts(context, basis, multiplier, relinearizer))
+        Self::prepare(context, external_level, key, None)
     }
 
     /// Prepares the same operation with an explicit computation-only P basis.
@@ -73,27 +73,27 @@ impl<'a> BfvLeveledMultiplication<'a> {
         key: &'a BfvRelinearizationKey,
         auxiliary_moduli: &[u64],
     ) -> Result<Self, BfvMultiplyError> {
-        let basis = WorkingBasis::try_new(context, external_level, key.level())?;
-        let relinearizer = BfvRelinearizer::try_new(context, key)?;
-        let multiplier = HpsMultiplier::try_new(context, key.level(), auxiliary_moduli)?;
-        Ok(Self::from_parts(context, basis, multiplier, relinearizer))
+        Self::prepare(context, external_level, key, Some(auxiliary_moduli))
     }
 
-    fn from_parts(
+    fn prepare(
         context: &'a BfvContext,
-        basis: WorkingBasis<'a>,
-        multiplier: HpsMultiplier<'a>,
-        relinearizer: BfvRelinearizer<'a>,
-    ) -> Self {
-        let working_level = basis.working_level();
-        Self {
+        external_level: usize,
+        key: &'a BfvRelinearizationKey,
+        auxiliary_moduli: Option<&[u64]>,
+    ) -> Result<Self, BfvMultiplyError> {
+        let working_level = key.level();
+        let basis = WorkingBasis::try_new(context, external_level, working_level)?;
+        let relinearizer = BfvRelinearizer::try_new(context, key)?;
+        let multiplier = HpsMultiplier::prepare(context, working_level, auxiliary_moduli)?;
+        Ok(Self {
             basis,
             multiplier,
             relinearizer,
             lhs: context.new_ciphertext(working_level),
             rhs: context.new_ciphertext(working_level),
             quadratic: context.new_quadratic_ciphertext(working_level),
-        }
+        })
     }
 
     /// External input/output level, preserved across every request.
@@ -117,8 +117,9 @@ impl<'a> BfvLeveledMultiplication<'a> {
     /// Writes a degree-one product in the complete external Q basis.
     ///
     /// # Panics
-    /// Rejects all complete input/output lengths before any scratch or output
-    /// writes. Transform failures may partially modify scratch or output.
+    /// Rejects recorded context/external-level conflicts and incorrect complete
+    /// input/output lengths before any scratch or output writes. Transform failures
+    /// may partially modify scratch or output.
     pub fn multiply_to<A, B, C>(
         &mut self,
         lhs: &BfvCiphertext<A>,
@@ -129,13 +130,18 @@ impl<'a> BfvLeveledMultiplication<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
-        self.validate_length(lhs.as_ref());
-        self.validate_length(rhs.as_ref());
-        self.validate_length(output.as_ref());
-        shrink_ciphertext(&mut self.basis, lhs.as_ref(), self.lhs.as_mut());
-        shrink_ciphertext(&mut self.basis, rhs.as_ref(), self.rhs.as_mut());
-        self.multiplier
-            .multiply_to(&self.lhs, &self.rhs, &mut self.quadratic);
+        self.check_ciphertext(lhs);
+        self.check_ciphertext(rhs);
+        self.check_ciphertext(output);
+        self.basis
+            .shrink_ciphertext_to(lhs.as_ref(), self.lhs.as_mut());
+        self.basis
+            .shrink_ciphertext_to(rhs.as_ref(), self.rhs.as_mut());
+        self.multiplier.multiply_scaled_to(
+            self.lhs.as_ref(),
+            self.rhs.as_ref(),
+            self.quadratic.as_mut(),
+        );
         self.finish(output.as_mut());
     }
 
@@ -145,16 +151,16 @@ impl<'a> BfvLeveledMultiplication<'a> {
     /// contract. HPS still uses its actual asymmetric working-level square.
     ///
     /// # Panics
-    /// Rejects complete input/output lengths before scratch or output writes.
+    /// Rejects recorded context/external-level conflicts and incorrect complete
+    /// input/output lengths before scratch or output writes.
     pub fn square_to<A, B>(&mut self, input: &BfvCiphertext<A>, output: &mut BfvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        self.validate_length(input.as_ref());
-        self.validate_length(output.as_ref());
-        shrink_ciphertext(&mut self.basis, input.as_ref(), self.lhs.as_mut());
-        self.multiplier.square_to(&self.lhs, &mut self.quadratic);
+        self.check_ciphertext(input);
+        self.check_ciphertext(output);
+        self.square_into_working_basis(input.as_ref());
         self.finish(output.as_mut());
     }
 
@@ -164,40 +170,34 @@ impl<'a> BfvLeveledMultiplication<'a> {
     /// first write. Inherits [`Self::square_to`]'s mathematical contract.
     ///
     /// # Panics
-    /// Rejects an incorrect complete length before any writes.
+    /// Rejects recorded context/external-level conflicts or incorrect lengths
+    /// before any writes.
     pub fn square_assign<A>(&mut self, input: &mut BfvCiphertext<A>)
     where
         A: DataMut<Elem = u64>,
     {
-        self.validate_length(input.as_ref());
-        shrink_ciphertext(&mut self.basis, input.as_ref(), self.lhs.as_mut());
-        self.multiplier.square_to(&self.lhs, &mut self.quadratic);
+        self.check_ciphertext(input);
+        self.square_into_working_basis(input.as_ref());
         self.finish(input.as_mut());
+    }
+
+    fn square_into_working_basis(&mut self, input: &[u64]) {
+        self.basis.shrink_ciphertext_to(input, self.lhs.as_mut());
+        self.multiplier
+            .square_scaled_to(self.lhs.as_ref(), self.quadratic.as_mut());
     }
 
     fn finish(&mut self, output: &mut [u64]) {
         self.relinearizer
-            .relinearize_to(&self.quadratic, &mut self.lhs);
-        self.basis
-            .restore_polynomials_to(self.lhs.as_ref(), output, 2);
+            .relinearize_validated_to(&self.quadratic, &mut self.lhs);
+        self.basis.restore_ciphertext_to(self.lhs.as_ref(), output);
     }
 
-    fn validate_length(&self, values: &[u64]) {
-        assert_eq!(
-            values.len(),
-            2 * self.basis.external_poly_len(),
-            "BFV leveled ciphertext length mismatch"
+    fn check_ciphertext<C: Data<Elem = u64>>(&self, ciphertext: &BfvCiphertext<C>) {
+        check_ciphertext(
+            self.relinearizer.context(),
+            self.basis.external_level(),
+            ciphertext,
         );
-    }
-}
-
-fn shrink_ciphertext(basis: &mut WorkingBasis<'_>, input: &[u64], output: &mut [u64]) {
-    let external = basis.external_poly_len();
-    let working = basis.working_poly_len();
-    for (input, output) in input
-        .chunks_exact(external)
-        .zip(output.chunks_exact_mut(working))
-    {
-        basis.shrink_polynomial_to(input, output);
     }
 }

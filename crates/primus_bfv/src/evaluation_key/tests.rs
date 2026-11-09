@@ -1,9 +1,10 @@
 //! Independent DFT/CRT phases and integer signed-digit residuals for BFV keys.
 
-use super::NativeEvaluationKey;
+use super::material::NativeEvaluationKey;
 use crate::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvKeySwitcher, BfvParameters,
-    BfvQuadraticCiphertext, BfvRelinearizer,
+    BfvCiphertext, BfvClient, BfvContext, BfvParameters,
+    advanced::BfvQuadraticCiphertext,
+    evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvRelinearizer},
 };
 use dashu_int::IBig;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
@@ -23,7 +24,7 @@ const Q: [u64; 3] = [
 
 fn make_context(p: u64, moduli: &[u64], n: usize) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_with_decoder_modulus(
             PolyLength::new(n),
             BarrettModulus::new(p),
             BarrettModulus::new((1 << 61) - 1),
@@ -399,7 +400,7 @@ fn exact_and_truncated_switch_keys_match_integer_residuals() {
                     .zip(&product)
                     .map(|(m, value)| m - value)
                     .collect();
-                let input = BfvCiphertext::new(encode(&[c0, c1.clone()], count));
+                let input = BfvCiphertext::from_raw(encode(&[c0, c1.clone()], count));
                 assert_eq!(phase(input.as_ref(), &source_big, count), message);
                 let expected =
                     switched_phase(&message, &c1, &source_big, &row_errors, count, config);
@@ -410,9 +411,9 @@ fn exact_and_truncated_switch_keys_match_integer_residuals() {
                 // A zero switched component has all-zero digits even for a
                 // truncated gadget, so no key error or residual is injected.
                 let constant =
-                    BfvCiphertext::new(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
+                    BfvCiphertext::from_raw(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
                 switch.switch_to(&constant, &mut output);
-                assert_eq!(output, constant);
+                assert_eq!(output.as_ref(), constant.as_ref());
             }
         }
     }
@@ -456,7 +457,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
             count,
             config,
         );
-        let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
+        let quadratic = BfvQuadraticCiphertext::from_raw(encode(&components, count));
         assert_eq!(phase(quadratic.as_ref(), &secret_big, count), before);
         let mut linear = context.new_ciphertext(level);
         BfvRelinearizer::try_new(&context, &key)
@@ -475,7 +476,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 count,
                 config,
             );
-            let source = BfvCiphertext::new(encode(&components[..2], count));
+            let source = BfvCiphertext::from_raw(encode(&components[..2], count));
             let before = automorphism(
                 &add(&components[0], &product(&components[1], &secret_big)),
                 exponent,
@@ -500,7 +501,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
 fn columns(key: &NativeEvaluationKey) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
     key.columns
         .chunks_exact(2 * key.key_poly_len())
-        .map(BfvCiphertext::new)
+        .map(BfvCiphertext::from_raw)
 }
 
 #[test]
@@ -552,7 +553,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                 (&relin.key, &source_square, &source_big),
                 (&auto.key, &transformed, &source_big),
             ] {
-                let moduli = key.key_moduli_values(&context);
+                let moduli = key.key_moduli_values();
                 for (column, values) in key.columns.chunks_exact(2 * key.key_poly_len()).enumerate()
                 {
                     let mut first_errors = None;
@@ -603,7 +604,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                     );
                 }
             };
-            let input = BfvCiphertext::new(encode(&components[..2], count));
+            let input = BfvCiphertext::from_raw(encode(&components[..2], count));
             let mut output = context.new_ciphertext(level);
             BfvKeySwitcher::try_new(&context, &switch)
                 .unwrap()
@@ -613,7 +614,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                 phase(input.as_ref(), &source_big, count),
                 &target_big,
             );
-            let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
+            let quadratic = BfvQuadraticCiphertext::from_raw(encode(&components, count));
             BfvRelinearizer::try_new(&context, &relin)
                 .unwrap()
                 .relinearize_to(&quadratic, &mut output);
@@ -636,12 +637,13 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
 
 #[test]
 fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous() {
-    use super::{BfvEvaluationKeyError, NativeHybridError};
+    use super::BfvEvaluationKeyError;
+    use primus_lattice::hybrid::NativeHybridError;
     use rand::Rng;
     let law = SecretKeyDistr::gaussian(60_000_000_000_000.0);
     let make = |moduli: &[u64]| {
         BfvContext::try_with_levels(
-            BfvParameters::try_with_error_distribution(
+            BfvParameters::try_with_decoder_modulus(
                 PolyLength::new(N),
                 BarrettModulus::new(2),
                 BarrettModulus::new((1 << 61) - 1),
@@ -698,7 +700,7 @@ fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous()
             .as_chunks::<N>()
             .0
             .iter()
-            .zip(key.key_moduli_values(target_context))
+            .zip(key.key_moduli_values())
         {
             assert_eq!(limb.as_slice(), dft(&expected, q));
         }

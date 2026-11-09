@@ -1,6 +1,7 @@
 //! One complete packed request with all resources/output prepared outside timing.
 use criterion::{Criterion, criterion_group, criterion_main};
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding};
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -21,7 +22,9 @@ fn bench(c: &mut Criterion) {
             BarrettModulus::new(P),
             &moduli,
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
     )
@@ -61,7 +64,7 @@ fn bench(c: &mut Criterion) {
                 &mut output,
                 PlaintextEmbedding::Centered,
             );
-            client.decrypt_to(&output, 0, &mut recovered);
+            client.decrypt_at_level_to(&output, 0, &mut recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
             batching.decode_to(&small, &mut slots, &mut scratch);
             black_box(&slots);

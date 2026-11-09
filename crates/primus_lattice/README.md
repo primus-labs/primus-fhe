@@ -91,8 +91,10 @@ Scheme key generators accept it through `EvaluationKeyConfig::PreparedRadix`.
 
 With `rns`, `hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 provides fixed-u64 rank-one `[c0,c1]` plus-phase arithmetic for BFV/BGV keys.
-Parameters share immutable CRT bases and own only P NTT tables; actual Q NTT
-resources stay with the scheme. A prepared product shares that owner and reuses
+Parameters share immutable CRT bases. `NativeHybridAuxiliary` owns the ordered P
+basis and NTT tables for one ring. Several active Q levels can reuse it through
+`NativeHybridParameters::try_with_auxiliary`. The scheme owns the Q NTT tables.
+A prepared product shares the active-level parameters and reuses
 all mutable scratch. `HybridModDown::Centered` and `PlaintextPreserving(p)` keep
 their distinct corrections. This adds no ciphertext family or raw GLWE bridge.
 Scheme owners still generate/sanitize role keys and establish all error/security
@@ -154,6 +156,13 @@ Default features are empty: coefficient storage, layouts and basic arithmetic do
 - `fourier` enables the corresponding generic Fourier APIs without selecting an FFT engine.
 - `rustfft` / `tfhe-fft` enable `fourier` and the corresponding FFT implementation; they can be combined.
 - `rns` enables CRT/DCRT ciphertexts and multiplication workspaces, including the `ntt` capability required by DCRT.
+- `parallel` forwards bounded DCRT prefix forward/inverse NTT scheduling to an
+  active NTT dependency, including GLev products and Hybrid Q/P transforms. It
+  does not activate `ntt` or `rns`; enable the needed representation separately.
+  Prefixes with N≥4096 and two or more limbs use at most four contiguous tasks;
+  bound total pool threads with `RAYON_NUM_THREADS` or `ThreadPool::install`.
+  It is off by default, with no pool initialization on this serial NTT path;
+  random sampling is not parallelized.
 - `simd` propagates nightly SIMD only to active arithmetic dependencies; it does not activate a backend, FFT engine or `rns`.
 - `RnsGlweSize` and `RnsGadgetSize` remain available without `rns`.
 

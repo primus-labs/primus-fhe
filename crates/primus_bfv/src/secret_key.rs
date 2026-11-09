@@ -2,10 +2,10 @@ use primus_data::{Data, DataMut};
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe_rns::{DcrtGlweSecretKey, RnsDomainError};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial, PolynomialOwned};
 
-use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters};
+use crate::workspace::BfvDecryptWorkspace;
+use crate::{BfvCiphertext, BfvContext, BfvParameters};
 
 /// A secret key bound to rank-one BFV parameters and their ordered NTT table.
 ///
@@ -14,8 +14,7 @@ use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters};
 /// NTT root/evaluation identity or evaluated ciphertext noise margin.
 pub struct BfvSecretKeyContext<'a> {
     key: &'a DcrtGlweSecretKey<u64>,
-    parameters: &'a BfvParameters,
-    table: &'a U64DcrtTable,
+    context: &'a BfvContext,
 }
 
 impl<'a> BfvSecretKeyContext<'a> {
@@ -33,15 +32,15 @@ impl<'a> BfvSecretKeyContext<'a> {
     }
 
     pub(crate) fn from_validated(key: &'a DcrtGlweSecretKey<u64>, context: &'a BfvContext) -> Self {
-        Self {
-            key,
-            parameters: context.parameters(),
-            table: context.table(),
-        }
+        Self { key, context }
+    }
+
+    pub(crate) fn context(&self) -> &'a BfvContext {
+        self.context
     }
 
     pub(crate) fn parameters(&self) -> &'a BfvParameters {
-        self.parameters
+        self.context.parameters()
     }
 
     /// Encrypts N coefficients in `[0,t)` using unsigned BFV embedding.
@@ -50,7 +49,8 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// before c0's sole forward NTT. No scratch allocation occurs.
     ///
     /// # Panics
-    /// Complete input/output lengths and canonical coefficients are checked
+    /// Recorded output context/level, complete lengths and canonical
+    /// coefficients are checked
     /// before sampling or writes. Codec, RNG or transform panics can leave
     /// partial output.
     pub fn encrypt_to<R, A, B>(
@@ -94,18 +94,19 @@ impl<'a> BfvSecretKeyContext<'a> {
     {
         assert_eq!(
             input.as_ref().len(),
-            self.parameters.poly_length().get(),
+            self.context.parameters().poly_length().get(),
             "BFV plaintext length mismatch"
         );
         assert!(
             input
                 .as_ref()
                 .iter()
-                .all(|&x| x < self.parameters.codec().t()),
+                .all(|&x| x < self.context.parameters().codec().t()),
             "BFV plaintext coefficient is not canonical"
         );
         self.encrypt_with_c0_to(output, rng, |c0| {
-            self.parameters
+            self.context
+                .parameters()
                 .codec()
                 .add_encode_coeffs_assign(input, c0, embedding);
         });
@@ -121,7 +122,8 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// The caller supplies canonical residues and the intended plaintext lifts.
     ///
     /// # Panics
-    /// Layout errors are rejected before sampling/writes. RNG or transform
+    /// Recorded output context/level conflicts and layout errors are rejected
+    /// before sampling/writes. RNG or transform
     /// panics can leave partial output.
     pub fn encrypt_plaintext_lift_crt_to<R, A, B>(
         &self,
@@ -135,22 +137,27 @@ impl<'a> BfvSecretKeyContext<'a> {
     {
         assert_eq!(
             input.as_ref().len(),
-            self.parameters.size().rns_poly_len(),
+            self.context.parameters().size().rns_poly_len(),
             "BFV CRT plaintext length mismatch"
         );
         self.encrypt_with_c0_to(output, rng, |c0| {
             c0.add_mul_factor_assign(
                 input,
-                self.parameters.codec().delta_factor_mod_q().as_ref(),
-                self.parameters.poly_length().get(),
-                self.parameters.codec().moduli_values(),
+                self.context
+                    .parameters()
+                    .codec()
+                    .delta_factor_mod_q()
+                    .as_ref(),
+                self.context.parameters().poly_length().get(),
+                self.context.parameters().codec().moduli_values(),
             );
         });
     }
 
     /// Overwrites a complete ciphertext with an encryption of zero, allocating nothing.
     /// # Panics
-    /// Checks the complete output before sampling. RNG/NTT panics may leave
+    /// Checks recorded context/level and complete output before sampling.
+    /// RNG/NTT panics may leave
     /// partially written output.
     pub(crate) fn encrypt_zeros_to<R, B>(&self, output: &mut BfvCiphertext<B>, rng: &mut R)
     where
@@ -172,9 +179,10 @@ impl<'a> BfvSecretKeyContext<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, 0);
         assert_eq!(
             output.as_ref().len(),
-            self.parameters.size().rns_poly_len(),
+            self.context.parameters().size().rns_poly_len(),
             "BFV phase output length mismatch"
         );
         phase_with_secret_to(
@@ -185,8 +193,8 @@ impl<'a> BfvSecretKeyContext<'a> {
                 .expect("rank-one secret")
                 .as_ref(),
             output,
-            self.parameters.poly_length().get(),
-            self.parameters.base_q().moduli(),
+            self.context.parameters().poly_length().get(),
+            self.context.parameters().base_q().moduli(),
         );
     }
 
@@ -201,7 +209,7 @@ impl<'a> BfvSecretKeyContext<'a> {
     where
         A: Data<Elem = u64>,
     {
-        let mut output = PolynomialOwned::zero(self.parameters.poly_length().get());
+        let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
         self.decrypt_to(input, &mut output, workspace);
         output
     }
@@ -215,7 +223,8 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// cover fresh private encryption, not public/evaluated noise automatically.
     ///
     /// # Panics
-    /// Complete input/output/workspace geometry is checked before writes.
+    /// Recorded input context/level and complete input/output/workspace
+    /// geometry are checked before writes.
     /// Transform/decoding panics may leave partial scratch or output.
     pub fn decrypt_to<A, B>(
         &self,
@@ -228,18 +237,18 @@ impl<'a> BfvSecretKeyContext<'a> {
     {
         assert_eq!(
             workspace.size(),
-            self.parameters.size(),
+            self.context.parameters().size(),
             "BFV decryption workspace shape mismatch"
         );
         assert_eq!(
             output.as_ref().len(),
-            self.parameters.poly_length().get(),
+            self.context.parameters().poly_length().get(),
             "BFV plaintext output length mismatch"
         );
         let (phase, conversion) = workspace.as_mut();
         self.phase_to(input, phase);
-        self.table.inverse_transform_slice(phase.as_mut());
-        self.parameters.codec().decode_coeffs_to(
+        self.context.table().inverse_transform_slice(phase.as_mut());
+        self.context.parameters().codec().decode_coeffs_to(
             &mut CrtPolynomial(phase.as_mut()),
             output,
             conversion,
@@ -257,7 +266,8 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// Recovery still requires the complete phase error to meet the codec bound.
     ///
     /// # Panics
-    /// Incorrect complete input/output lengths are rejected before sampling.
+    /// Recorded output context/level conflicts and incorrect complete lengths
+    /// are rejected before sampling.
     /// RNG or transform panics may leave partial output.
     pub fn encrypt_encoded_crt_to<R, A, B>(
         &self,
@@ -271,14 +281,14 @@ impl<'a> BfvSecretKeyContext<'a> {
     {
         assert_eq!(
             input.as_ref().len(),
-            self.parameters.size().rns_poly_len(),
+            self.context.parameters().size().rns_poly_len(),
             "BFV encoded phase length mismatch"
         );
         self.encrypt_with_c0_to(output, rng, |c0| {
             c0.add_assign(
                 input,
-                self.parameters.poly_length().get(),
-                self.parameters.base_q().moduli(),
+                self.context.parameters().poly_length().get(),
+                self.context.parameters().base_q().moduli(),
             )
         });
     }
@@ -292,13 +302,14 @@ impl<'a> BfvSecretKeyContext<'a> {
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
     {
-        let parameters = self.parameters;
+        output.check_binding(self.context, 0);
+        let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
         let sampling = parameters.encryption_parameters();
         let (mut c0, mut c1) = output.c0_c1_mut(parameters.size().rns_poly_len());
         sampling.sample_noise_to(c0.as_mut(), parameters.codec().moduli_values(), rng);
         inject(&mut CrtPolynomial(c0.as_mut()));
-        self.table.transform_slice(c0.as_mut());
+        self.context.table().transform_slice(c0.as_mut());
         primus_distr::sample_crt_uniform_values_to(
             c1.as_mut(),
             n,

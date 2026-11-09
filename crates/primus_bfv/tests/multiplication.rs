@@ -1,9 +1,9 @@
 //! Ordinary prepared multiplication, in-place square and complete-length boundaries.
-use primus_bfv::{
-    BfvCiphertext, BfvClient, BfvContext, BfvModulusSwitch, BfvMultiplication, BfvMultiplier,
-    BfvParameters, BfvRelinearizer,
-};
+use primus_bfv::advanced::BfvMultiplier;
+use primus_bfv::evaluation::{BfvModulusSwitch, BfvMultiplication, BfvRelinearizer};
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -30,7 +30,9 @@ fn context(n: usize, p: u64, moduli: &[u64]) -> BfvContext {
                 .map(BarrettModulus::new)
                 .collect::<Vec<_>>(),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         moduli.len(),
@@ -65,7 +67,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         request.multiply_to(&left, &right, &mut output);
         let mut expected = vec![0; N];
         expected[..3].copy_from_slice(&[15, 13, 2]);
-        assert_eq!(client.decrypt(&output, level).as_ref(), expected);
+        assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
 
         let mut multiplier = BfvMultiplier::try_with_default_basis(&context, level).unwrap();
         let mut quadratic = context.new_quadratic_ciphertext(level);
@@ -79,7 +81,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         request.square_assign(&mut inplace);
         assert_eq!(output.as_ref(), inplace.as_ref());
         expected[..3].copy_from_slice(&[9, 12, 4]);
-        assert_eq!(client.decrypt(&inplace, level).as_ref(), expected);
+        assert_eq!(client.decrypt_at_level(&inplace, level).as_ref(), expected);
         if level + 1 < context.level_count() {
             let mut drop = BfvModulusSwitch::new(&context, level);
             let mut next_left = context.new_ciphertext(level + 1);
@@ -110,8 +112,8 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
     let valid = context.new_ciphertext(2);
     let length = valid.as_ref().len();
     for bad in [0, length - 1, length + 1, 2 * length] {
-        let mut malformed = BfvCiphertext::new(vec![77; bad]);
-        let mut output = BfvCiphertext::new(vec![55; length]);
+        let mut malformed = BfvCiphertext::from_raw(vec![77; bad]);
+        let mut output = BfvCiphertext::from_raw(vec![55; length]);
         for left_is_bad in [false, true] {
             let (lhs, rhs) = if left_is_bad {
                 (&malformed, &valid)
@@ -158,7 +160,7 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
 
 #[test]
 fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
-    use primus_bfv::BfvMultiplicationBackend::{Exact, HpsPOverQ};
+    use primus_bfv::evaluation::BfvMultiplicationBackend::{Exact, HpsPOverQ};
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x23bf_0001);
     let mut client = BfvClient::generate(&context, &mut rng);
@@ -208,9 +210,9 @@ fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
             assert!(!request.auxiliary_moduli().is_empty());
             let mut output = context.new_ciphertext(level);
             request.multiply_to(&left, &right, &mut output);
-            assert_eq!(client.decrypt(&output, level).as_ref(), expected);
+            assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
             request.square_to(&left, &mut output);
-            assert_eq!(client.decrypt(&output, level).as_ref(), square);
+            assert_eq!(client.decrypt_at_level(&output, level).as_ref(), square);
             let mut in_place = left.clone();
             request.square_assign(&mut in_place);
             assert_eq!(output.as_ref(), in_place.as_ref());
@@ -229,7 +231,7 @@ fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
 
 #[test]
 fn hps_explicit_basis_and_complete_lengths_are_checked_before_writes() {
-    use primus_bfv::{BfvMultiplicationBackend::HpsPOverQ, BfvMultiplyError};
+    use primus_bfv::evaluation::{BfvMultiplicationBackend::HpsPOverQ, BfvMultiplyError};
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x23bf_bad0);
     let client = BfvClient::generate(&context, &mut rng);
@@ -267,8 +269,8 @@ fn hps_explicit_basis_and_complete_lengths_are_checked_before_writes() {
     let valid = context.new_ciphertext(0);
     let length = valid.as_ref().len();
     for bad in [0, length - 1, length + 1, 2 * length] {
-        let malformed = BfvCiphertext::new(vec![77; bad]);
-        let mut output = BfvCiphertext::new(vec![55; length]);
+        let malformed = BfvCiphertext::from_raw(vec![77; bad]);
+        let mut output = BfvCiphertext::from_raw(vec![55; length]);
         for (lhs, rhs) in [(&malformed, &valid), (&valid, &malformed)] {
             assert!(
                 catch_unwind(AssertUnwindSafe(|| request.multiply_to(

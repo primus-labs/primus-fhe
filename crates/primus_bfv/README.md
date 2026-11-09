@@ -20,26 +20,32 @@ cargo run -p primus_bfv --example slots --features batching
 
 Both examples follow the same chain:
 
-1. Build `BfvParameters::try_coefficients(N,t,&Q,secret_law,sigma)` and move it
+1. Build `BfvParameters::try_coefficients(N,t,&Q,secret_law,error_law)` and move it
    into `BfvContext::try_new(parameters)`.
 2. Generate `BfvClient::generate(&context,rng)`, retain `client.public_key(rng)`
    and bind `context.public_key_encryptor(&public_key)`.
 3. Allocate plaintexts and outputs with `context.new_plaintext()` and
-   `context.new_ciphertext(level)`. Prepare `BfvEvaluator::new(&context,level)`.
-4. Encrypt, use `add_plain_to` / `mul_plain_to` with `PlaintextEmbedding`, then
-   recover with `client.decrypt(ciphertext,level)`. Reuse setup and outputs for
-   the next request, with fresh encryption coins.
+   `context.new_ciphertext(level)`. Prepare `evaluation::BfvEvaluator::new(&context,level)`.
+4. Use `encrypt_centered_to`, `add_plain_assign` and `mul_plain_assign` with
+   centered lifts, then recover at the recorded level with
+   `client.decrypt_to(&ciphertext, &mut plaintext)`. Reuse the prepared operations
+   and buffers with fresh encryption coins.
 
 [Slots](examples/slots.rs) adds one `context.batching_encoder()` and uses n=N.
 `encode_to` writes directly into the context's plaintext polynomial; `decode`
 recovers slots after decryption. The encoder owns its plaintext NTT table, so
-retain it across requests. Basic examples use allocating encryption/recovery
-conveniences; prepared `*_to` calls support reusable caller-owned outputs.
+retain it across requests. The coefficient example uses caller-owned buffers.
+Allocating conveniences are available when the caller needs an owned result.
 Their small parameters demonstrate functionality and are not security presets.
 Full-ring packing needs a plaintext prime t≡1 mod 2N. The subring examples use
 the plaintext ring n<N while retaining full-N secrets and ciphertexts.
 
 ## Choose an advanced workflow
+
+Find key material and Radix/Hybrid configuration in `keys`, and prepared
+operations in `evaluation`. Ordinary leveled requests and budgets live in
+`planning`. Use `advanced` for explicit scaled tensors and recovery scratch,
+and `collective` for shared key contributions and fresh lookup.
 
 | Need | Entry point and added resource |
 | --- | --- |
@@ -59,8 +65,8 @@ cargo run -p primus_bfv --example leveled_slots --features batching
 ```
 
 Role-key operations take `(&context,&key)` and derive their level from that key;
-key generation, linear evaluation, prime drop and recovery select their actual
-level explicitly. `try_with_levels(parameters,count)` includes level zero;
+key generation, linear evaluation and prime drop select their actual level
+explicitly. Ordinary recovery reads the ciphertext's bound level. `try_with_levels(parameters,count)` includes level zero;
 level l omits the last l primes. Generate keys for each actual level used.
 A positive `row_rotation_key` step rotates left within each row, a negative one
 rotates right; `row_swap_key` exchanges the two rows. Generic polynomial
@@ -68,7 +74,7 @@ substitutions remain available through `automorphism_key`.
 
 For repeated roles, prepare `context.radix_key_parameters(level,config)` or
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once and share
-its `Arc`. Numerical metadata does not prove actual secret or NTT identity.
+its `Arc`. Shared numerical metadata alone does not prove an imported secret or transform's provenance.
 Key P enlarges the evaluation-key modulus to QP and needs its own error/security
 budget. It is separate from BFV multiplication's computation-only P. See the
 [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
@@ -89,26 +95,40 @@ The [evaluation contract](../../guides/development/bfv-evaluation.md) owns these
 algorithms, truncated-radix residuals, exact rounded prime drops and error bounds.
 `BfvMultiplier` / `BfvRelinearizer` preserve an explicitly staged scaled quadratic
 workflow. The [working-basis contract](../../guides/development/bfv-working-basis.md)
-covers finite ordinary CBD1/CBD21 profiles; collective or raw SSLE needs separate
-accounting.
+covers ordinary binary-multiplication depths 1–8 using generated or explicit
+prime chains and the actual secret/error sampler's hard support. Start with
+`BfvLeveledRequest::create_context`, then admit the target depth with
+`BfvLeveledParameters::try_new`. The public ledger reports fresh public-key
+error, working HPS/rounding/key errors, fixed-Delta drift and remaining capacity.
+Separate `security_inputs()` include actual Hybrid QP domains and remain
+`NotEvaluated`; numerical admission does not establish a security level.
+Collective or raw SSLE needs separate accounting. See the
+[parameter and security-reference guide](../../guides/development/ordinary-parameter-budgets.md)
+for the supported workflow and independent offline screening.
 
 The codec is exact within its recovery bound, not an arbitrary-phase rounding
-oracle. `try_coefficients` selects gamma=2⁶¹−1 and requires t<gamma; `try_new`
-selects gamma explicitly and `try_with_error_distribution` selects the error law.
+oracle. `try_coefficients` selects gamma=2⁶¹−1 and requires t<gamma.
+Choose a Gaussian or centered-binomial `ErrorDistribution` in either
+constructor. Use `try_with_decoder_modulus` to supply gamma explicitly.
 Construction checks sufficient fresh private recovery, not public/evaluated
 recovery or a security level. Include public-key noise, delta drift, evaluation,
-key-switch residuals and every drop. Supplied Q/P primes must actually be suitable
-primes; NTT rootability does not prove primality. Optimized q_i must be below 2⁶².
+key-switch residuals and every drop. Parameter construction validates the data Q
+primes, and Hybrid key preparation validates the separate key P primes. Each
+prime is below 2⁶² and supports the ring's negacyclic NTT. Q and key P are disjoint.
 
 Collective plans borrow individual `DcrtGlweSecretKey<u64>` shares and require
 exact CBD1/CBD21 laws. Protocol callers authenticate roster/session/role and
 actual NTT/secret provenance; count and distribution metadata cannot prove them.
-Two-round private states are consuming and erasing. Fresh lookup uses a separate
-`BfvFreshLookupKey` and `BfvRawQuadraticAggregate` for one **unscaled** relin,
-without ordinary BFV scale-and-round; its noise/ephemeral must be independent of
-selector inputs, including indirect seed dependencies. `partial_phase_to` releases
-only c1*s_i and requires protocol authorization plus complete privacy flooding
-before publication. See [collective and lookup contracts](../../guides/development/native-hybrid-keys.md#collective-roles-and-fresh-lookup).
+Move public payloads into transport with `into_residues`. The owner retains the
+private response state and consumes it against the frozen first round. That
+state erases its secret scratch on drop. `BfvCollectiveLookup` is a separate
+setup role from ordinary relinearization. Finalization consumes its frozen
+round to produce a `BfvFreshLookupKey`. It takes a `BfvRawQuadraticAggregate`
+for one **unscaled** relin. Lookup noise and ephemeral secrets must be independent
+of selector inputs, including indirect seed dependencies. For an authorized
+opening, `collective::raw_unflooded_partial_phase_to` writes c1*s_i to local scratch.
+Apply the protocol's privacy flooding before releasing a contribution.
+See [collective and lookup contracts](../../guides/development/native-hybrid-keys.md#collective-roles-and-fresh-lookup).
 
 Raw GLWE has phase b−a*s: the explicit bridges map `[c0,c1]` to `[a=−c1,b=c0]`
 and back without NTT. Advanced CRT inputs keep two meanings:
@@ -128,14 +148,27 @@ independent concurrent requests use separate operation owners. Prepared `*_to` /
 scratch are erased on drop. `into_secret_key` consumes a client for a checked
 owner handoff; it never clones a private share.
 
-Public coefficient inputs are checked before RNG consumption or writes. Storage
-wrappers do not authenticate level, canonical NTT residues, roots/order or actual
-secret. Callers maintain these identities; equal lengths/moduli are insufficient.
+Public coefficient inputs are checked before RNG consumption or writes.
+Context-created ciphertexts, their clones and views retain that local context and
+level. Prepared keys must belong to the same context; bound foreign-context or
+wrong-level inputs/outputs reject before writes. `client.decrypt(&ciphertext)`
+uses this binding. It does not prove the actual secret relationship or authenticate
+residues modified through `AsMut`. Explicit `from_raw` / `zero_raw` containers and
+`decrypt_at_level` / `decrypt_at_level_to` retain the advanced caller contract.
+`context.try_bind_ciphertext(raw,level)` checks storage and canonicality once;
+the caller still attests its actual transform and secret.
+See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md).
 Per-method rustdoc specifies exact input, scratch and partial-write contracts.
 
 Default features are empty. `batching` enables shared slot encoding. `simd`
 forwards the shared nightly backends; runtime NTT intrinsic dispatch is separate,
 so disabling `simd` does not force scalar NTT. See the [feature boundary](../../guides/development/testing.md#features-与独立消费者).
+
+`parallel` enables bounded DCRT prefix forward/inverse NTT scheduling in the
+connected key-generation and gadget-product paths. Each prefix with N≥4096 and
+at least two limbs uses at most four contiguous tasks; bound total pool threads
+with `RAYON_NUM_THREADS` or `ThreadPool::install`. It is off by default, leaving
+this NTT path serial without pool initialization. Random sampling stays serial.
 
 ## Checks
 
@@ -149,3 +182,13 @@ Tests retain independent DFT/schoolbook/integer-rounding oracles and focused
 binding, recovery, dirty-scratch, erasure and allocation boundaries. Crate-local
 benches measure explicit prepared workloads; setup stays outside timing. Their
 historical source/workload limits are in the [performance report](../../guides/performance/bfv-multiplication.md).
+
+## Public storage
+
+Borrow the cached context description with `context.public_bytes()` when hashing or comparing it repeatedly.
+
+`BfvContext::to_public_bytes()` and `from_public_bytes(bytes, limits)` store complete public parameters and restore a new local context. Its `export_*` / `import_*` methods cover native ciphertexts, public keys and typed relinearization, switching and automorphism keys, including Radix and Hybrid Q/P metadata. Set `PublicObjectLimits` for your deployment; imports check version, role, full geometry, canonical residues and actual NTT representation before accepting owned data. BFV keeps its own scaling and decoder parameters.
+
+No secret or local binding pointer is serialized. Authenticate the public object together with its application source/target identities and declared budgets. Structural validation does not prove honest key generation or the claimed secret relationship. Independent key imports can repeat numerical metadata/P-table preparation; no implicit key cache is introduced.
+
+See [public storage](../../guides/development/public-storage.md) and the [BGV public-worker example](../primus_bgv/examples/public_worker.rs), which keeps the client secret local and evaluates through public byte containers. These containers do not add headers to a protocol's online round payloads.

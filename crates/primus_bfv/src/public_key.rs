@@ -2,11 +2,22 @@ use primus_data::{Data, DataMut};
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe_rns::{DcrtGlwePublicKeyWorkspace, RnsDomainError};
 use primus_lattice::RnsGlweSize;
-use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
 use zeroize::Zeroize;
 
-use crate::{BfvCiphertext, BfvContext, BfvParameters, BfvSecretKeyContext};
+use crate::secret_key::BfvSecretKeyContext;
+use crate::{BfvCiphertext, BfvContext, BfvParameters};
+
+/// Rejected native BFV public-key provenance or numerical geometry.
+#[derive(Debug, thiserror::Error)]
+pub enum BfvPublicKeyError {
+    /// The key belongs to another local context owner.
+    #[error("BFV public key context provenance mismatch")]
+    ContextMismatch,
+    /// The key's numerical geometry differs from the context.
+    #[error(transparent)]
+    Parameters(#[from] RnsDomainError<u64>),
+}
 
 /// A native BFV public key, represented by a zero encryption `[c0,c1]`.
 /// Its phase under the generating secret is `c0+c1*s=e`.
@@ -27,7 +38,7 @@ impl BfvPublicKey {
     /// Borrows the public native zero encryption, with no private secret or evaluation columns.
     #[must_use]
     pub fn as_ciphertext(&self) -> BfvCiphertext<&[u64]> {
-        BfvCiphertext::new(self.ciphertext.as_ref())
+        self.ciphertext.as_view()
     }
 
     /// Generates a native public key using an already checked private binding.
@@ -38,7 +49,7 @@ impl BfvPublicKey {
         rng: &mut R,
     ) -> Self {
         let parameters = context.parameters();
-        let mut ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+        let mut ciphertext = context.context().new_ciphertext(0);
         context.encrypt_zeros_to(&mut ciphertext, rng);
         Self {
             ciphertext,
@@ -49,7 +60,7 @@ impl BfvPublicKey {
 
     pub(crate) fn from_collective(context: &crate::BfvContext, coefficients: Vec<u64>) -> Self {
         Self {
-            ciphertext: BfvCiphertext::new(coefficients),
+            ciphertext: BfvCiphertext::bound(coefficients, context, 0),
             size: context.parameters().size(),
             moduli: context.parameters().codec().moduli_values().to_vec(),
         }
@@ -93,8 +104,7 @@ impl BfvPublicKey {
 /// [`Zeroize::zeroize`] erases ephemeral scratch without releasing its allocation.
 pub struct BfvPublicKeyEncryptor<'a> {
     key: &'a BfvPublicKey,
-    parameters: &'a BfvParameters,
-    table: &'a U64DcrtTable,
+    context: &'a BfvContext,
     workspace: DcrtGlwePublicKeyWorkspace<u64>,
 }
 
@@ -102,18 +112,27 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     /// Checks a key against the prepared context, then allocates one ephemeral.
     ///
     /// # Errors
-    /// Rejects a different key layout or ordered context basis. Actual
-    /// secret and NTT root/evaluation identity remain caller contracts.
-    pub fn try_new(
+    /// Rejects a different local generating context or numerical key geometry.
+    /// Actual secret identity and complete noise bounds remain caller contracts.
+    pub(crate) fn try_new(
         key: &'a BfvPublicKey,
         context: &'a BfvContext,
-    ) -> Result<Self, RnsDomainError<u64>> {
+    ) -> Result<Self, BfvPublicKeyError> {
         let parameters = context.parameters();
-        key.validate(parameters)?;
+        let binding = key
+            .ciphertext
+            .binding
+            .as_ref()
+            .ok_or(BfvPublicKeyError::ContextMismatch)?;
+        if binding.validate(context, 0).is_err() {
+            // Preserve precise diagnostics for independently composed resources;
+            // the ordinary same-owner path needs no repeated basis scan.
+            key.validate(parameters)?;
+            return Err(BfvPublicKeyError::ContextMismatch);
+        }
         Ok(Self {
             key,
-            parameters,
-            table: context.table(),
+            context,
             workspace: DcrtGlwePublicKeyWorkspace::new(parameters.size()),
         })
     }
@@ -126,7 +145,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         R: rand::Rng + rand::CryptoRng,
         A: Data<Elem = u64>,
     {
-        let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
+        let mut output = self.context.new_ciphertext(0);
         self.encrypt_to(input, &mut output, rng);
         output
     }
@@ -143,7 +162,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         R: rand::Rng + rand::CryptoRng,
         A: Data<Elem = u64>,
     {
-        let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
+        let mut output = self.context.new_ciphertext(0);
         self.encrypt_centered_to(input, &mut output, rng);
         output
     }
@@ -157,7 +176,8 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     /// lifts. Public-key/evaluated noise needs a separate complete recovery bound.
     ///
     /// # Panics
-    /// Incorrect complete lengths are rejected before sampling/writes. RNG,
+    /// Recorded output context/level conflicts and incorrect complete lengths
+    /// are rejected before sampling/writes. RNG,
     /// callback or transform panics may leave partial output/scratch.
     pub fn encrypt_plaintext_lift_crt_to<R, A, B>(
         &mut self,
@@ -169,7 +189,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        let parameters = self.parameters;
+        let parameters = self.context.parameters();
         assert_eq!(
             input.as_ref().len(),
             parameters.size().rns_poly_len(),
@@ -189,7 +209,8 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     /// Encoding is fused before c0's single NTT; no temporary storage is allocated.
     ///
     /// # Panics
-    /// Incorrect complete lengths and noncanonical coefficients are rejected
+    /// Recorded output context/level conflicts, incorrect complete lengths and
+    /// noncanonical coefficients are rejected
     /// before sampling or writes. Codec/RNG/NTT panics may leave partial output
     /// and scratch.
     pub fn encrypt_to<R, A, B>(
@@ -230,7 +251,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        let parameters = self.parameters;
+        let parameters = self.context.parameters();
         assert_eq!(
             input.as_ref().len(),
             parameters.poly_length().get(),
@@ -260,7 +281,7 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        let parameters = self.parameters;
+        let parameters = self.context.parameters();
         assert_eq!(
             input.as_ref().len(),
             parameters.size().rns_poly_len(),
@@ -284,14 +305,11 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
     {
-        let parameters = self.parameters;
+        output.check_binding(self.context, 0);
+        let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
         let length = parameters.size().rns_poly_len();
-        assert_eq!(
-            output.as_ref().len(),
-            parameters.size().rns_glwe_len(),
-            "BFV ciphertext length mismatch"
-        );
+        let (mut c0, mut c1) = output.c0_c1_mut(length);
         let ephemeral = self.workspace.as_mut_slice();
         let sampling = parameters.encryption_parameters();
         primus_distr::sample_crt_sparse_ternary_values_to(
@@ -300,16 +318,15 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
             sampling.cipher_moduli_minus_one(),
             rng,
         );
-        self.table.transform_slice(ephemeral);
+        self.context.table().transform_slice(ephemeral);
         let ephemeral = DcrtPolynomial(&*ephemeral);
-        let (mut c0, mut c1) = output.c0_c1_mut(length);
         let (pk0, pk1) = self.key.ciphertext.c0_c1(length);
         sampling.sample_noise_to(c0.as_mut(), parameters.codec().moduli_values(), rng);
         inject(&mut CrtPolynomial(c0.as_mut()));
-        self.table.transform_slice(c0.as_mut());
+        self.context.table().transform_slice(c0.as_mut());
         c0.add_mul_assign(&ephemeral, &pk0, n, parameters.base_q().moduli());
         sampling.sample_noise_to(c1.as_mut(), parameters.codec().moduli_values(), rng);
-        self.table.transform_slice(c1.as_mut());
+        self.context.table().transform_slice(c1.as_mut());
         c1.add_mul_assign(&ephemeral, &pk1, n, parameters.base_q().moduli());
     }
 }
@@ -322,3 +339,5 @@ impl Zeroize for BfvPublicKeyEncryptor<'_> {
 
 #[cfg(test)]
 mod tests;
+
+mod persistence;

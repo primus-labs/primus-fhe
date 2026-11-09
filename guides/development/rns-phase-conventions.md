@@ -29,8 +29,10 @@ Native BFV encryption/recovery, linear/plaintext evaluation, exact rounded prime
 drop, physical components and this bridge are implemented. Native BFV unscaled evaluation keys and full ciphertext multiplication/
 relinearization are specified in [BFV evaluation](bfv-evaluation.md). Native BGV now provides quadratic products, p-preserving relin/key switch/
 automorphism and exact prefix prime drop; its distinct key/residual equations are
-specified in [BGV evaluation](bgv-evaluation.md). Collective Flexilect setup and
-opening remain separate future work; existing Relect opening uses raw shares.
+specified in [BGV evaluation](bgv-evaluation.md). Collective setup arithmetic and
+an enclosing protocol's authorized, flooded opening have separate contracts;
+local context/level binding does not replace either. See
+[context and collective responsibilities](scheme-context-binding.md).
 The unscaled tensor/key equations below also explain existing raw consumers;
 BFV scale-and-round is verified separately against its integer tensor oracle.
 

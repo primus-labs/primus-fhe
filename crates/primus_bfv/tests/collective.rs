@@ -1,5 +1,12 @@
 //! Collective public boundaries and normal native-key consumers.
-use primus_bfv::*;
+use primus_bfv::collective::{
+    BfvCollectiveAutomorphismKey, BfvCollectiveError, BfvCollectiveLookup, BfvCollectivePublicKey,
+    BfvCollectiveRelinearization, BfvCollectiveSwitchingKey, BfvRawQuadraticAggregate,
+    raw_unflooded_partial_phase_to,
+};
+use primus_bfv::evaluation::{BfvAutomorphism, BfvKeySwitcher, BfvMultiplication, BfvRelinearizer};
+use primus_bfv::keys::BfvEvaluationKeyConfig;
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -17,10 +24,9 @@ const Q: [u64; 3] = [
 ];
 fn context(n: usize) -> BfvContext {
     BfvContext::try_with_levels(
-        BfvParameters::try_with_error_distribution(
+        BfvParameters::try_coefficients(
             PolyLength::new(n),
             BarrettModulus::new(257),
-            BarrettModulus::new((1 << 61) - 1),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
             ErrorDistribution::CenteredBinomial { eta: 21 },
@@ -245,14 +251,12 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
     let client_owner = BfvClient::try_from_secret_key(&context, client).unwrap();
     let mut partial = DcrtPolynomial(vec![42; context.rns_poly_len(0)]);
     assert!(
-        client_owner
-            .partial_phase_to(&BfvCiphertext::zero(1), 0, &mut partial)
+        raw_unflooded_partial_phase_to(&client_owner, &BfvCiphertext::zero_raw(1), 0, &mut partial)
             .is_err()
     );
     assert!(partial.as_ref().iter().all(|&x| x == 42));
     assert!(
-        client_owner
-            .partial_phase_to(&context.new_ciphertext(0), 3, &mut partial)
+        raw_unflooded_partial_phase_to(&client_owner, &context.new_ciphertext(0), 3, &mut partial)
             .is_err()
     );
     let client = client_owner.into_secret_key();
@@ -310,15 +314,24 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
     // A fresh lookup is prepared from its independent setup and consumes both
     // its key and raw aggregate. The all-zero tensor has exact zero output.
     let key = {
-        let plan = BfvCollectiveRelinearization::try_new(&context, 1, config(), &mut rng).unwrap();
+        let plan = BfvCollectiveLookup::try_new(&context, 1, config(), &mut rng).unwrap();
         let (msg, state) = plan.start(&client, &mut rng).unwrap();
         let mut sum = plan.aggregate(1).unwrap();
         sum.add(&msg).unwrap();
+        let mut replay = plan.aggregate(1).unwrap();
+        replay.add(&msg).unwrap();
         let r1 = plan.freeze_round1(sum).unwrap();
-        let msg = state.round2(&r1, &mut rng).unwrap();
-        let mut sum = r1.aggregate(1).unwrap();
-        sum.add(&msg).unwrap();
-        r1.finalize_lookup(sum).unwrap()
+        assert!(matches!(
+            plan.freeze_round1(replay),
+            Err(BfvCollectiveError::ConsumedLookupSetup)
+        ));
+        r1.finalize_lookup(|r1| {
+            let msg = state.round2(r1, &mut rng)?;
+            let mut sum = r1.aggregate(1)?;
+            sum.add(&msg)?;
+            Ok::<_, BfvCollectiveError>(sum)
+        })
+        .unwrap()
     };
     // The final owner retains no setup/R1 workspace.
     assert!(core::ptr::eq(key.context(), &context));
@@ -333,4 +346,72 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
         )
         .unwrap();
     assert!(output.as_ref().iter().all(|&x| x == 0));
+}
+
+#[test]
+fn relinearization_state_and_bodies_stay_bound_to_their_round_and_role() {
+    let context = context(N);
+    let mut rng = StdRng::seed_from_u64(0x05_bf21);
+    let owners = [share(&context, &mut rng), share(&context, &mut rng)];
+    let level = 1;
+    for config in [
+        BfvEvaluationKeyConfig::from(config()),
+        context
+            .hybrid_key_parameters(level, 1, &[1_099_511_626_049])
+            .unwrap()
+            .into(),
+    ] {
+        let plan = BfvCollectiveRelinearization::try_new(&context, level, config.clone(), &mut rng)
+            .unwrap();
+        let other = BfvCollectiveRelinearization::try_from_common_mask(
+            &context,
+            level,
+            config.clone(),
+            plan.common_mask().to_vec(),
+        )
+        .unwrap();
+        let (message, state) = plan.start(&owners[0], &mut rng).unwrap();
+        let mut other_sum = other.aggregate(2).unwrap();
+        assert!(matches!(
+            other_sum.add(&message),
+            Err(BfvCollectiveError::Binding)
+        ));
+        let mut pending = Vec::new();
+        for owner in &owners {
+            let (message, state) = other.start(owner, &mut rng).unwrap();
+            let received = other
+                .try_import_contribution(message.into_residues())
+                .unwrap();
+            other_sum.add(&received).unwrap();
+            pending.push(state);
+        }
+        let round1 = other.freeze_round1(other_sum).unwrap();
+        let mut rejected_rng = StdRng::seed_from_u64(0x05_bf22);
+        let mut untouched_rng = StdRng::seed_from_u64(0x05_bf22);
+        assert!(matches!(
+            state.round2(&round1, &mut rejected_rng),
+            Err(BfvCollectiveError::Binding)
+        ));
+        assert_eq!(rejected_rng.next_u64(), untouched_rng.next_u64());
+        assert!(matches!(
+            round1.aggregate(1),
+            Err(BfvCollectiveError::Count)
+        ));
+
+        let switching =
+            BfvCollectiveSwitchingKey::try_new(&context, level, config, &mut rng).unwrap();
+        let mut switch_sum = switching.aggregate(2).unwrap();
+        let mut round2_sum = round1.aggregate(2).unwrap();
+        for state in pending {
+            let message = state.round2(&round1, &mut rng).unwrap();
+            assert_eq!(message.as_residues().len(), switching.contribution_len());
+            assert!(matches!(
+                switch_sum.add(&message),
+                Err(BfvCollectiveError::Binding)
+            ));
+            round2_sum.add(&message).unwrap();
+        }
+        let key = round1.finalize(round2_sum).unwrap();
+        assert!(BfvRelinearizer::try_new(&context, &key).is_ok());
+    }
 }

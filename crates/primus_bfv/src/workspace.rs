@@ -59,6 +59,7 @@ impl Drop for BfvDecryptWorkspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use primus_distr::ErrorDistribution;
     use primus_glwe_rns::SecretKeyDistr;
     use primus_modulus::BarrettModulus;
     use primus_shape::PolyLength;
@@ -67,13 +68,15 @@ mod tests {
     fn explicit_erasure_preserves_both_allocations_and_geometry() {
         for count in [1, 2] {
             let moduli = [65_537, 114_689].map(BarrettModulus::new);
-            let parameters = BfvParameters::try_new(
+            let parameters = BfvParameters::try_with_decoder_modulus(
                 PolyLength::new(32),
                 BarrettModulus::new(17),
                 BarrettModulus::new(257),
                 &moduli[..count],
                 SecretKeyDistr::SparseTernary,
-                1.0,
+                ErrorDistribution::Gaussian {
+                    standard_deviation: 1.0,
+                },
             )
             .unwrap();
             let mut workspace = BfvDecryptWorkspace::new(&parameters);

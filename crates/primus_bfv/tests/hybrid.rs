@@ -1,8 +1,9 @@
 //! Native Hybrid keys at each prefix, through ordinary public BFV operations.
-use primus_bfv::{
-    BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch,
-    BfvMultiplication, BfvParameters,
+use primus_bfv::evaluation::{
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
 };
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
+use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
@@ -25,7 +26,9 @@ fn context() -> BfvContext {
             BarrettModulus::new(T),
             &Q.map(BarrettModulus::new),
             SecretKeyDistr::SparseTernary,
-            0.849,
+            ErrorDistribution::Gaussian {
+                standard_deviation: 0.849,
+            },
         )
         .unwrap(),
         3,
@@ -80,13 +83,19 @@ fn hybrid_roles_recover_at_all_prefixes_with_a_smaller_auxiliary_basis() {
         let mut multiplication = BfvMultiplication::try_new(&context, &key).unwrap();
         let mut output = context.new_ciphertext(level);
         multiplication.square_to(&input, &mut output);
-        assert_eq!(alice.decrypt(&output, level).as_ref(), expected_square);
+        assert_eq!(
+            alice.decrypt_at_level(&output, level).as_ref(),
+            expected_square
+        );
         let switching_key = bob
             .key_switching_key(&alice, level, parameters.clone(), &mut rng)
             .unwrap();
         let mut switching = BfvKeySwitcher::try_new(&context, &switching_key).unwrap();
         switching.switch_to(&input, &mut output);
-        assert_eq!(bob.decrypt(&output, level).as_ref(), plaintext.as_ref());
+        assert_eq!(
+            bob.decrypt_at_level(&output, level).as_ref(),
+            plaintext.as_ref()
+        );
         let auto_key = alice
             .automorphism_key(level, 3, parameters, &mut rng)
             .unwrap();
@@ -100,7 +109,7 @@ fn hybrid_roles_recover_at_all_prefixes_with_a_smaller_auxiliary_basis() {
                 (T - x) % T
             };
         }
-        assert_eq!(alice.decrypt(&output, level).as_ref(), expected);
+        assert_eq!(alice.decrypt_at_level(&output, level).as_ref(), expected);
         if level + 1 < 3 {
             let mut lower = context.new_ciphertext(level + 1);
             BfvModulusSwitch::new(&context, level).switch_to(&input, &mut lower);
@@ -121,6 +130,7 @@ fn hybrid_binding_and_complete_lengths_reject_before_output_writes() {
     );
     assert!(context.hybrid_key_parameters(0, 0, &KEY_P).is_err());
     assert!(context.hybrid_key_parameters(0, 2, &[Q[0]]).is_err());
+    assert!(context.hybrid_key_parameters(0, 2, &[49_601]).is_err());
     let parameters = context.hybrid_key_parameters(0, 2, &KEY_P).unwrap();
     let key = client
         .key_switching_key(&client, 0, parameters, &mut rng)
@@ -128,11 +138,11 @@ fn hybrid_binding_and_complete_lengths_reject_before_output_writes() {
     let mut switch = BfvKeySwitcher::try_new(&context, &key).unwrap();
     let valid = context.new_ciphertext(0);
     for size in [0, valid.as_ref().len() - 1, valid.as_ref().len() + 1] {
-        let bad = BfvCiphertext::new(vec![77; size]);
-        let mut output = BfvCiphertext::new(vec![55; valid.as_ref().len()]);
+        let bad = BfvCiphertext::from_raw(vec![77; size]);
+        let mut output = BfvCiphertext::from_raw(vec![55; valid.as_ref().len()]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&bad, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&x| x == 55));
-        let mut bad_output = BfvCiphertext::new(vec![55; size]);
+        let mut bad_output = BfvCiphertext::from_raw(vec![55; size]);
         assert!(
             catch_unwind(AssertUnwindSafe(
                 || switch.switch_to(&valid, &mut bad_output)

@@ -1,6 +1,7 @@
 #![cfg(feature = "batching")]
 
-use primus_bgv::{BgvClient, BgvContext, BgvEvaluator, BgvParameters, PlaintextEmbedding};
+use primus_bgv::evaluation::BgvEvaluator;
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -29,7 +30,9 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
                 BarrettModulus::new(P),
                 &moduli,
                 SecretKeyDistr::SparseTernary,
-                0.849,
+                ErrorDistribution::Gaussian {
+                    standard_deviation: 0.849,
+                },
             )
             .unwrap(),
         )
@@ -58,7 +61,7 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
         let mut evaluator = BgvEvaluator::new(&context, 0);
         evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
         evaluator.mul_plain_assign(&mut ciphertext, &multiplier, PlaintextEmbedding::Centered);
-        let decoded = client.decrypt(&ciphertext, 0);
+        let decoded = client.decrypt_at_level(&ciphertext, 0);
         assert!(
             decoded
                 .as_ref()

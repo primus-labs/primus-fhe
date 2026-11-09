@@ -28,6 +28,13 @@ Constructors accept each choice through `Into`; ordinary prepared requests still
 bind their level from the finalized role key. A mixed configuration can be
 stored in that enum without introducing a second ciphertext type.
 
+Finalized scheme keys also retain their local context binding; prepare rejects
+a same-shaped key from another context. Shared numerical parameters alone do
+not establish that relation. Context-created ciphertexts and their views retain
+context/level, while explicit raw adoption keeps its caller provenance contract;
+see [context binding](scheme-context-binding.md). Same-context actual secret
+relationships remain a caller requirement.
+
 The advanced ciphertext-multiplication examples for
 [BFV](../../crates/primus_bfv/examples/ciphertext_multiplication.rs) and
 [BGV](../../crates/primus_bgv/examples/ciphertext_multiplication.rs) accept
@@ -58,20 +65,24 @@ is not a bit radix or a multiplicative-depth budget. Generate keys for the
 actual level and use their bound parameters; slicing a matrix is not an API for
 converting its level or decomposition.
 
-`primus_lattice::hybrid::NativeHybridParameters` owns the immutable Hybrid RNS
-bases, constants and P NTT tables. Existing CRT bases share their allocations;
-Q NTT tables remain with the scheme context. Role keys share the parameter
+`primus_lattice::hybrid::NativeHybridParameters` owns the active Hybrid RNS
+bases and constants. When preparing several Q levels with the same N and
+ordered P, create one `Arc<NativeHybridAuxiliary>` using `try_new(N, &key_p)`
+and pass it to `NativeHybridParameters::try_with_auxiliary`. Each level prepares
+its own Q-dependent partitions and converters. The shared auxiliary owner
+supplies the P basis and P NTT tables. The scheme context owns the Q NTT tables.
+Role keys share the active-level parameter
 owner through `Arc` and each retain only their own public columns. A prepared
 operation owns its selected mutable scratch. Prepared numerical `_to` calls
 reuse that scratch and caller outputs without allocation; allocating convenience
 methods still allocate their returned owners. Independent concurrent calls need
 independent mutable operation owners.
 
-Explicit P must be coprime to Q and support the ring's NTT. There is no blanket
-`P>Q`, `P>NQ`, or `P>partition_product` requirement. Smaller P can substantially
-increase key-product error; construction checks arithmetic compatibility, not
-an application error budget. Caller-supplied moduli must actually be suitable
-primes; rootability alone does not certify primality.
+Preparation validates explicit P as distinct NTT primes below `2^62`,
+coprime to the active Q. BGV also requires P to be coprime to the plaintext
+modulus p. There is no blanket `P>Q`, `P>NQ`, or `P>partition_product`
+requirement. Smaller P can substantially increase key-product error. The
+application supplies its own error budget.
 
 ## Native product and exact correction
 
@@ -169,6 +180,11 @@ allocation across paired BFV/BGV roles and move it into an online client once.
 The online BGV additive-input entry continues to borrow its client.
 Transport authenticates the backend, active Q, key P, partitions, actual NTT
 convention, role, session and source/target identities before import.
+Use `as_residues` to borrow a contribution body or `into_residues` to move its
+public buffer into transport. The receiving plan validates the payload and
+assigns its own local binding. Round one returns the public contribution and
+a separate owner-local response state. The coordinator freezes the public sum,
+and `round2` consumes the owner's response state against that sum.
 
 For a common A_j and individual CBD1 shares/ephemeral s_i,u_i, Hybrid two-round
 S² generation uses
@@ -187,15 +203,25 @@ a conservative coefficient bound on the error inside nu is
 justification. Noncloneable private state is consumed before round two and
 cleared on all exits. Count checks do not authenticate a roster; protocol
 callers reject missing/duplicate owners and bind the exact frozen round.
+The finalized key targets aggregate S. Local plan identity prevents accidental
+mixing. The protocol supplies sender authentication and one-use authorization.
+`collective::raw_unflooded_partial_phase_to` computes c1*s_i for local scratch.
+Keep that result private and apply the protocol's fresh privacy flood before
+publishing the contribution.
 
-BFV fresh mixed lookup retains a separately sampled, consuming
-`BfvFreshLookupKey`. Its raw degree-two aggregate is distinct from an ordinary
-scaled quadratic. It performs one unscaled native Hybrid relin and adds t0/t1;
-it never executes ordinary BFV multiplication, HPSPOVERQ prescaling or t/Q
-message scaling. Its key errors/ephemeral must be independent of selector/raw
-inputs, including indirect seed or transcript dependencies. Changing key P or
-the backend requires rechecking the whole lookup error, privacy flood,
-recovery level, security and communication budget.
+BFV fresh mixed lookup uses the separate `BfvCollectiveLookup` setup role.
+A local setup can freeze its first round once. Finalization consumes the frozen
+round and assembles one `BfvFreshLookupKey`. For a local multi-party simulation,
+`finalize_lookup_for_roster` issues one consuming handle per roster member for
+the same authenticated request. The handles share immutable key columns.
+The protocol remains responsible for authentication, replay prevention across
+imports and independence of the lookup key's noise and ephemeral secrets from
+selector/raw inputs, including indirect seed or transcript dependencies.
+
+The raw degree-two aggregate is distinct from an ordinary scaled quadratic.
+Lookup performs one unscaled native relin and adds t0/t1. Changing key P or the
+backend requires rechecking the lookup error, privacy flood, recovery level,
+security and communication budget.
 
 Finite complete-request and resource measurements are reported separately in the
 [performance comparison](../performance/native-hybrid-keys.md). They do not
