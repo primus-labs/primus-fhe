@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh_CN.md)
 
-Primus FHE is an experimental Rust workspace for fully homomorphic encryption. It provides arithmetic and lattice primitives, LWE/GLWE/NTRU encryption, and TFHE backends for GLWE NTT, GLWE Fourier and NTRU NTT.
+Primus FHE is an experimental Rust workspace for fully homomorphic encryption. It includes arithmetic and lattice primitives, LWE/GLWE/NTRU encryption, three TFHE backends, and leveled BFV and BGV.
 
 > [!WARNING]
 > APIs, representations, algorithms and crate boundaries may change incompatibly without deprecation. Example and benchmark parameters are functional fixtures, not security or failure-probability recommendations. The project does not claim production readiness.
@@ -29,9 +29,23 @@ The example selects an `experimental` operation config, builds a context and pai
 | [GLWE parameters and clients](crates/primus_tfhe_glwe/README.md) | [GLWE NTT](crates/primus_tfhe_glwe_ntt/README.md) | [GLWE Fourier](crates/primus_tfhe_glwe_fourier/README.md) |
 | [NTRU parameters and clients](crates/primus_tfhe_ntru/README.md) | [NTRU NTT](crates/primus_tfhe_ntru_ntt/README.md) | — |
 
-GLWE supports both PBS orders. NTRU uses independent external LWE and ring secrets, with a return path from ring modulus Q to external modulus q. Invertibility applies to the ring secret; external binary/ternary secrets have no odd-weight requirement. GLWE Fourier rings support only `NativeModulus`, with RustFFT or TFHE-FFT; NTRU's external q is independently configurable.
+GLWE supports both PBS orders. NTRU uses independent external LWE and ring secrets, with a return path from ring modulus Q to external modulus q. Invertibility applies to the ring secret; external binary/ternary secrets have no odd-weight requirement. GLWE Fourier rings currently support only `NativeModulus`, with RustFFT or TFHE-FFT; NTRU's external q is independently configurable.
 
 See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabilities) for classic and sparse coverage. Operation configs bind message moduli and key domains; contexts prepare the corresponding clients and LUT compilers. Raw ciphertexts do not carry encoding or key identity.
+
+## BFV and BGV
+
+Both schemes provide rank-one coefficient and slot workflows with native Radix and Hybrid evaluation keys. Run one of the complete examples below.
+
+```sh
+cargo run --release -p primus_bfv --example coefficients
+cargo run --release -p primus_bgv --example leveled_coefficients
+```
+
+- [BFV](crates/primus_bfv/README.md) provides exact rounded prime drop and Exact and HPSPOVERQ multiplication. The [working-basis guide](guides/development/bfv-working-basis.md) describes the finite HPSPOVERQLEVELED parameter factory and its arithmetic and key requirements.
+- [BGV](crates/primus_bgv/README.md) supports ciphertext prime chains with each prime coprime to the plaintext modulus `p`. Dropping a prime `q` updates the correction factor to `f*q^-1 mod p`. Centered recovery applies the inverse factor modulo `p`. See the [parameter and budget guide](guides/development/ordinary-parameter-budgets.md) for the ordinary BGV workflow and its limits.
+
+The [native Hybrid key guide](guides/development/native-hybrid-keys.md) describes the QP key basis and role bindings shared by both schemes.
 
 ## Workspace map
 
@@ -47,17 +61,14 @@ See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabiliti
 | BFV/BGV coefficients and slots | [primus_bfv](crates/primus_bfv/README.md): BFV parameters, scaling and recovery; [primus_bgv](crates/primus_bgv/README.md): p-scaled error and exact centered recovery; both consume shared batching |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.md): shared external LWE clients, LUTs, PBS traits, and Boolean evaluation; the two family crates and three backends above bind parameters, keys, and execution |
 
-BFV supports coefficient/slot linear/plaintext evaluation, RNS ciphertext multiplication/square, native relin/key switching/rotations and exact rounded prime drop. BGV supports coefficient/slot private/public encryption, multiplication/square, p-preserving relin/key switching/rotations, prefix levels and exact centered recovery for q_i≡1 mod p. CKKS remains subsequent work. BFV multiplication exposes Exact and HPSPOVERQ, plus a finite ordinary-BFV HPSPOVERQLEVELED parameter factory with temporary working bases; see its [arithmetic and key preconditions](guides/development/bfv-working-basis.md). Both schemes expose Radix/Native Hybrid evaluation keys with an explicit QP key modulus; see the [native key contract](guides/development/native-hybrid-keys.md).
-
-Application libraries live in separate sibling repositories: [primus_omr](../primus_omr/README.md) provides clue detection, board encoding and message recovery; [primus_high_prec_lut](../primus_high_prec_lut/README.md) provides high-precision lookup over independently encrypted chunks. Run their examples, tests and benchmarks from their own repository roots. They are not workspace members.
-
 ## Building and further reading
 
 Default features use stable Rust; optional `simd` requires nightly. Run `cargo check --workspace --all-targets` or `cargo doc --workspace --no-deps` from the repository root. The repository sets `target-cpu=native`; adjust the build configuration explicitly when distributing binaries to other CPUs.
 
-- [Testing guide](guides/development/testing.md): ordinary tests, doctests, feature coverage and separate example/benchmark smoke runs.
-- [TFHE numerical contracts](guides/development/bootstrapping-contracts.md): rotation rounding, first lifting, one-hot and MVB.
-- [Contribution rules](AGENTS.md) and [justfile](justfile): repository conventions and convenience commands.
+- Run ordinary tests, doctests, examples and benchmark smoke tests using the [testing guide](guides/development/testing.md) and [justfile](justfile).
+- Find the BFV/BGV external consumer check and parameter screening adapter under [developer scripts](guides/development/testing.md#开发脚本).
+- See the [performance guide](guides/performance/README.md) for benchmark interpretation and the [TFHE numerical contracts](guides/development/bootstrapping-contracts.md) for algorithmic requirements.
+- Follow the [contribution rules](AGENTS.md) for workspace changes.
 
 ## License
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格密文原语、LWE/GLWE/NTRU 加密，以及 GLWE NTT、GLWE Fourier 和 NTRU NTT 后端。
+Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格密文原语、LWE/GLWE/NTRU 加密、三个 TFHE 后端，以及支持分层求值的 BFV 和 BGV。
 
 > [!WARNING]
 > API、表示、算法和 crate 边界尚不稳定，可能直接发生不兼容修改。示例与基准参数用于功能演示，不构成安全性或失败概率推荐；项目尚未达到生产可用状态。
@@ -29,9 +29,23 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 | [GLWE 参数与客户端](crates/primus_tfhe_glwe/README.zh_CN.md) | [GLWE NTT](crates/primus_tfhe_glwe_ntt/README.zh_CN.md) | [GLWE Fourier](crates/primus_tfhe_glwe_fourier/README.zh_CN.md) |
 | [NTRU 参数与客户端](crates/primus_tfhe_ntru/README.zh_CN.md) | [NTRU NTT](crates/primus_tfhe_ntru_ntt/README.zh_CN.md) | — |
 
-GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
+GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。GLWE Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
 
 Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
+
+## BFV 与 BGV
+
+两种方案均提供 rank-one 的系数和槽流程，求值密钥可选原生 Radix 或 Hybrid。可以先运行完整示例。
+
+```sh
+cargo run --release -p primus_bfv --example coefficients
+cargo run --release -p primus_bgv --example leveled_coefficients
+```
+
+- [BFV](crates/primus_bfv/README.zh_CN.md) 提供精确舍入降模和 Exact、HPSPOVERQ 乘法。[工作基指南](guides/development/bfv-working-basis.md) 说明有限的 HPSPOVERQLEVELED 参数工厂及其算术与密钥前提。
+- [BGV](crates/primus_bgv/README.zh_CN.md) 支持各密文素数与明文模数 `p` 互素的模数链。丢弃素数 `q` 时将校正因子更新为 `f*q^-1 mod p`。恢复明文时对 centered phase 取模 `p` 后应用因子的逆。[参数与预算指南](guides/development/ordinary-parameter-budgets.md) 说明普通 BGV 流程和适用范围。
+
+两种方案的 QP 密钥基与角色绑定见[原生 Hybrid 密钥指南](guides/development/native-hybrid-keys.md)。
 
 ## Workspace 导航
 
@@ -47,17 +61,14 @@ Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN
 | BFV/BGV 系数与槽流程 | [primus_bfv](crates/primus_bfv/README.zh_CN.md)：BFV 参数、消息缩放与恢复；[primus_bgv](crates/primus_bgv/README.zh_CN.md)：p 倍误差与精确 centered 恢复；两者消费共享 batching |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.zh_CN.md)：共享外部 LWE 客户端、LUT、PBS trait 和 Boolean 求值；上方两个家族 crate 与三个后端负责绑定参数、密钥和执行过程 |
 
-BFV 已支持系数/槽线性与明文求值、RNS 密文乘法/square、原生 relin/换钥/密文旋转及精确舍入降模；BGV 已支持 q_i≡1 mod p 下的系数/槽私钥与公钥加密、乘法/square、p-preserving relin/换钥/密文旋转、前缀层级及精确 centered 恢复。CKKS 尚待实现。BFV 乘法可显式选择 Exact/HPSPOVERQ，并提供使用临时工作基的有限 ordinary BFV HPSPOVERQLEVELED 参数工厂，见[算术与密钥前提](guides/development/bfv-working-basis.md)。两方案的求值密钥可选 Radix/Native Hybrid，后者显式扩大 key modulus 到 QP，见[原生密钥契约](guides/development/native-hybrid-keys.md)。
-
-应用库位于同级独立仓库：[primus_omr](../primus_omr/README.zh_CN.md) 提供 clue 检测、board 编码和消息恢复；[primus_high_prec_lut](../primus_high_prec_lut/README.zh_CN.md) 对多个独立加密的 chunk 执行高精度查表。它们不是本 workspace 的成员，示例、测试和基准请在各自仓库根目录运行。
-
 ## 构建与进一步阅读
 
 默认 features 使用 stable Rust；可选 `simd` 需要 nightly。在仓库根目录运行 `cargo check --workspace --all-targets` 或 `cargo doc --workspace --no-deps`。仓库设置了 `target-cpu=native`，分发到其他 CPU 的二进制需要显式调整构建配置。
 
-- [测试指南](guides/development/testing.md)：普通测试、doctest、feature 覆盖和独立的示例/基准 smoke。
-- [TFHE 数值契约](guides/development/bootstrapping-contracts.md)：旋转舍入、首次提升、one-hot 与 MVB 的数学条件。
-- [贡献规范](AGENTS.md)与 [justfile](justfile)：仓库开发约定和便捷命令。
+- 普通测试、doctest、示例和基准冒烟命令见[测试指南](guides/development/testing.md)和 [justfile](justfile)。
+- BFV/BGV 独立消费者验证和参数筛查入口见[开发脚本](guides/development/testing.md#开发脚本)。
+- 性能数据的适用口径见[性能指南](guides/performance/README.zh_CN.md)，算法条件见 [TFHE 数值契约](guides/development/bootstrapping-contracts.md)。
+- 工作区修改遵循[贡献规范](AGENTS.md)。
 
 ## 许可证
 

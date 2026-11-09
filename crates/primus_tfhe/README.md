@@ -41,7 +41,7 @@ ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotat
 | NTRU sparse fixed-weight binary | Yes | Yes | Yes | Yes |
 | NTRU NTT block binary | Yes | Yes | Yes | One-hot; LUT integration pending |
 
-All three backends provide secret-key and LWE public-key clients. GLWE Fourier supports RustFFT and TFHE-FFT with Native ring moduli only. Example configurations are arithmetic teaching fixtures, without assessed security or failure probability. NTRU's external LWE secret is independent of its ring secret; only the ring secret undergoes invertibility screening.
+All three backends provide secret-key and LWE public-key clients. Fourier supports RustFFT and TFHE-FFT with Native ring moduli only. Example configurations are arithmetic teaching fixtures, without assessed security or failure probability. NTRU's external LWE secret is independent of its ring secret; only the ring secret undergoes invertibility screening.
 
 ## Selecting blind rotation
 

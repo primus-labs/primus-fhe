@@ -28,7 +28,7 @@ let context = TfheContext::<u64, Table>::try_from_pbs_config(config)?;
 
 从 [experimental](src/experimental.rs) 选择操作配置。`PbsConfig` 包含 BR/KS、PBS 顺序及输入输出消息；`CbsConfig` 添加 CBS gadget 和输入编码，使用 `TfheContext::try_from_cbs_config`。这些算术教学参数的**安全性及失败概率尚未评估**，数值选择与噪声角色见[家族指南](../primus_tfhe_glwe/README.zh_CN.md#实验配套参数)。
 
-Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncoding::MsbBoolean`（t=2）。基准内的 CMUX2 比较参数采用不同输入和消费契约，不能直接替换。候选范围见[参数筛选说明](../../guides/performance/bootstrap-functional-comparison.md)。
+Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncoding::MsbBoolean`（t=2）。基准内的 CMUX2 比较参数采用不同输入和消费契约，不能直接替换。候选范围见[参数筛选说明](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
 
 `PbsMessageConfig::new(t_in)` 默认输入输出消息模数相同，`.with_output_modulus(t_out)` 可独立修改输出。创建 PBS context 前设置 `config.messages`，CBS 则设置 `config.pbs.messages`；PBS 和 padded CBS 客户端、编译器据此派生编码；MSB Boolean CBS 独立使用 t=2。同钥消息覆盖见[选择输出编码](../primus_tfhe/README.zh_CN.md#选择输出编码)。
 
@@ -57,7 +57,7 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 
 启用 `split-trace`（默认开启）后，需要额外的 trace 精度时，在 `TfheContext::try_from_cbs_config(config)` 前设置 `config.fourier_trace_precision = FourierTracePrecision::Split35`。选择保存在 `CbsParameters` 中；绑定已准备参数使用可返回错误的 `TfheContext::try_from_cbs_parameters`。首版支持 native u64、rank-1 binary/ternary 环秘密，普通 trace 保持默认。ordinary 和 Split35 均使用精确系数密钥生成。Split 使 trace key payload 和逆变换次数翻倍；它不修复不足的 BR/SS 分解，也不证明失败概率。同一个 CBS 示例可加 `-- --split-trace`，加密、谓词和 CMux 流程不变。独立组合通过 `circuit_bootstrap::CbsTraceKey` 区分对应的 GLWE trace 表示。
 
-升级时须重新生成旧版未约简 Fourier 路径的求值材料；已公开过此类材料的秘密也应更换。具体表示与噪声限制见 [GLWE 加密契约](../primus_glwe/README.zh_CN.md#加密与解密)，修复前后成本见[建钥性能](../../guides/performance/fourier-glwe-keygen.md)。
+升级时须重新生成旧版未约简 Fourier 路径的求值材料；已公开过此类材料的秘密也应更换。具体表示与噪声限制见 [GLWE 加密契约](../primus_glwe/README.zh_CN.md#加密与解密)，修复前后成本见[建钥性能](../../guides/performance/README.zh_CN.md#fourier-key-generation)。
 
 ## 参数与表示
 
@@ -127,7 +127,7 @@ cargo bench -p primus_tfhe_glwe_fourier --bench cbs_identity --features tfhe-fft
 ```
 
 其 unsigned t4 编码、ring KS 和 reverse trace 与作者协议不同，
-见[参数映射](../../guides/performance/bootstrap-functional-comparison.md#glwe外部cbs功能参考)。
+见[参数映射](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
 
 ## 进一步阅读
 

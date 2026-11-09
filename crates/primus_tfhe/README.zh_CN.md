@@ -41,7 +41,7 @@ ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分�
 | NTRU sparse fixed-weight binary | 支持 | 支持 | 支持 | 支持 |
 | NTRU NTT block binary | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
 
-三个后端均提供私钥及 LWE 公钥客户端。GLWE Fourier 支持 RustFFT 和 TFHE-FFT，环模数仅支持 Native。示例配置用于算术教学，未评估安全性及失败概率。NTRU 的外部 LWE 秘密独立于环秘密，只有环秘密需要可逆性筛选。
+三个后端均提供私钥及 LWE 公钥客户端。Fourier 支持 RustFFT 和 TFHE-FFT，环模数仅支持 Native。示例配置用于算术教学，未评估安全性及失败概率。NTRU 的外部 LWE 秘密独立于环秘密，只有环秘密需要可逆性筛选。
 
 ## 选择盲旋转算法
 

@@ -4,7 +4,7 @@
 //! PRIMUS_CBS_ENCODING=padded|msb compares input encodings without changing gadgets.
 //! bit*_cmux includes both CBS and its encrypted CMux consumer.
 //! Parameters differ from the author's input/KS protocol and are not certified presets.
-//! Historical comparisons: guides/performance/bootstrap-functional-comparison.md
+//! Comparison scope: guides/performance/README.md#tfhe-comparisons
 
 use criterion::{BenchmarkId, Criterion, Throughput};
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};

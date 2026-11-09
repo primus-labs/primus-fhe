@@ -71,7 +71,7 @@ let context = TfheContext::<u64, U64NttTable, _>::try_from_cbs_config(config)?;
 ```
 
 Only NGSW-only output changes; it need not match the NGSW part of dual output bitwise.
-See the [four-strategy comparison](../../guides/performance/ntru-projection-fusion.md#current-strategy-comparison) for timing and memory tradeoffs. Presets remain experimental; a faster strategy does not establish a smaller noise budget.
+See the [four-strategy comparison](../../guides/performance/README.md#ntru-projection) for timing and memory tradeoffs. Presets remain experimental; a faster strategy does not establish a smaller noise budget.
 
 MVB requires odd ring Q; prepared factors remain in NTT form. Factor norms amplify both encrypted initialization and BR noise; return-KS noise is added afterward. MVB programs remain bound to their context. Complete encoding and factor-error conditions are in the [MVB contract](../primus_tfhe/README.md#fixed-scale-factorized-mvb).
 

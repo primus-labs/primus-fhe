@@ -86,7 +86,7 @@ NTT generation rejects zero evaluations. Bounded rejection sampling can fail; at
 
 General NTRU supports nonbinary ring secrets. NTRU TFHE uses an independent external LWE secret for binary/ternary blind-rotation controls, without requiring a zero-padded binary ring secret.
 
-Secret keys and private encryption/generation/decryption workspaces erase owned buffers on drop. Discard an explicitly zeroized secret key. Caller-owned plaintext and phase outputs retain their own lifetimes.
+Secret keys and private gadget-encryption workspaces erase owned buffers on drop. Discard an explicitly zeroized secret key. Caller-owned plaintext and phase outputs retain their own lifetimes.
 
 The [automorphism example](examples/automorphism.rs) shows key generation and reusable NTT evaluation under the original secret:
 
@@ -122,9 +122,9 @@ For [phase-error diagnostics](../primus_encoding/README.md#phase-error-diagnosti
 
 Evaluation keys retain their decomposition bases; construct matching workspaces once and reuse them. Automorphism requires odd `d` in `[1, 2N)`. NLev rows can each use scalar automorphism, but applying it row-wise to NGSW does **not** preserve the NGSW message/key relation.
 
-`NttNlev::lift_monomial_to` fuse public-polynomial lifting with the first binary/ternary rotation. Supply NLev[1], a positive NLev bit and an optional negative NLev bit; a zero exponent still performs the lift. Subsequent ternary `cmux_ternary_monomial_to` uses positive/negative NGSW bits, which must be mutually exclusive. Exponents are already quantized into `0..2N`. Reuse `NttNtruCmuxWorkspace::new(poly_length, levels)`.
+`NttNlev::lift_monomial_to` fuses public-polynomial lifting with the first binary/ternary rotation. Supply NLev[1], a positive NLev bit and an optional negative NLev bit; a zero exponent still performs the lift. Subsequent ternary `cmux_ternary_monomial_to` uses positive/negative NGSW bits, which must be mutually exclusive. Exponents are already quantized into `0..2N`. Reuse `NttNtruCmuxWorkspace::new(poly_length, levels)`.
 
-Sample extraction, external products, lift and CMUX are documented in [`primus_lattice`](../primus_lattice/README.md). For PBS, ManyLUT and CBS workflows, see [the NTRU NTT backend](../primus_tfhe_ntru_ntt/README.md).
+Sample extraction, external products, lift and CMUX are documented in [`primus_lattice`](../primus_lattice/README.md). For PBS, ManyLUT and CBS workflows, see [`primus_tfhe_ntru_ntt`](../primus_tfhe_ntru_ntt).
 
 ## Independent LWE return
 
@@ -148,7 +148,7 @@ Q and q may be native or explicit, including equal moduli. Returns keep the coef
 
 ## Trace, projection and expansion
 
-`NttNtruTraceKey` operate on coefficient ciphertexts under the original secret. Let `M` be the input message; target messages below omit evaluation noise.
+`NttNtruTraceKey` operates on coefficient ciphertexts under the original secret. Let `M` be the input message; target messages below omit evaluation noise.
 
 | Method | Target message |
 | --- | --- |
@@ -160,7 +160,7 @@ Q and q may be native or explicit, including equal moduli. Returns keep the coef
 | `expand_coefficients_to` | All N coefficients as constants |
 | `expand_partial_coefficients_to(input, count, ...)` | First `count` constants, assuming a zero message tail |
 
-Partial trace accepts a power-of-two r in `1..=N`; r=N copies input and r=1 is full trace. Reverse trace normalizes before each automorphism/addition. Normalization uses `2^-1 mod q`. The [trace methods](src/trace) document the error terms.
+Partial trace accepts a power-of-two r in `1..=N`; r=N copies input and r=1 is full trace. Reverse trace normalizes before each automorphism/addition. NTT uses `2^-1 mod q`. Late evaluation errors may survive outside target positions. See the [trace methods](src/trace).
 
 Projection accepts arbitrary indices, including duplicates and an empty selection; prefix projection accepts any count in `0..=N`. Each selected coefficient needs a full reverse trace, even for count one. Partial expansion instead requires a power-of-two count in `1..=N`; count one copies the input and count N gives full expansion. It normalizes once and has different error behavior from projection.
 
@@ -168,9 +168,9 @@ Partial expansion produces constants only when **message** coefficients `count..
 
 ## Same-secret scheme switching
 
-`NttNtruSchemeSwitchKey` convert coefficient `NLev_f[m]` to transformed `NGSW_f[m]`. `key_basis` controls decomposition; the independent `output_basis` specifies input/output gadget scalars and level count. Inputs must already use that output basis; matching lengths alone cannot establish this. Reuse a matching external-product workspace.
+`NttNtruSchemeSwitchKey` converts coefficient `NLev_f[m]` to transformed `NGSW_f[m]`. `key_basis` controls decomposition; the independent `output_basis` specifies input/output gadget scalars and level count. Inputs must already use that output basis; matching lengths alone cannot establish this. Reuse a matching external-product workspace.
 
-The evaluation material is `NGSW_f[f]`. Input errors are multiplied by f, decomposition errors by f², and key errors also contribute. Publishing this secret-dependent material requires a justified key-dependent-message/circular-security assumption and suitable parameters; functional correctness provides neither a security proof nor a CBS parameter recommendation. A bit-valued m can control CMUX. See [scheme switching](src/scheme_switch) for the full phase contract.
+The evaluation material is `NGSW_f[f]`. Input errors are multiplied by f, decomposition errors by f², and evaluation-key errors also contribute. Publishing this secret-dependent material requires a justified key-dependent-message/circular-security assumption and suitable parameters; functional correctness provides neither a security proof nor a CBS parameter recommendation. A bit-valued m can control CMUX. See [scheme switching](src/scheme_switch) for the full phase contract.
 
 For packed coefficients that only need NGSW output, [`NttNtruProjectionKey`](src/scheme_switch/projection.rs) accepts an explicit `NtruProjectionMethod`: `Separate` (the enum default), `FusedLastStage`, `FusedLastThreeStages`, or `PairedTrace`. The last method pairs reverse-trace stages and fuses the remaining two or three with SS. `project_to` accepts general message tails; allocate its reusable buffer with `scratch_len()` (2N, 2N, 8N, or 5N/8N respectively, with paired size depending on even/odd log₂N). Only the selected fusion material is generated. Fused strategies change decomposition residuals and key errors; switching strategies requires a new noise budget. Borrow the owned ordinary trace/SS keys for NLev or dual outputs.
 

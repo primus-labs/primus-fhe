@@ -223,6 +223,5 @@ Lookup performs one unscaled native relin and adds t0/t1. Changing key P or the
 backend requires rechecking the lookup error, privacy flood, recovery level,
 security and communication budget.
 
-Finite complete-request and resource measurements are reported separately in the
-[performance comparison](../performance/native-hybrid-keys.md). They do not
-replace these per-operation mathematical and ownership contracts.
+See the [performance guide](../performance/README.md#bfv-and-bgv) for the
+complete-request workloads and resource tradeoffs.

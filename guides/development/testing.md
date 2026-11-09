@@ -33,6 +33,15 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 
 [开发 profile](../../Cargo.toml) 设置 `opt-level=1`，test profile 继承它；release/bench 使用默认配置。需要验证 release 下的检查或数值行为时，对相关普通测试另加 `--release`。[GitHub CI](../../.github/workflows/ci.yml) 先检查独立特性组合，再 lint 和测试主配置。Stable 的 doctest 与普通测试共用 feature 配置，Nightly 另检查全特性文档的链接与警告。示例和基准由 CI 做编译与 lint 检查，实际执行按需手动触发。
 
+## 开发脚本
+
+从仓库根目录执行。两个脚本的 `--help` 都可用普通 Python 查看。
+
+| 脚本 | 用途与依赖 |
+| --- | --- |
+| [`check_scheme_consumers.py`](../../scripts/check_scheme_consumers.py) | `just schemes` 调用，验证独立 Cargo 消费者的普通依赖和实际 BFV/BGV 工作流。需要 Python 3.11+ 及已下载的 Cargo 依赖。 |
+| [`screen_scheme_parameters.py`](../../scripts/screen_scheme_parameters.py) | 使用 Sage Python 和显式指定的 lattice-estimator checkout 估算公开参数的 bare-LWE 参考成本。命令、示例输入和适用范围见[参数与安全参考](ordinary-parameter-budgets.md#安全输入与离线参考筛查)。 |
+
 ## Features 与独立消费者
 
 | 包或能力 | 默认与选择方式 |
@@ -61,7 +70,12 @@ cargo nextest run -p primus_modulus --test derives --features derive
 ```
 
 workspace 的普通 `just` 已因 raw `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`，
-并因 `primus_bfv` 的依赖启用 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。BFV/BGV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，不能以 workspace feature 合并替代各自的独立依赖检查。BGV 的 phase 为 `c0+c1*s=m+p*e`，使用精确 centered CRT 恢复；共享 batching 不包含 BFV 解码器。`just schemes` 额外选择 `rns,batching`，覆盖 BFV/BGV 槽例及小明文子环嵌入。只准备明文 n 不会改变实际密文/秘密的 N。
+并因 `primus_bfv` 的依赖启用 `primus_encoding/rns`。单独选择这两个包时仍需显式启用 `rns`。
+BFV/BGV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，同时检查各自的独立依赖。
+普通 BGV 支持与 p 互素的密文素数。目标整数 phase 为 `lift(f*m mod p)+p*e`，
+处于居中范围时使用精确 centered CRT 恢复，再去除 correction factor `f`。共享 batching
+无需 BFV 解码器。`just schemes` 额外选择 `rns,batching`，覆盖 BFV/BGV 槽例及小明文子环嵌入。
+只准备明文 n 时，密文与秘密仍使用实际的 N。
 
 ```sh
 cargo nextest run -p primus_fft --lib --tests --features rustfft,tfhe-fft
@@ -208,7 +222,7 @@ Fourier 引擎按前面的 feature 规则选择；GLWE `cbs_identity` 仅在 `sp
 
 密钥生成、公开程序编译、加密、工作区/输出分配和解密校验均在计时之外。每次迭代处理一个完整请求，throughput 不按输出数放大；单条基准测固定输入的延迟；批量吞吐中的每条平均成本不能当作尾延迟。Criterion 过滤器只控制采样，**不会跳过 `bench_function` 外的准备和校验**。
 
-比较时固定 CPU、工具链、features、参数和完整负载，不混用不同核型的结果。构建、smoke 和正式采样分别记录；Criterion 提供统计输出，历史测量及其适用范围见[性能指南](../performance/README.zh_CN.md)。
+比较时固定 CPU、工具链、features、参数和完整负载，按核型分开报告结果。分别记录构建、smoke 和正式采样。Criterion 提供统计输出，测量口径见[性能指南](../performance/README.zh_CN.md)。
 
 GLWE `cbs_identity` 分开测量 CBS→变换域 GGSW 和 CBS＋一次真实 CMux；输入编码
 可选 padded/MSB。Fourier ordinary/Split35 只改变 trace 表示，BR、SS 和输入 KS 不变。
@@ -247,12 +261,12 @@ PRIMUS_PBS_CASE=ntt-q50-derived/low cargo bench -p primus_tfhe_glwe_ntt --bench 
 PRIMUS_PBS_CASE=tfhe-fft/high cargo bench -p primus_tfhe_glwe_fourier --bench pbs --features tfhe-fft
 ```
 
-算法、参数、完整计时边界和外部适配器的差异见[跨方案比较](../performance/bootstrap-functional-comparison.md)。
+算法、参数和完整计时边界见[跨方案比较](../performance/README.zh_CN.md#tfhe-comparisons)。
 
 ## 独立应用仓库
 
-OMR 和高精度查表不属于本 workspace。它们通过 path 依赖使用同级 `primus-fhe`；
-在各自根目录执行验证和基准命令，core 的 `just` 不包含它们。
+OMR 和高精度查表是独立应用仓库，通过 path 依赖使用同级 `primus-fhe`。
+在各自根目录执行验证和基准命令。
 
-- [OMR 验证与完整检索基准](../../../primus_omr/crates/primus_omr/README.zh_CN.md#验证)：two-stage 检测、board 吞吐、encode/digest/recovery。
-- [高精度查表验证与基准](../../../primus_high_prec_lut/guides/development/testing.md)：后端 features、公开表创建、完整求值、one-hot 与 primitive 计时边界。
+- `primus_omr/README.zh_CN.md` 说明 two-stage 检测、board 吞吐和 encode/digest/recovery 验证。
+- `primus_high_prec_lut/guides/development/testing.md` 说明后端 features、公开表创建、完整求值、one-hot 与 primitive 计时边界。

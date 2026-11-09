@@ -30,7 +30,7 @@ let context = TfheContext::<u64, Table>::try_from_pbs_config(config)?;
 
 `CLASSIC_CBS_U64` 使用 n866/N2048、独立 binary 秘密、两层 BR 和三层 trace/SS。返回 KS 使用小 LWE 的标准差，与环密钥行的标准差不同。已测消费者及评估边界见[参数目录](../../guides/development/tfhe-parameters.md#noise-by-key-role)。
 
-Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncoding::MsbBoolean`（t=2）。基准内的 LightFHE G1 比较参数采用不同输入和消费契约，不能直接替换。候选范围见[参数筛选说明](../../guides/performance/bootstrap-functional-comparison.md)。
+Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncoding::MsbBoolean`（t=2）。基准内的 LightFHE G1 比较参数采用不同输入和消费契约，不能直接替换。候选范围见[参数筛选说明](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
 
 `PbsMessageConfig::new(t_in)` 默认输入输出消息模数相同，`.with_output_modulus(t_out)` 可独立修改输出。创建 PBS context 前设置 `config.messages`，CBS 则设置 `config.pbs.messages`；PBS 和 padded CBS 客户端、编译器据此派生编码；MSB Boolean CBS 独立使用 t=2。同钥消息覆盖见[选择输出编码](../primus_tfhe/README.zh_CN.md#选择输出编码)。
 
@@ -101,7 +101,7 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 
 每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和工作流解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。只有 fixed-weight classic/sparse PBS 配对仅改变 BR 算法，dense 用例使用不同参数。计时范围与比较限制见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
 
-`cbs_identity` 使用仅在 bench 中定义的派生比较配置，不是教学预设或作者协议的原样复现。测量前检查 bit 0/1 的真实深度 1 CMux 消费，失败直接报错。这些有限 fixture 不证明安全性、失败率或更深树的精度；见[参数映射和验证范围](../../guides/performance/bootstrap-functional-comparison.md#glwe外部cbs功能参考)。
+`cbs_identity` 使用仅在 bench 中定义的派生比较配置，不是教学预设或作者协议的原样复现。测量前检查 bit 0/1 的真实深度 1 CMux 消费，失败直接报错。这些有限 fixture 不证明安全性、失败率或更深树的精度；见[参数映射和验证范围](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
 
 OMR 的两阶段 clue 检测及 `classic_two_stage` / `sparse_two_stage` 基准位于独立的 [primus_omr](../../../primus_omr/README.zh_CN.md) 仓库，请在该仓库根目录运行。
 

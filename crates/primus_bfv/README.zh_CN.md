@@ -156,7 +156,7 @@ cargo clippy -p primus_bfv --all-targets --features batching -- -D warnings
 
 测试保留独立 DFT/schoolbook/整数舍入 oracle，以及绑定、恢复、dirty scratch、擦除和
 分配边界。Crate-local bench 测明确的 prepared 工作负载，setup 在计时外。
-历史来源和工作负载限制见 [性能报告](../../guides/performance/bfv-multiplication.md)（English）。
+历史来源和工作负载限制见 [性能报告](../../guides/performance/README.zh_CN.md#bfv-and-bgv)（English）。
 
 ## 公共对象持久化
 

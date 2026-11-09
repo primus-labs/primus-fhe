@@ -14,7 +14,9 @@ Start from the concrete backend's `experimental` operation config. Examples fix 
 | GLWE Fourier | [experimental.rs](../../crates/primus_tfhe_glwe_fourier/src/experimental.rs) | [Examples](../../crates/primus_tfhe_glwe_fourier/README.md#operation-examples) |
 | NTRU NTT | [experimental.rs](../../crates/primus_tfhe_ntru_ntt/src/experimental.rs) | [Examples](../../crates/primus_tfhe_ntru_ntt/README.md#operation-examples) |
 
-Application parameters are maintained in the sibling repositories: [OMR two-stage presets](../../../primus_omr/crates/primus_omr/README.md#parameters-and-contracts) and [high-precision lookup presets and model limits](../../../primus_high_prec_lut/guides/development/parameters.md).
+Application parameters are maintained in the external repositories. See
+`primus_omr/README.md` for two-stage presets and
+`primus_high_prec_lut/guides/development/parameters.md` for lookup presets and model limits.
 
 Here t is the message modulus, not the number of padded inputs: a front-half input at t=32 has 16 values. Input and output message moduli may differ. PBS/ManyLUT outputs are Rounded, MVB outputs are Scaled, and CBS outputs use gadget scaling rather than an ordinary output codec.
 
@@ -41,7 +43,7 @@ Classic is the default for every entry except the two explicitly sparse configs.
 | Native32 / Native64 | `NativeModulus<u32/u64>`, implicit 2^32 / 2^64 | Fourier accumulator; also GLWE external modulus |
 | q24 | `PowOf2Modulus<u32/u64>`, 2^24 | NTRU backend teaching configs |
 
-These Barrett values fit `Q<2^(BITS-2)` and support the NTT lengths used here. Explicit powers of two use `PowOf2Modulus`; native moduli are implicit. GLWE Fourier TFHE uses Native accumulator moduli.
+These Barrett values fit `Q<2^(BITS-2)` and support the NTT lengths used here. Explicit powers of two use `PowOf2Modulus`; native moduli are implicit. Fourier TFHE uses Native accumulator moduli.
 
 For the u64 configs, n denotes the small BR-control dimension in GLWE and the independent external dimension in NTRU. The GLWE teaching constants below have k=1 and q=Q; their contexts also support independent q/Q, demonstrated by `ntt_two_moduli`. NTRU uses independent external q and ring Q secrets; its backend teaching configs use q24.
 
@@ -105,12 +107,12 @@ A `DecompositionConfig` fixes `log_basis` and optionally `level_count`. With
 this can still discard low bits. An explicit count does not extend to fill the
 modulus. See [decomposition precision](../../crates/primus_decompose/README.md).
 
-The backend config sources above own BR, KS, trace, SS and output gadgets; output
-gadget precision is distinct from the internal switching bases. Select precision
-and projection before generating keys. GLWE Fourier trace defaults to Ordinary.
-NTRU NTT projection defaults to Separate, and the teaching CBS/one-hot presets
-explicitly use PairedTrace. The [projection contract](bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
-also explains GLWE's trace-only Split35 context setting.
+The backend config sources above own BR, KS, trace, SS and output gadgets.
+Output gadget precision is distinct from the internal switching bases. Before
+generating keys, choose the NTRU NTT projection and GLWE Fourier trace precision.
+NTRU NTT teaching CBS and one-hot presets use PairedTrace. GLWE Fourier teaching
+presets use Ordinary trace. The [numerical contracts](bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+describe the supported choices and GLWE's trace-only Split35 setting.
 
 ## Current backend benchmarks
 
@@ -128,7 +130,10 @@ The crate-local benchmarks consume the operation configs but measure the followi
 
 Fourier benches select RustFFT, TFHE-FFT or both, using the same numerical config but engine-compatible material. Sources and commands: [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md#benchmarks), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md#benchmarks), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md#benchmarks).
 
-The opt-in PBS Low/High, identity CBS and modulus-domain comparisons own their parameters in the bench files, rather than the teaching constants above. Select them through the [benchmark guide](testing.md#tfhe-benchmarks); historical parameter mappings and results belong to the [comparison report](../performance/bootstrap-functional-comparison.md).
+The opt-in PBS Low/High, identity CBS and modulus-domain comparisons define their
+parameters in their respective benchmark files. Use the [benchmark guide](testing.md#tfhe-benchmarks)
+to select the cases and the [performance guide](../performance/README.md#tfhe-comparisons)
+to interpret the comparison.
 
 The dense PBS benchmarks provide explicit word-specific u32/u64 fixtures, rather
 than casts of one config. Dense and fixed-weight PBS change geometry, secrets
