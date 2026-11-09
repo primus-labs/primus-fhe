@@ -9,12 +9,12 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 
 use primus_decompose::DecompositionConfig;
-use primus_factor::{FactorMul, ShoupFactor};
+use primus_factor::{FactorMul, FactorSliceOps, ShoupFactor};
 use primus_modulus::BarrettModulus;
 use primus_ntt::{
     NttError, NttTable, U64DcrtTable, U64NttPrimeBasisError, validate_u64_ntt_primes,
 };
-use primus_reduce::{Reduce, ReduceAdd, ReduceInv, ReduceMul, ReduceSub};
+use primus_reduce::{Reduce, ReduceInv, ReduceMulAddSlice, ReduceNeg};
 use primus_rns::{
     CenteredBaseConverter, CenteredConversionWorkspace, HybridRNS, HybridRNSPartitioning, RNSBase,
     Residues, RnsError,
@@ -502,8 +502,7 @@ pub struct NativeHybridProduct<'a> {
     table_q: &'a U64DcrtTable,
     mode: HybridModDown,
     t_inv_p: Vec<ShoupFactor<u64>>,
-    t_mod_q: Vec<ShoupFactor<u64>>,
-    p_inv_q: Vec<ShoupFactor<u64>>,
+    q_factors: Vec<(ShoupFactor<u64>, ShoupFactor<u64>)>,
     // Partition ModUp reads Q coefficients before ModDown overwrites this
     // complete buffer with each component's P-to-Q correction.
     q_scratch: Vec<u64>,
@@ -535,28 +534,24 @@ impl<'a> NativeHybridProduct<'a> {
             .iter()
             .map(|p| ShoupFactor::new(p.reduce_inv(p.reduce(t)), p.value()))
             .collect();
-        let t_mod_q = parameters
-            .hybrid
-            .q_base()
-            .moduli()
-            .iter()
-            .map(|q| ShoupFactor::new(q.reduce(t), q.value()))
-            .collect();
-        let p_inv_q = parameters
+        let q_factors = parameters
             .hybrid
             .q_base()
             .moduli()
             .iter()
             .zip(parameters.hybrid.inv_p_mod_q())
-            .map(|(q, &p)| ShoupFactor::new(p, q.value()))
+            .map(|(q, &p_inv)| {
+                let inverse = ShoupFactor::new(p_inv, q.value());
+                let correction = q.reduce_neg(inverse.factor_mul_modulo(q.reduce(t), q.value()));
+                (inverse, ShoupFactor::new(correction, q.value()))
+            })
             .collect();
         Ok(Self {
             parameters: Arc::clone(parameters),
             table_q,
             mode,
             t_inv_p,
-            t_mod_q,
-            p_inv_q,
+            q_factors,
             q_scratch: vec![0; parameters.q_len],
             accumulator: vec![0; 2 * parameters.qp_len],
             mod_up_limb: vec![0; parameters.poly_length().get()],
@@ -649,24 +644,19 @@ impl<'a> NativeHybridProduct<'a> {
             }
             p.p_to_q
                 .convert_to(acc_p, &mut self.q_scratch, n, &mut self.conversion);
-            for (index, ((((table, correction), acc), out), (scale, inverse))) in self
+            for ((((table, correction), acc), out), (inverse, minus_scaled_inverse)) in self
                 .table_q
                 .iter()
                 .zip(self.q_scratch.chunks_exact_mut(n))
                 .zip(acc_q.chunks_exact(n))
                 .zip(output.chunks_exact_mut(n))
-                .zip(self.t_mod_q.iter().zip(&self.p_inv_q))
-                .enumerate()
+                .zip(&self.q_factors)
             {
                 table.transform_slice(correction);
-                let modulus = p.hybrid.q_base().moduli()[index];
-                let q = modulus.value();
-                for ((out, &acc), &correction) in out.iter_mut().zip(acc).zip(correction.iter()) {
-                    *out = inverse.factor_mul_modulo(
-                        modulus.reduce_sub(acc, scale.factor_mul_modulo(correction, q)),
-                        q,
-                    );
-                }
+                // Compute P^-1 * (acc - t * correction) with two Shoup passes.
+                let q = table.modulus();
+                inverse.factor_mul_slice_to(acc, out, q);
+                minus_scaled_inverse.add_factor_mul_slice_assign(out, correction, q);
             }
         }
     }
@@ -682,13 +672,8 @@ fn add_limb(
     let start = index * digit.len();
     for component in 0..2 {
         let offset = component * qp_len + start;
-        for ((acc, &key), &digit) in accumulator[offset..offset + digit.len()]
-            .iter_mut()
-            .zip(&column[offset..offset + digit.len()])
-            .zip(digit)
-        {
-            *acc = modulus.reduce_add(*acc, modulus.reduce_mul(key, digit));
-        }
+        let range = offset..offset + digit.len();
+        modulus.reduce_add_mul_slice_assign(&mut accumulator[range.clone()], &column[range], digit);
     }
 }
 fn gcd(mut a: u64, mut b: u64) -> u64 {

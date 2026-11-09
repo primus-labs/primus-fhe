@@ -1,9 +1,42 @@
-//! Integer SIMD for canonical Barrett multiply-add/subtract slices.
+//! Integer SIMD for Barrett multiplication and canonical multiply-add/subtract slices.
 //!
 //! Kernels use or derive their reciprocal from the scalar two-limb reciprocal.
 //! There is no key-dependent precomputation or change to residue representation.
 use super::BarrettModulus;
 use primus_integer::FheUint;
+
+// None takes the left operand from the output for in-place multiplication.
+#[cfg(not(feature = "simd"))]
+#[inline]
+pub(super) fn try_mul<T: FheUint>(
+    modulus: BarrettModulus<T>,
+    lhs: Option<&[T]>,
+    rhs: &[T],
+    output: &mut [T],
+) -> bool {
+    #[cfg(target_arch = "x86_64")]
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+        // SAFETY: TypeId proves the exact element type. Length and the
+        // disjoint borrows of the original slices are preserved.
+        let (lhs, rhs, output) = unsafe {
+            (
+                lhs.map(|values| {
+                    std::slice::from_raw_parts(values.as_ptr().cast::<u64>(), values.len())
+                }),
+                std::slice::from_raw_parts(rhs.as_ptr().cast::<u64>(), rhs.len()),
+                std::slice::from_raw_parts_mut(output.as_mut_ptr().cast::<u64>(), output.len()),
+            )
+        };
+        let modulus = BarrettModulus::from_parts(
+            modulus.value().as_into(),
+            modulus.ratio().map(|word| word.as_into()),
+        );
+        return avx512::try_mul_u64(modulus, lhs, rhs, output);
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    let _ = (modulus, lhs, rhs, output);
+    false
+}
 
 #[inline]
 pub(super) fn try_add_mul<T: FheUint, const FIXED_MODULUS: bool>(
@@ -97,11 +130,6 @@ fn try_mul_add<
 
 #[cfg(target_arch = "x86_64")]
 mod avx512 {
-    // Private kernels require their target features, valid Barrett parts and
-    // equal-length canonical operands. OVERWRITE additionally requires Some
-    // addend of that length; otherwise acc supplies the canonical addend.
-    // The typed dispatchers establish all lengths before any raw vector access.
-
     use super::BarrettModulus;
     use primus_reduce::ReduceMulAdd;
     use std::arch::x86_64::*;
@@ -109,6 +137,52 @@ mod avx512 {
     const MIN_NATIVE_LEN: usize = 32;
     pub(super) const IFMA_MODULUS_LIMIT: u64 = 1 << 50;
 
+    #[cfg(not(feature = "simd"))]
+    #[inline(always)]
+    pub(super) fn try_mul_u64(
+        modulus: BarrettModulus<u64>,
+        lhs: Option<&[u64]>,
+        rhs: &[u64],
+        output: &mut [u64],
+    ) -> bool {
+        let len = output.len();
+        if len < MIN_NATIVE_LEN
+            || rhs.len() != len
+            || lhs.is_some_and(|lhs| lhs.len() != len)
+            || !is_x86_feature_detected!("avx512f")
+            || !is_x86_feature_detected!("avx512dq")
+        {
+            return false;
+        }
+        // SAFETY: both target features are available and all lengths agree.
+        unsafe { mul_u64_dq(modulus, lhs, rhs, output) };
+        true
+    }
+
+    #[cfg(not(feature = "simd"))]
+    #[target_feature(enable = "avx512f,avx512dq")]
+    fn mul_u64_dq(
+        modulus: BarrettModulus<u64>,
+        lhs: Option<&[u64]>,
+        rhs: &[u64],
+        output: &mut [u64],
+    ) {
+        let q = modulus.value();
+        let k = u64::BITS - q.leading_zeros();
+        let reciprocal = dq_reciprocal(modulus, k);
+        if let Some(lhs) = lhs {
+            for ((out, &a), &b) in output.iter_mut().zip(lhs).zip(rhs) {
+                *out = reduce_dq(carrying_mul(a, b, 0), q, k, reciprocal);
+            }
+        } else {
+            for (a, &b) in output.iter_mut().zip(rhs) {
+                *a = reduce_dq(carrying_mul(*a, b, 0), q, k, reciprocal);
+            }
+        }
+    }
+
+    // Fused kernels take canonical operands. OVERWRITE reads a separate
+    // addend of the same length, otherwise acc supplies the addend.
     #[inline(always)]
     pub(super) fn try_add_mul_u32<
         const FIXED_MODULUS: bool,
@@ -320,6 +394,23 @@ mod avx512 {
         p11 + (p01 >> 32) + (((p01 & 0xffff_ffff) + p10) >> 32)
     }
 
+    #[inline(always)]
+    fn dq_reciprocal(modulus: BarrettModulus<u64>, k: u32) -> u64 {
+        let [low, high] = modulus.ratio();
+        // Shift floor(2^128/q); batch setup needs no division.
+        (((u128::from(high) << 64) | u128::from(low)) >> (66 - k)) as u64
+    }
+
+    #[inline(always)]
+    fn reduce_dq((lo, hi): (u64, u64), q: u64, k: u32, reciprocal: u64) -> u64 {
+        // When k=2, the left shift count wraps to zero; hi is zero as well.
+        let truncated = (lo >> (k - 2)) | hi.wrapping_shl(66 - k);
+        let quotient = mul_hi_approx(truncated, reciprocal);
+        let value = lo.wrapping_sub(quotient.wrapping_mul(q));
+        let value = value.min(value.wrapping_sub(2 * q));
+        value.min(value.wrapping_sub(q))
+    }
+
     // Truncated Barrett, including the addend in U=a*b+c<q^2. For
     // k=bit_width(q)<=62, s=k-2, t=floor(U/2^s), mu=floor(2^(k+62)/q),
     // both t and mu fit u64. Before rounding the quotient, the error is
@@ -340,9 +431,7 @@ mod avx512 {
         debug_assert_eq!(acc.len(), rhs.len());
         let q = modulus.value();
         let k = u64::BITS - q.leading_zeros();
-        let [low, high] = modulus.ratio();
-        // Shift floor(2^128/q); batch setup needs no division.
-        let reciprocal = (((u128::from(high) << 64) | u128::from(low)) >> (66 - k)) as u64;
+        let reciprocal = dq_reciprocal(modulus, k);
         let len = acc.len().min(lhs.len()).min(rhs.len());
         // Include the separate addend so LLVM can vectorize the final full block.
         let len = if OVERWRITE {
@@ -360,13 +449,7 @@ mod avx512 {
             // intermediate is at most (q-1)^2+q < q^2, preserving
             // the existing quotient/error bound of this DQ kernel.
             let addend = if SUBTRACT { q - addend } else { addend };
-            let (lo, hi) = carrying_mul(lhs[i], rhs[i], addend);
-            // When k=2, the left shift count wraps to zero; hi is zero as well.
-            let truncated = (lo >> (k - 2)) | hi.wrapping_shl(66 - k);
-            let quotient = mul_hi_approx(truncated, reciprocal);
-            let value = lo.wrapping_sub(quotient.wrapping_mul(q));
-            let value = value.min(value.wrapping_sub(2 * q));
-            let value = value.min(value.wrapping_sub(q));
+            let value = reduce_dq(carrying_mul(lhs[i], rhs[i], addend), q, k, reciprocal);
             acc[i] = if SUBTRACT {
                 let negated = q - value;
                 negated.min(negated.wrapping_sub(q))
@@ -463,6 +546,76 @@ mod avx512 {
 mod tests {
     use super::*;
     use primus_reduce::ReduceMulAddSlice;
+
+    #[cfg(not(feature = "simd"))]
+    #[test]
+    fn pure_u64_multiply_matches_wide_remainders() {
+        use primus_reduce::ReduceMulSlice;
+
+        let available = is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512dq");
+        for q in [
+            2,
+            1_125_874_136_383_489,
+            1 << 50,
+            1_152_921_422_732_787_713,
+            1 << 60,
+            (1 << 62) - 1,
+        ] {
+            let modulus = BarrettModulus::new(q);
+            for len in [0, 1, 7, 8, 31, 32, 33, 63, 64, 65, 8192, 32768] {
+                let mut state = 42u64;
+                let mut sample = || {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    state % q
+                };
+                let mut lhs = vec![u64::MAX];
+                let mut rhs = vec![u64::MAX];
+                for i in 0..len {
+                    let pair = match i % 8 {
+                        0 => (q - 1, q - 1),
+                        1 => (u64::MAX, 0),
+                        2 if q > 1 << 32 => (u64::MAX, 1),
+                        3 if q > 1 << 32 => (1, u64::MAX),
+                        4 => (q + 1, 1),
+                        _ => (sample(), sample()),
+                    };
+                    lhs.push(pair.0);
+                    rhs.push(pair.1);
+                }
+                lhs.push(u64::MAX);
+                rhs.push(u64::MAX);
+                let body = 1..len + 1;
+                let expected: Vec<_> = lhs[body.clone()]
+                    .iter()
+                    .zip(&rhs[body.clone()])
+                    .map(|(&a, &b)| ((u128::from(a) * u128::from(b)) % u128::from(q)) as u64)
+                    .collect();
+                let mut output = vec![u64::MAX; len + 2];
+                let mut assigned = lhs.clone();
+                let used_native = try_mul(
+                    modulus,
+                    Some(&lhs[body.clone()]),
+                    &rhs[body.clone()],
+                    &mut output[body.clone()],
+                );
+                assert_eq!(used_native, available && len >= 32);
+                if !used_native {
+                    modulus.reduce_mul_slice_to(
+                        &lhs[body.clone()],
+                        &rhs[body.clone()],
+                        &mut output[body.clone()],
+                    );
+                }
+                modulus.reduce_mul_slice_assign(&mut assigned[body.clone()], &rhs[body.clone()]);
+                assert_eq!(&output[body.clone()], expected, "q={q}, len={len}, to");
+                assert_eq!(&assigned[body], expected, "q={q}, len={len}, assign");
+                assert_eq!([output[0], output[len + 1]], [u64::MAX; 2]);
+                assert_eq!([assigned[0], assigned[len + 1]], [u64::MAX; 2]);
+            }
+        }
+    }
 
     #[test]
     fn native_subtract_matches_wide_remainders() {

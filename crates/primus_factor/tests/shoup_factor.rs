@@ -200,3 +200,87 @@ fn fused_slice_ops_against_wide_product() {
         check::<u64>(q);
     }
 }
+
+#[test]
+fn grouped_butterfly_matches_both_wide_outputs() {
+    for q in [3, 1_152_921_422_732_787_713, (1 << 63) - 1] {
+        let wide_q = u128::from(q);
+        let weights = [0, 1, q - 1, q / 2, q - 2];
+        let factors = weights.map(|value| ShoupFactor::new(value, q));
+        // Short groups force the scalar path even on AVX-512. Longer groups
+        // cover a complete vector, per-group tails, and repeated broadcasts.
+        for group_len in [1, 7, 8, 9, 17, 32, 65] {
+            let len = group_len * factors.len();
+            let mut lhs = vec![u64::MAX; len + 2];
+            let mut rhs = lhs.clone();
+            let mut right = lhs.clone();
+            let lhs_values = &mut lhs[1..len + 1];
+            let rhs_values = &mut rhs[1..len + 1];
+            for (i, (lhs, rhs)) in lhs_values.iter_mut().zip(rhs_values.iter_mut()).enumerate() {
+                let varying = (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) % q;
+                (*lhs, *rhs) = match (i + i / group_len) % 5 {
+                    0 => (0, q - 1),
+                    1 => (q - 1, 0),
+                    2 => (q - 1, q - 1),
+                    3 => (q / 2, q / 2 + 1),
+                    _ => (varying, q - 1 - varying),
+                };
+            }
+            let original = lhs_values.to_vec();
+            let right_values = &mut right[1..len + 1];
+            ShoupFactor::butterfly_grouped_to(
+                lhs_values,
+                rhs_values,
+                &factors,
+                group_len,
+                right_values,
+                q,
+            );
+            for i in 0..len {
+                let a = u128::from(original[i]);
+                let b = u128::from(rhs_values[i]);
+                let w = u128::from(weights[i / group_len]);
+                assert_eq!(u128::from(lhs_values[i]), (a + b) % wide_q);
+                assert_eq!(u128::from(right_values[i]), ((a + wide_q - b) * w) % wide_q);
+            }
+            for slice in [&lhs, &rhs, &right] {
+                assert_eq!(slice[0], u64::MAX);
+                assert_eq!(slice[len + 1], u64::MAX);
+            }
+        }
+    }
+    ShoupFactor::butterfly_grouped_to(&mut [], &[], &[], 8, &mut [], 3);
+}
+
+#[test]
+fn grouped_butterfly_rejects_incomplete_shapes_before_writing() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let factors = [ShoupFactor::new(2, 17); 2];
+    for (group_len, factor_len, rhs_len, right_len) in [
+        (0, 2, 8, 8),
+        (4, 2, 7, 8),
+        (4, 2, 8, 7),
+        (4, 1, 8, 8),
+        (3, 2, 8, 8),
+        (usize::MAX, 2, 8, 8),
+    ] {
+        let mut lhs = [3; 8];
+        let mut right = [5; 8];
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                ShoupFactor::butterfly_grouped_to(
+                    &mut lhs,
+                    &[1; 8][..rhs_len],
+                    &factors[..factor_len],
+                    group_len,
+                    &mut right[..right_len],
+                    17,
+                );
+            }))
+            .is_err()
+        );
+        assert_eq!(lhs, [3; 8]);
+        assert_eq!(right, [5; 8]);
+    }
+}

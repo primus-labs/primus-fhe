@@ -1,23 +1,20 @@
 //! Integer oracle for the coupled sum/difference outputs, modulus-major factor
-//! packing, and the SIMD tail. The same test runs with and without SIMD.
+//! packing, and short, full-vector and tail lengths.
 
 use primus_factor::{Factor, ShoupFactor};
 use primus_integer::FheUint;
 use primus_poly::DcrtPolynomial;
 
-// Seventeen points include full u32/u64 SIMD vectors and a scalar tail in each
-// limb. These raw pointwise operations do not require a power-of-two ring length.
-fn check<T>(qs: [T; 2])
+fn check<T>(n: usize, qs: [T; 2])
 where
     T: FheUint + Into<u64>,
     ShoupFactor<T>: Factor<T>,
 {
-    const N: usize = 17;
-    let len = N * qs.len();
+    let len = n * qs.len();
     let values = |offset: usize| -> Vec<T> {
         (0..len)
             .map(|index| {
-                let q = u128::from(qs[index / N].into());
+                let q = u128::from(qs[index / n].into());
                 let value = match (index + offset) % 4 {
                     0 => 0,
                     1 => q - 1,
@@ -34,7 +31,7 @@ where
         .as_ref()
         .iter()
         .enumerate()
-        .map(|(index, &w)| ShoupFactor::new(w, qs[index / N]))
+        .map(|(index, &w)| ShoupFactor::new(w, qs[index / n]))
         .collect();
     let mut factor_output = vec![T::ONE; len + 2];
 
@@ -43,7 +40,7 @@ where
         let mut expected_sum = Vec::with_capacity(len);
         let mut expected_product = Vec::with_capacity(len);
         for index in 0..len {
-            let q = u128::from(qs[index / N].into());
+            let q = u128::from(qs[index / n].into());
             let a = u128::from(lhs.as_ref()[index].into());
             let b = u128::from(rhs.as_ref()[index].into());
             let w = u128::from(weights.as_ref()[index].into());
@@ -55,7 +52,7 @@ where
             &rhs.as_view(),
             &factors,
             &mut DcrtPolynomial::new(&mut factor_output[1..len + 1]),
-            N,
+            n,
             &qs,
         );
         assert_eq!(lhs.as_ref(), expected_sum);
@@ -66,7 +63,10 @@ where
 }
 
 #[test]
-fn factor_butterfly_preserves_original_lhs_modulus_order_and_tail() {
-    check([132_120_577u32, 754_974_721]);
-    check([1_152_921_504_606_830_593u64, 576_460_752_303_439_873]);
+fn factor_butterfly_preserves_original_lhs_and_modulus_order() {
+    // Raw pointwise operations also accept lengths with a vector tail.
+    for n in [1, 7, 16, 17] {
+        check(n, [132_120_577u32, 754_974_721]);
+        check(n, [1_152_921_504_606_830_593u64, 576_460_752_303_439_873]);
+    }
 }

@@ -14,6 +14,7 @@ use crate::Residues;
 pub(crate) enum FastConversionLimb<'a, T, M> {
     SingleInput {
         input: &'a [T],
+        source_modulus: T,
         modulus: &'a M,
     },
     General {
@@ -29,19 +30,31 @@ impl<T: FheUint, M: FieldContext<T>> FastConversionLimb<'_, T, M> {
     ///
     /// # Correctness
     ///
-    /// A general limb requires the cross-modulus dot-product range described
-    /// by [`BaseConverter::fast_convert`]. The output must have one entry per
-    /// prepared input value. Array conversion and full ModUp obtain it by
-    /// slicing validated output; streaming ModUp checks its reusable limb once.
+    /// Single-limb inputs must be canonical. A general limb requires the
+    /// cross-modulus dot-product range described by [`BaseConverter::fast_convert`].
+    /// The output must have one entry per prepared input value. Array conversion
+    /// and full ModUp obtain it by slicing validated output; streaming ModUp
+    /// checks its reusable limb once.
     #[inline]
     pub(crate) fn write_to(self, output: &mut [T]) {
         match self {
-            Self::SingleInput { input, modulus } => {
+            Self::SingleInput {
+                input,
+                source_modulus,
+                modulus,
+            } => {
                 debug_assert_eq!(output.len(), input.len());
-                output
-                    .iter_mut()
-                    .zip(input)
-                    .for_each(|(result, &ai)| *result = modulus.reduce(ai));
+                let target_modulus = modulus.value();
+                if source_modulus <= target_modulus {
+                    output.copy_from_slice(input);
+                } else if source_modulus - target_modulus <= target_modulus {
+                    modulus.reduce_once_slice_to(input, output);
+                } else {
+                    output
+                        .iter_mut()
+                        .zip(input)
+                        .for_each(|(result, &ai)| *result = modulus.reduce(ai));
+                }
             }
             Self::General {
                 adjusted_residues,
@@ -239,12 +252,14 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
         debug_assert_eq!(input.len(), input_moduli_count * value_count);
 
         if self.uses_single_input_kernel() {
-            Either::Left(
-                self.output_base
-                    .moduli()
-                    .iter()
-                    .map(move |modulus| FastConversionLimb::SingleInput { input, modulus }),
-            )
+            let source_modulus = self.input_base.moduli_values()[0];
+            Either::Left(self.output_base.moduli().iter().map(move |modulus| {
+                FastConversionLimb::SingleInput {
+                    input,
+                    source_modulus,
+                    modulus,
+                }
+            }))
         } else {
             let adjusted_residues =
                 self.prepare_general_fast_convert_array(input, value_count, scratch);

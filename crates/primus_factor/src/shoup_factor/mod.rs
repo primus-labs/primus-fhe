@@ -115,6 +115,71 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     }
 }
 
+impl ShoupFactor<u64> {
+    /// Computes `(lhs + rhs, (lhs - rhs) * factor)` modulo `modulus` in one pass.
+    ///
+    /// Each factor applies to one consecutive group of `group_len` words.
+    /// Overwrites `lhs` with the sum and `right` with the factored difference
+    /// computed from the original inputs. Both outputs are canonical residues.
+    ///
+    /// # Correctness
+    ///
+    /// The inputs must be canonical residues modulo `modulus`. Each factor
+    /// must have been prepared for that same nonzero modulus below `2^63`.
+    /// These arithmetic conditions are caller obligations.
+    ///
+    /// # Panics
+    ///
+    /// Panics before writing if `group_len` is zero, the data slices have
+    /// different lengths, or the factors do not cover exactly those slices.
+    #[inline]
+    pub fn butterfly_grouped_to(
+        lhs: &mut [u64],
+        rhs: &[u64],
+        factors: &[Self],
+        group_len: usize,
+        right: &mut [u64],
+        modulus: u64,
+    ) {
+        assert!(
+            group_len != 0
+                && lhs.len() == rhs.len()
+                && lhs.len() == right.len()
+                && factors.len().checked_mul(group_len) == Some(lhs.len()),
+            "butterfly requires one factor per complete group and equal data lengths"
+        );
+        #[cfg(target_arch = "x86_64")]
+        if native::try_butterfly_grouped_to(lhs, rhs, factors, group_len, right, modulus) {
+            return;
+        }
+        for (((lhs, rhs), right), &factor) in lhs
+            .chunks_exact_mut(group_len)
+            .zip(rhs.chunks_exact(group_len))
+            .zip(right.chunks_exact_mut(group_len))
+            .zip(factors)
+        {
+            butterfly_scalar(lhs, rhs, right, factor, modulus);
+        }
+    }
+}
+
+#[inline]
+fn butterfly_scalar(
+    lhs: &mut [u64],
+    rhs: &[u64],
+    right: &mut [u64],
+    factor: ShoupFactor<u64>,
+    modulus: u64,
+) {
+    for ((lhs, &rhs), right) in lhs.iter_mut().zip(rhs).zip(right) {
+        let original = *lhs;
+        let sum = original.wrapping_add(rhs);
+        let diff = original.wrapping_sub(rhs);
+        *lhs = sum.min(sum.wrapping_sub(modulus));
+        *right = factor.factor_mul_modulo(diff.min(diff.wrapping_add(modulus)), modulus);
+    }
+}
+
 impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
     #[inline]
     fn new(value: T, modulus: T) -> Self {
