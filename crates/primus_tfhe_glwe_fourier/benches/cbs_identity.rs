@@ -3,7 +3,7 @@
 //! PRIMUS_CBS_ENCODING=padded|msb compares input encodings without changing gadgets.
 //! bit*_cmux includes both CBS and its encrypted CMux consumer.
 //! Parameters differ from the author's input/KS protocol and are not certified presets.
-//! Historical comparisons: guides/performance/bootstrap-functional-comparison.md
+//! Comparison scope: guides/performance/README.md#tfhe-comparisons
 //! Add --features tfhe-fft to measure both Fourier engines.
 //! Split35 cases require split-trace (enabled by default); for TFHE-FFT alone
 //! with both trace representations, use --no-default-features --features tfhe-fft,split-trace.

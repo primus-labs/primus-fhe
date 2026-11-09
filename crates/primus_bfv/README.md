@@ -181,7 +181,7 @@ cargo clippy -p primus_bfv --all-targets --features batching -- -D warnings
 Tests retain independent DFT/schoolbook/integer-rounding oracles and focused
 binding, recovery, dirty-scratch, erasure and allocation boundaries. Crate-local
 benches measure explicit prepared workloads; setup stays outside timing. Their
-historical source/workload limits are in the [performance report](../../guides/performance/bfv-multiplication.md).
+historical source/workload limits are in the [performance report](../../guides/performance/README.md#bfv-and-bgv).
 
 ## Public storage
 

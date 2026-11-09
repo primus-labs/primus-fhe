@@ -71,7 +71,7 @@ let context = TfheContext::<u64, U64NttTable, _>::try_from_cbs_config(config)?;
 ```
 
 该选择只改变 NGSW-only 输出；结果不必与双输出中的 NGSW 逐位相同。
-耗时与存储取舍见[四策略对照](../../guides/performance/ntru-projection-fusion.md#current-strategy-comparison)。预设仍为实验参数，更快的策略不代表更小的噪声预算。
+耗时与存储取舍见[四策略对照](../../guides/performance/README.zh_CN.md#ntru-projection)。预设仍为实验参数，更快的策略不代表更小的噪声预算。
 
 MVB 要求奇数环 Q，准备后的因子保留 NTT 表示。因子范数同时放大加密初始化与 BR 噪声，返回 KS 噪声在之后加入。MVB 程序保持与其 context 绑定，完整编码及因子误差条件见 [MVB 契约](../primus_tfhe/README.zh_CN.md#固定尺度分解式-mvb)。
 

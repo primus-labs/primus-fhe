@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Parameters and external LWE clients for NTRU-TFHE. Use the [NTT](../primus_tfhe_ntru_ntt/README.md) backend for contexts, evaluation keys, evaluators and complete examples. Operation and encoding choices are in the [shared guide](../primus_tfhe/README.md).
+Parameters and external LWE clients for NTRU-TFHE. See the [NTT backend](../primus_tfhe_ntru_ntt/README.md) for contexts, evaluation keys, evaluators and complete examples. Operation and encoding choices are in the [shared guide](../primus_tfhe/README.md).
 
 ## Experimental paired parameters
 
@@ -40,9 +40,9 @@ Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q round
 
 Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Boolean, MVB, CBS and one-hot. Select sparse explicitly through `config.method`; the `SparseTernary` secret distribution alone does not select bucket aggregation. External fixed weights may be even; [shared sparse restrictions](../primus_tfhe/README.md#selecting-blind-rotation) still apply.
 
-`NtruBlindRotationControls<T>` stores grouped coefficient controls. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
+The NTT backend uses `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
-The NTT backend also supports `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. The NTT backend supports scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
+The NTRU NTT backend also supports `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. The NTT backend supports scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
 
 ## Clients and LUTs
 
@@ -93,7 +93,7 @@ first lift (`c=d`). Grouped BR has no independent classic initializer: request
 `KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` or
 `try_generate_public_lift_key`. Do not derive this material by summing the
 first group's bit/dummy controls. The lift retains its own generation parameters
-and adds its own decomposition and encryption error.
+and adds its own decomposition/encryption error.
 
 Full output covers δ_r(m), r=0..M-1. Compact NGSW slot r-1 represents r=1..M-1; m=0 makes all those target bits zero. `cmux_k_to` consumes these nonzero controls with C0 as default. NLev output is in coefficient form at Q and must be transformed before public lifting; NGSW is in the backend's transform representation for CMux.
 

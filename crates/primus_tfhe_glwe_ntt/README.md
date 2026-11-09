@@ -30,7 +30,7 @@ Start with an operation config from [experimental](src/experimental.rs). `PbsCon
 
 `CLASSIC_CBS_U64` uses n866/N2048 with independent binary secrets, two BR levels and three trace/SS levels. Its return KS uses the small-LWE deviation, distinct from the ring-row deviation. See the [parameter directory](../../guides/development/tfhe-parameters.md#noise-by-key-role) for the tested consumer and assessment limits.
 
-Padded CBS examples use the t8 teaching config; the MSB example explicitly selects `CbsInputEncoding::MsbBoolean` (t=2). The benchmark-local LightFHE G1 comparison uses a different input/consumer contract and is not a drop-in replacement; see [candidate scope](../../guides/performance/bootstrap-functional-comparison.md).
+Padded CBS examples use the t8 teaching config; the MSB example explicitly selects `CbsInputEncoding::MsbBoolean` (t=2). The benchmark-local LightFHE G1 comparison uses a different input/consumer contract and is not a drop-in replacement; see [candidate scope](../../guides/performance/README.md#tfhe-comparisons).
 
 `PbsMessageConfig::new(t_in)` defaults to equal input/output message moduli; `.with_output_modulus(t_out)` changes the output independently. Set `config.messages` before PBS context creation, or `config.pbs.messages` for CBS. PBS and padded CBS clients/compilers derive their encodings from that choice. MSB Boolean CBS independently uses t=2. Same-key overrides are described in [choosing the output encoding](../primus_tfhe/README.md#choosing-the-output-encoding).
 
@@ -101,7 +101,7 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 
 Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and workflow decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
-`cbs_identity` uses a benchmark-local derived comparison configuration, not a teaching preset or an exact reproduction of the author protocol. It checks both bits with real depth-one CMux consumption before measurement; a failure aborts the run. These finite fixtures do not establish security, failure probability or deeper-tree precision; see the [parameter mapping and validation scope](../../guides/performance/bootstrap-functional-comparison.md#glwe外部cbs功能参考).
+`cbs_identity` uses a benchmark-local derived comparison configuration, not a teaching preset or an exact reproduction of the author protocol. It checks both bits with real depth-one CMux consumption before measurement; a failure aborts the run. These finite fixtures do not establish security, failure probability or deeper-tree precision; see the [parameter mapping and validation scope](../../guides/performance/README.md#tfhe-comparisons).
 
 Two-stage OMR clue detection and its `classic_two_stage` / `sparse_two_stage` benchmarks live in the separate [primus_omr](../../../primus_omr/README.md) repository. Run them from that repository’s root.
 

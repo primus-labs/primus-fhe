@@ -19,10 +19,10 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 | RNS conversion, raw GLWE and gadget evaluation | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
 | BFV coefficient/slot encryption, exact multiplication, relin, rotation and levels | [primus_bfv](../../crates/primus_bfv/README.md) |
 | BGV coefficient/slot encryption, multiplication, relin, rotation and levels | [primus_bgv](../../crates/primus_bgv/README.md) |
-| PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md) or [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) |
+| PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) |
 | One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
-| Functions on encrypted multi-chunk integers | [High-precision lookup](../../../primus_high_prec_lut/README.md) |
-| OMR detection, digest and recovery | [primus_omr](../../../primus_omr/README.md) |
+| Functions on encrypted multi-chunk integers | External `primus_high_prec_lut` repository |
+| OMR detection, digest and recovery | External `primus_omr` repository |
 
 ## Read across library boundaries
 
@@ -43,7 +43,7 @@ The index is bilingual; the topic language is shown below. External tools mainta
 | Native BFV/BGV Hybrid QP keys, partitions, exact correction and collective roles | [Native Hybrid keys](native-hybrid-keys.md) (English) |
 | Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
 | Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |
-| Offline NTRU CBS noise scenarios and gadget search | [Parameter analysis tool](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.md) |
+| Offline NTRU CBS noise scenarios and gadget search | `tools/parameter_selection/ntru_cbs/README.md` in the external `primus_high_prec_lut` repository |
 | Tests, examples, features and benchmark commands | [Testing guide](testing.md) (中文) |
 
 Performance decisions and measurements are in the [performance guide](../performance/README.md). Contributor rules are in [AGENTS.md](../../AGENTS.md).

@@ -1,58 +1,84 @@
-# Performance decisions and historical evidence
+# Benchmark interpretation and performance choices
 
 English | [简体中文](README.zh_CN.md)
 
-Start with the decision relevant to your workload. **Historical timings are not
-current-HEAD validation or security/DFR guarantees.** The index is bilingual;
-topic language is listed below, and measurement data is shared once.
-Current usage and commands belong to the [development guide](../development/README.md)
-and [benchmark guide](../development/testing.md#tfhe-benchmarks).
+Run the current benchmarks from the repository root. Use the [BFV/BGV commands](../development/testing.md#bfvbgv-工作流与基准) or the [TFHE commands](../development/testing.md#tfhe-benchmarks). Each crate owns its benchmark parameters and workload.
 
-| Topic | Language | What remains useful |
-| --- | --- | --- |
-| [BFV/BGV ordinary workflows](bfv-bgv-api-workflows.md) | 中文 | Combined prepared multiplication, private diagnostics, same-request ABBA and allocation/storage comparison |
-| [BFV HPSPOVERQ](bfv-hps-over-q.md) | English | Exact reference, bounded prescaling/wrap, same-parameter complete requests and owned-resource costs |
-| [BFV HPSPOVERQLEVELED](bfv-hps-over-q-leveled.md) | Chinese | Temporary working bases, certified-depth comparisons and complete-request/resource tradeoffs |
-| [Native Hybrid keys](native-hybrid-keys.md) | English | Same-data BFV/BGV complete requests, explicit QP exposure, key preparation and scratch costs |
-| [BFV coefficient input checks](bfv-coefficient-validation.md) | English | Early rejection at encryption boundaries and complete-request ABBA guard |
-| [Exact BFV multiplication](bfv-multiplication.md) | English | Exact RNS NTT/reference comparison, complete fresh slot requests and unchanged coefficient control |
-| [BGV leveled slot requests](bgv-leveled.md) | English | Multiplication/relin/rotation/key-change/drop pipeline and equivalent previous-workflow ABBA control |
-| [BGV coefficient and subring slots](bgv-basic.md) | English | Exact centered recovery resources and complete packed-request baseline |
-| [BFV coefficient workflow](bfv-leveled-coefficients.md) | English | Exact rounded prime-drop resources and complete coefficient-request costs |
-| [Sparse arithmetic and scheduling](sparse-arithmetic.md) | English | Current grouping, canonical NTT boundaries, 16 KiB tiles, 4/2/1 ownership and retained negative controls |
-| [NTRU projection](ntru-projection-fusion.md) | English | Four NTT strategies, Fourier paired/sharing costs and historical binary full-request failure gate |
-| [Fourier GLWE key generation](fourier-glwe-keygen.md) | 中文 | Exact native-row repair, key replacement, setup/storage costs and floating-point limits |
-| [GLWE square SS](glwe-square-ss.md) | 中文 | Rank-one NTT material savings, complete CBS/CMux gains and regressions |
-| [PBS/CBS/EBS references](bootstrap-functional-comparison.md) | 中文 | Historical algorithms, parameter differences and process means; unrepaired Primus GLWE Fourier times retired |
-| [First-product overwrite](fourier-first-write.md) | English | Short historical reason to keep clear-then-accumulate; not evidence for today's pipeline |
-| [LUT presets](../../../primus_high_prec_lut/guides/performance/ntru-lut-presets.md) | English | Independent library's request-specific parameters and numerical limits |
-| [OMR scheduling](../../../primus_omr/guides/performance/omr-scheduling.md) | English | Independent application's detection/retrieval throughput, workers and workspace costs |
+## Measuring a request
 
-## Comparing and remeasuring
+Keep the algorithm, inputs, parameters, compiler, features, CPU and actual
+binary fixed for an A/B comparison. Separate setup, smoke checks and statistical
+sampling. Decide whether encoding, encryption, output allocation, return to LWE
+or result validation belongs to the measured request, and use the same boundary
+for both variants. Compare individual-request latency and batch throughput
+separately. Record requested heap, allocation traffic and process RSS as separate
+quantities. Several historical runs pinned cores in two L3 groups of one Ryzen
+9955HX3D. Their results describe that machine and workload.
 
-Use the same algorithm, revision/actual binary, CPU, features, parameters and
-complete operation. Stage speedups or fewer allocations do not establish full
-request gains. Keep setup/validation outside one-request timing, construction
-costs separate, and adverse rounds/unchanged-path controls. Process intervals
-do not measure between-process variation.
+## BFV and BGV
 
-CPU4/8 records are two L3 groups of **one** Ryzen9 9955HX3D, not independent
-platforms. Time alone does not diagnose cache writeback/bandwidth. Requested
-heap, allocation traffic, peak and RSS have different boundaries.
+- **BFV multiplication.** Ordinary multiplication defaults to Exact, with
+  HPSPOVERQ as an explicit choice. The integer schoolbook reference verifies
+  the same tensor and scale-and-round result as Exact RNS NTT. A timing ratio
+  against that reference only describes those two implementations. HPSPOVERQ
+  has its own error terms. The temporary working-basis plan preserves the
+  external ciphertext basis and selects internal bases with a finite
+  circuit budget. Smaller working keys can lower total memory even when
+  per-operation scratch grows. [Exact and HPSPOVERQ evaluation](../development/bfv-evaluation.md) · [Working-basis plan](../development/bfv-working-basis.md)
+- **Evaluation keys.** Choose Radix or Hybrid independently of the BFV
+  multiplication backend. For Hybrid, measure key setup, retained QP material,
+  reusable scratch and the complete request. The evaluation-key P and BFV
+  multiplication's computation-only P have different roles. [Native Hybrid keys](../development/native-hybrid-keys.md)
+- **BGV leveled requests.** Include the actual correction-factor and prime-drop
+  sequence in a comparison. Use the same logical inputs and check recovery
+  after all required rotations, key changes and drops. [BGV evaluation](../development/bgv-evaluation.md#exact-prime-drop-and-logical-message-preservation)
 
-[Data](data/) retains the necessary process summaries, source/parameter identities
-and selected original samples. Numerical/method contracts remain in rustdoc and
-the [bootstrapping guide](../development/bootstrapping-contracts.md).
-Old parameter names and values are not rewritten as current presets. Reports
-identify measurements, not standalone replay kits; removed adapters/ELFs are not
-maintained. No public report depends on local `docs/`.
+## TFHE comparisons
 
-Superseded raw matrices and duplicated chronology are recoverable at Git
-`c6a6fcbe8dce15be5df83215611f39bdeda181ba`, for example:
+Compare results at the same endpoint. Ordinary PBS benchmarks include the
+configured return. The GLWE `cbs_identity` comparison ends at a consumable
+transform-domain GSW. Its setup checks both input bits with a real depth-one
+CMux before measuring. Include CMux and LWE return explicitly when those are
+part of the workload. LightFHE G1 and CMUX2 derived profiles are local benchmark
+fixtures with different input and consumer contracts from the teaching presets.
+Historical cross-library PBS, CBS and EBS used different parameter profiles
+and provide functional reference points. [Comparison commands](../development/testing.md#glwe-functional-comparison-benchmarks) · [Current benchmark parameters](../development/tfhe-parameters.md#current-backend-benchmarks)
+
+Measure single-input and batched blind rotation separately. Retained sparse
+schedules keep the encrypted selectors, dummy and arithmetic boundaries. Their
+observed gains depend on geometry and workload. CBS with CMux and return needs
+a complete measurement even when a scheme-switching kernel is faster or its
+key payload is smaller. [Bootstrapping contracts](../development/bootstrapping-contracts.md)
+
+## Fourier key generation
+
+Fourier GLWE evaluation material is generated from native coefficient rows
+before transformation. Regenerate material produced by the former unreduced
+path and replace secrets whose affected material was disclosed. Use the exact
+coefficient path for current GLWE Fourier timings. The historical repair
+comparison measured setup separately and found higher
+key-generation costs with mixed, much smaller online changes. The exact
+native rows still incur Fourier conversion error and have backend-specific
+precision limits. [Fourier error budget](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)
+
+## NTRU projection
+
+Choose the projection strategy before generating keys and preparing scratch.
+NTT CBS performance presets use `PairedTrace`; the default configuration uses
+`Separate`. Historical NTT results showed faster trace-plus-scheme-switch
+projection with higher key and scratch costs than `Separate`. Compare the full
+request and its error budget when selecting a strategy.
+[Projection and precision contract](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+
+## Historical evidence
+
+The former experiment reports and data are available in Git at
+`c0584af519270022cc704b500db72f3bdbb60cf4`. They identify the original source,
+fixtures and measurement scope. Current benchmarks use the current source
+and parameters. Security and decryption failure rates for current presets
+require their own evidence.
 
 ```sh
-git show c6a6fcbe:guides/performance/data/fourier-first-write-pairs.csv
+git ls-tree -r --name-only c0584af5 -- guides/performance
+git show c0584af5:guides/performance/bfv-multiplication.md
 ```
-
-New parameters, contracts, FFT plans or compilers need new validation/timing;
-old favorable or adverse results are not silently replaced.

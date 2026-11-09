@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT, by RNS GLWE implementations, and by native BFV/BGV Hybrid products.
+`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT, RNS GLWE implementations, and native BFV/BGV Hybrid products.
 
 Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), [`primus_glwe_rns`](../primus_glwe_rns), [`primus_bfv`](../primus_bfv), and [`primus_bgv`](../primus_bgv).
 

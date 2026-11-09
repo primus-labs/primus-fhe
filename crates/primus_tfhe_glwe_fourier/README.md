@@ -28,7 +28,7 @@ let context = TfheContext::<u64, Table>::try_from_pbs_config(config)?;
 
 Start with an operation config from [experimental](src/experimental.rs). `PbsConfig` contains BR/KS, PBS order and input/output messages; `CbsConfig` adds CBS gadgets and input encoding and uses `TfheContext::try_from_cbs_config`. These are arithmetic teaching fixtures with **unassessed security and failure probability**. Numerical choices and noise roles are described in the [family guide](../primus_tfhe_glwe/README.md#experimental-paired-parameters).
 
-Padded CBS examples use the t8 teaching config; the MSB example explicitly selects `CbsInputEncoding::MsbBoolean` (t=2). The benchmark-local CMUX2 comparison uses a different input/consumer contract and is not a drop-in replacement; see [candidate scope](../../guides/performance/bootstrap-functional-comparison.md).
+Padded CBS examples use the t8 teaching config; the MSB example explicitly selects `CbsInputEncoding::MsbBoolean` (t=2). The benchmark-local CMUX2 comparison uses a different input/consumer contract and is not a drop-in replacement; see [candidate scope](../../guides/performance/README.md#tfhe-comparisons).
 
 `PbsMessageConfig::new(t_in)` defaults to equal input/output message moduli; `.with_output_modulus(t_out)` changes the output independently. Set `config.messages` before PBS context creation, or `config.pbs.messages` for CBS. PBS and padded CBS clients/compilers derive their encodings from that choice. MSB Boolean CBS independently uses t=2. Same-key overrides are described in [choosing the output encoding](../primus_tfhe/README.md#choosing-the-output-encoding).
 
@@ -57,7 +57,7 @@ The CBS example transfers its buffers with `cbs.into_parts()` and `Evaluator::tr
 
 With `split-trace` enabled (the default), set `config.fourier_trace_precision = FourierTracePrecision::Split35` before `TfheContext::try_from_cbs_config(config)`. The choice is retained by `CbsParameters`; binding prepared state uses fallible `TfheContext::try_from_cbs_parameters`. This currently supports native u64, rank-one binary/ternary ring secrets; ordinary trace remains the default. Both ordinary and Split35 use exact coefficient key generation. Split doubles trace key payload and inverse transforms. It does not fix insufficient BR/SS decomposition or certify a failure rate. The same CBS example accepts `-- --split-trace`; its encryption, predicate and CMux workflow are unchanged. Standalone trace material is exposed as `circuit_bootstrap::CbsTraceKey`, with representation-specific GLWE keys.
 
-When upgrading, regenerate evaluation material produced by the former unreduced Fourier path; replace secrets whose material was disclosed. See the [GLWE encryption contract](../primus_glwe/README.md#encryption-and-decryption) for representation/noise limits and [key-generation measurements](../../guides/performance/fourier-glwe-keygen.md) for repair costs.
+When upgrading, regenerate evaluation material produced by the former unreduced Fourier path; replace secrets whose material was disclosed. See the [GLWE encryption contract](../primus_glwe/README.md#encryption-and-decryption) for representation/noise limits and [key-generation measurements](../../guides/performance/README.md#fourier-key-generation) for repair costs.
 
 ## Parameters and representation
 
@@ -127,7 +127,7 @@ cargo bench -p primus_tfhe_glwe_fourier --bench cbs_identity --features tfhe-fft
 ```
 
 Its unsigned t4 encoding, ring KS and reverse trace differ from the author
-protocol; see the [parameter mapping](../../guides/performance/bootstrap-functional-comparison.md#glwe外部cbs功能参考).
+protocol; see the [parameter mapping](../../guides/performance/README.md#tfhe-comparisons).
 
 ## Further reading
 

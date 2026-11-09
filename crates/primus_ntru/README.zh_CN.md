@@ -86,7 +86,7 @@ NTT 生成拒绝零点值。有界拒绝采样可能失败，重试次数及求�
 
 一般 NTRU 支持非 binary 环秘密。NTRU TFHE 使用独立外部 LWE 秘密作为 binary/ternary 盲旋转控制，不要求环秘密为补零 binary。
 
-私钥及私有加密、生成、解密工作区析构时擦除自身缓冲区。显式清零后应丢弃私钥。内置 FFT 后端析构时擦除 scratch，长寿命 engine 可使用 `FftEngine::zeroize_workspace()`。调用方持有的明文和相位输出另行管理生命周期。
+私钥和私有 gadget 加密工作区析构时擦除自身缓冲区。显式清零后应丢弃私钥。调用方持有的明文和相位输出另行管理生命周期。
 
 [自同构示例](examples/automorphism.rs) 展示密钥生成，以及原秘密下可复用的 NTT 求值：
 
@@ -124,7 +124,7 @@ NTT 私钥运算不需要工作区。已编码 NTT 输入须为模 q 的规范�
 
 `NttNlev::lift_monomial_to` 融合公开多项式提升与首次 binary/ternary 旋转。传入 NLev[1]、正控制 NLev 位和可选的负控制 NLev 位，指数为零时仍须提升。后续 ternary `cmux_ternary_monomial_to` 使用互斥的正/负 NGSW 控制位。指数应已量化到 `0..2N`。复用 `NttNtruCmuxWorkspace::new(poly_length, levels)`。
 
-样本提取、外积、lift 和 CMUX 见 [`primus_lattice`](../primus_lattice/README.zh_CN.md)。PBS、ManyLUT 与 CBS 流程见 [NTRU NTT 后端](../primus_tfhe_ntru_ntt/README.zh_CN.md)。
+样本提取、外积、lift 和 CMUX 见 [`primus_lattice`](../primus_lattice/README.zh_CN.md)。PBS、ManyLUT 和 CBS 流程见 [`primus_tfhe_ntru_ntt`](../primus_tfhe_ntru_ntt)。
 
 ## 独立 LWE 返回
 
@@ -144,7 +144,7 @@ NTT 私钥运算不需要工作区。已编码 NTT 输入须为模 q 的规范�
 
 运算先逐系数计算 `c' = round(q*c/Q) mod q`（最近舍入，半点向上），再在 f 下提取并于 q 下 key switch。提取的相位为 `b-<a,f> = (f*c')[index]`。**舍入先于提取中的取负**，交换次序会改变半点结果。Mask 布局见 [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs)。
 
-Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类型（u32→u32 或 u64→u64），缩小 q 不改变字宽。输入须为 Q 下规范剩余类。噪声预算包含 f 加权的舍入、秘密加权的分解误差和 LWE 密钥噪声，以及已有 NTRU/FFT 误差。将 Q 下编码消息缩放到 q，一般不等于直接在 q 下重新编码。
+Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类型（u32→u32 或 u64→u64），缩小 q 不改变字宽。输入须为 Q 下规范剩余类。噪声预算包含 f 加权的舍入、秘密加权的分解误差和 LWE 密钥噪声，以及已有 NTRU 误差。将 Q 下编码消息缩放到 q，一般不等于直接在 q 下重新编码。
 
 ## Trace、投影与展开
 
@@ -160,7 +160,7 @@ Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类
 | `expand_coefficients_to` | 全部 N 个系数各自作为常数 |
 | `expand_partial_coefficients_to(input, count, ...)` | 前 `count` 个常数，要求消息尾部为零 |
 
-部分 trace 接收 `1..=N` 中的二次幂 r；r=N 复制输入，r=1 为完整 trace。Reverse trace 在每次自同构及相加前归一化，采用 `2^-1 mod q`。误差项见 [trace 方法](src/trace)。
+部分 trace 接收 `1..=N` 中的二次幂 r；r=N 复制输入，r=1 为完整 trace。Reverse trace 在每次自同构及相加前归一化，NTT 使用 `2^-1 mod q`。较晚引入的求值误差可能留在目标位置之外。误差项见 [trace 方法](src/trace)。
 
 投影接受任意索引，包括重复索引和空选择；前缀投影接受 `0..=N` 中任意数量。每个选中系数都需要一次完整 reverse trace，数量为一也如此。部分展开要求数量为 `1..=N` 中的二次幂，一时复制输入，N 时为完整展开。它只归一化一次，误差行为与投影不同。
 
@@ -170,7 +170,7 @@ Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类
 
 `NttNtruSchemeSwitchKey` 将系数 `NLev_f[m]` 转为变换域 `NGSW_f[m]`。`key_basis` 控制分解，独立的 `output_basis` 指定输入输出 gadget scalar 和层数。输入必须已使用该输出基，长度匹配不足以证明这一点。复用匹配的外积工作区。
 
-求值材料为 `NGSW_f[f]`。输入误差乘 f，分解误差乘 f²，密钥误差也参与结果。公开该秘密相关材料需要有依据的 key-dependent-message/circular-security 假设和合适参数；功能正确性不提供安全证明或 CBS 参数推荐。m 为 bit 时输出可控制 CMUX，完整相位契约见 [scheme switching](src/scheme_switch)。
+求值材料为 `NGSW_f[f]`。输入误差乘 f，分解误差乘 f²，求值密钥误差也参与结果。公开该秘密相关材料需要有依据的 key-dependent-message/circular-security 假设和合适参数；功能正确性不提供安全证明或 CBS 参数推荐。m 为 bit 时输出可控制 CMUX，完整相位契约见 [scheme switching](src/scheme_switch)。
 
 对于只需要 NGSW 输出的打包系数，[`NttNtruProjectionKey`](src/scheme_switch/projection.rs) 显式接收 `NtruProjectionMethod`：`Separate`（枚举默认值）、`FusedLastStage`、`FusedLastThreeStages` 或 `PairedTrace`。最后一种两两合并 reverse trace 阶段，将末两层或三层与 SS 融合。`project_to` 接受一般非零消息尾部；用 `scratch_len()` 分配可复用缓冲（依次为 2N、2N、8N、5N/8N；paired 的大小取决于 log₂N 的偶/奇性）。仅生成所选策略的融合材料。融合改变分解残差与密钥误差，切换策略需要重新评估噪声预算。NLev 或双输出可以借用其中的普通 trace/SS 密钥。
 

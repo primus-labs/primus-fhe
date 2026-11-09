@@ -153,7 +153,7 @@ required. Automatic parameter/noise management is a separate facility.
 HPSPOVERQ square applies the asymmetric transform to a separate right copy;
 it shares multiplication's residual semantics and does not assume the two
 middle terms are equal. All prepared online methods allocate nothing. See the
-[performance comparison](../performance/bfv-hps-over-q.md) for complete requests,
+[performance guide](../performance/README.md#bfv-and-bgv) for complete requests,
 resource costs and the current selection policy.
 
 ## Temporary working-basis HPSPOVERQLEVELED
