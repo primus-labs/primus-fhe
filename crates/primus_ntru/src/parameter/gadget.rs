@@ -161,4 +161,12 @@ where
     pub fn nlev_len(&self) -> usize {
         self.nlev_len
     }
+
+    /// Returns the number of complex values in a Fourier NLev/NGSW
+    /// ciphertext.
+    #[must_use]
+    #[inline]
+    pub fn fourier_nlev_len(&self) -> usize {
+        self.nlev_len >> 1
+    }
 }

@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// Parameters for scalar secret-key NTRU encryption.
 ///
 /// The ciphertext modulus may be an explicit NTT-friendly field or the native
-/// wrapping modulus. In either case plaintexts
+/// wrapping modulus used by the Fourier backend.  In either case plaintexts
 /// use the codec scale `Delta = round(q / t)`.
 /// The shared encryption state owns the checked ring length and sampler tables;
 /// cloning ordinary or derived gadget parameters retains that state through `Arc`.
@@ -34,7 +34,7 @@ where
     /// Creates a [`NtruParameters`] for `Z_q[X] / (X^N + 1)`.
     ///
     /// `cipher_modulus.explicit_value() == None` selects the native wrapping
-    /// modulus `2^T::BITS`.
+    /// modulus `2^T::BITS`, as required by the Fourier backend.
     ///
     /// # Panics
     ///

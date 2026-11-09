@@ -152,6 +152,7 @@ const fn circuit(
 ) -> CbsConfig<u64, PowOf2Modulus<u64>> {
     CbsConfig {
         projection: primus_tfhe_ntru::NtruProjectionMethod::PairedTrace,
+        fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
         gadget: CbsGadgetConfig {
             trace: decomposition(8),
             scheme_switch: decomposition(8),

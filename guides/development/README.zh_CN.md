@@ -19,7 +19,7 @@
 | RNS 转换、raw GLWE 与 gadget 求值 | [primus_rns](../../crates/primus_rns/README.zh_CN.md)、[primus_glwe_rns](../../crates/primus_glwe_rns/README.zh_CN.md) |
 | BFV 系数/槽加密、精确乘法、relin、旋转与层级 | [primus_bfv](../../crates/primus_bfv/README.zh_CN.md) |
 | BGV 系数/槽加密、乘法、relin、旋转与层级 | [primus_bgv](../../crates/primus_bgv/README.zh_CN.md) |
-| PBS、ManyLUT、MVB、CBS 与 Boolean 门 | [运算选择](../../crates/primus_tfhe/README.zh_CN.md)，然后阅读 [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.zh_CN.md)、[GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.zh_CN.md)、[NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.zh_CN.md) |
+| PBS、ManyLUT、MVB、CBS 与 Boolean 门 | [运算选择](../../crates/primus_tfhe/README.zh_CN.md)，然后阅读 [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.zh_CN.md)、[GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.zh_CN.md)、[NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.zh_CN.md) 或 [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.zh_CN.md) |
 | One-hot selectors | [NTRU CBS 与 one-hot](../../crates/primus_tfhe_ntru/README.zh_CN.md#one-hot-cbs)，然后阅读后端示例 |
 | 加密多 chunk 整数上的函数 | 独立的 `primus_high_prec_lut` 仓库 |
 | OMR 检测、digest 与恢复 | 独立的 `primus_omr` 仓库 |

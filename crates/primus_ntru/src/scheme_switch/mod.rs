@@ -1,8 +1,12 @@
 //! Same-secret conversion from coefficient NLev to transformed NGSW.
 
+#[cfg(feature = "fourier")]
+mod fourier;
 #[cfg(feature = "ntt")]
 mod ntt;
 
+#[cfg(feature = "fourier")]
+pub use fourier::FourierNtruSchemeSwitchKey;
 #[cfg(feature = "ntt")]
 pub use ntt::NttNtruSchemeSwitchKey;
 
@@ -15,10 +19,14 @@ pub use projection::NttNtruProjectionKey;
 ///
 /// Applies only to NGSW-only CBS/one-hot output. NLEV-only and dual-output
 /// operations retain separate trace and, for dual output, separate scheme switching.
+/// Fourier stages retain their independently configured precision.
 /// [`Self::Separate`] is the enum default; NTT performance presets explicitly
 /// select [`Self::PairedTrace`]. Choose before generating keys and workspaces.
 ///
-/// These choices describe arithmetic schedules. Fused strategies change decomposition
+/// These choices are algorithms, not noise or security guarantees. Fourier
+/// supports Separate, FusedLastStage and PairedTrace (fusion requires split trace
+/// and SS); NTT supports
+/// all variants. Fused strategies change decomposition
 /// residuals and correlated key errors; changing strategy requires a new noise budget.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum NtruProjectionMethod {

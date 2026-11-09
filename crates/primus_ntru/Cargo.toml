@@ -8,6 +8,7 @@ primus_shape = { path = "../primus_shape" }
 primus_data = { path = "../primus_data" }
 primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
+primus_fft = { path = "../primus_fft", optional = true }
 primus_encoding = { path = "../primus_encoding" }
 primus_factor = { path = "../primus_factor" }
 primus_integer = { path = "../primus_integer" }
@@ -29,71 +30,71 @@ criterion = { workspace = true }
 [[bench]]
 name = "constant_gadget"
 harness = false
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft"]
 
 [[bench]]
 name = "primitives"
 harness = false
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[bench]]
 name = "ternary_cmux"
 harness = false
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[bench]]
 name = "encryption"
 harness = false
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[bench]]
 name = "lwe_return"
 harness = false
 
-# Targets declare the representations they exercise.
+# Targets declare the representations and concrete FFT engines they exercise.
 [[test]]
 name = "automorphism"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "constant_gadget"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "gadget_generation"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft"]
 
 [[test]]
 name = "key_switch"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "lwe_key_switch"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "phase_contracts"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "scheme_switch"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "secret_key"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "ternary_cmux"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "trace"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "zeroize"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft"]
 
 [[example]]
 name = "automorphism"
@@ -102,6 +103,9 @@ required-features = ["ntt"]
 [features]
 default = []
 ntt = ["dep:primus_ntt", "primus_lattice/ntt"]
+fourier = ["dep:primus_fft", "primus_lattice/fourier"]
+rustfft = ["fourier", "primus_fft/rustfft"]
+tfhe-fft = ["fourier", "primus_fft/tfhe-fft"]
 simd = [
     "primus_integer/simd",
     "primus_factor/simd",

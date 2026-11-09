@@ -153,3 +153,5 @@ pub type CbsParameters<T, LM = BarrettModulus<T>> =
 
 /// Prepared independent LWE return-key parameters.
 pub use primus_tfhe_ntru::LweKeySwitchingParameters;
+
+pub use primus_tfhe_ntru::{FourierCbsPrecision, FourierPrecision};

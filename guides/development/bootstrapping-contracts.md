@@ -56,7 +56,7 @@ G_j = Dummy_j + sum_{i in C_j} X^a_i * Selector_(j,i).
 
 The independently encrypted dummy represents one minus the sum of that bucket's selector bits. An unused bucket therefore targets the identity monomial, not zero. Encrypted zero selectors and the dummy still contribute noise. Under independent centered row errors of variance sigma², each coefficient of the aggregate row has variance `(|C_j|+1)*sigma²`; differing bucket sizes require an appropriate bound, not just their average. This local variance calculation does not establish the full BR tail distribution. Mapping and matching are defined in [sparse.rs](../../crates/primus_tfhe/src/sparse.rs).
 
-Retrying the public map until matching succeeds conditions the published map on the fixed secret admitting a matching. It reduces generation failure without removing that correlation. Only the independent NTRU ring secret is conditioned on invertibility; the external fixed-weight secret may have even weight. Conditioned secret/map distributions and evaluation-key KDM/circular-security assumptions require separate analysis. Matching, rejection sampling and inverse preparation have no constant-time guarantee.
+Retrying the public map until matching succeeds conditions the published map on the fixed secret admitting a matching. It reduces generation failure without removing that correlation. Only the independent NTRU ring secret is conditioned on invertibility and, for Fourier, inverse stability; the external fixed-weight secret may have even weight. Conditioned secret/map distributions and evaluation-key KDM/circular-security assumptions require separate analysis. Matching, rejection sampling and inverse preparation have no constant-time guarantee.
 
 GLWE NTT raw sparse and block BR also accept independent input batches. Their
 four-lane workspaces share read-only key tiles on one thread; each lane retains
@@ -181,7 +181,7 @@ Here Phi is the phase under the original secret and e_k is the actual automorphi
 | NTT | Canonical residues multiplied by `2^-1 mod Q`; the current path requires odd Q below `2^(T::BITS-1)`. This is not rounded integer division and does not inherit native-torus noise bounds. |
 | Fourier | Unsigned `floor(c/2)` on each canonical coefficient, including wrapped negative representatives, before automorphism. Complex Fourier values are never divided by two. |
 
-For native `Q=2^w`, define p_k from the parity of the **actual current ciphertext**, before that step's halving. Since `2*floor(C/2)=C-p`, for GLWE its phase correction is `rho_k=p_b-sum_j p_aj*s_j`. After completing the suffix, the exact modular identity is
+For native `Q=2^w`, define p_k from the parity of the **actual current ciphertext**, before that step's halving. Since `2*floor(C/2)=C-p`, its phase correction is `rho_k=f*p_k` for NTRU and `rho_k=p_b-sum_j p_aj*s_j` for GLWE. After completing the suffix, the exact modular identity is
 
 ```text
 Phi(output) = Pi_r(Phi(input))
@@ -189,27 +189,73 @@ Phi(output) = Pi_r(Phi(input))
             + sum_{k=h+1}^{ell} Pi_(2^k)(e_k).
 ```
 
-Half-modulus lift ambiguities cancel in the completed suffix; e_k includes actual FFT/conversion and KS errors. Do not move floor-halving across addition or signed monomial shifts, or reuse parity from a differently scheduled ciphertext. Each rho term has coefficient bound `1+sum_j ||s_j||_1` for GLWE. If the actual e_k have bounds B_k, the introduced contribution is bounded by `sum B_k` for odd Q, or `sum B_k+(ell-h)*rho_bound` for native Q. Include the projected input error separately. These are conditional deterministic bounds, not Gaussian variance or tail estimates; parity need not be independent or unbiased.
+Half-modulus lift ambiguities cancel in the completed suffix; e_k includes actual FFT/conversion and KS errors. Do not move floor-halving across addition or signed monomial shifts, or reuse parity from a differently scheduled ciphertext. Each rho term has coefficient bound `||f||_1` for NTRU or `1+sum_j ||s_j||_1` for GLWE. If the actual e_k have bounds B_k, the introduced contribution is bounded by `sum B_k` for odd Q, or `sum B_k+(ell-h)*rho_bound` for native Q. Include the projected input error separately. These are conditional deterministic bounds, not Gaussian variance or tail estimates; parity need not be independent or unbiased.
 
 To project coefficient i, first use `X^-i*C` and then full reverse trace. Reduce i modulo 2N: indices at least N carry the negacyclic minus sign and cannot simply be reduced modulo N. Ordinary CBS uses i=l; one-hot selector j uses i=l-j*S modulo 2N, with S=N/M. This does not add a factor N or change the gadget scalar. Arbitrary message tails are allowed. Prefix expansion yields independent constants only when the target message is zero outside that prefix; fewer requested outputs do not establish that premise, nor does a message zero tail imply zero ciphertext/noise tails.
 
-Outputs share BR and evaluation-key errors. Do not combine selector/level errors by root-sum-of-squares without additional assumptions. Bound all coefficients needed by subsequent scheme switching, CMux and rotation, not only the projected constant.
+Outputs share BR and evaluation-key errors. Fourier PairedTrace one-hot NGSW batches also share the first pair across targets, introducing further correlations. Do not combine selector/level errors by root-sum-of-squares without additional assumptions. Bound all coefficients needed by subsequent scheme switching, CMux and rotation, not only the projected constant.
 
 ### NTRU CBS precision and projection support
 
-`CbsConfig.projection` chooses the NGSW-only projection schedule before context
-and key preparation. The four NTRU NTT strategies are `Separate` (the enum default),
-`FusedLastStage`, `FusedLastThreeStages`, and `PairedTrace`. The NTRU NTT teaching
-CBS and one-hot presets select `PairedTrace`. NLEV-only and dual outputs retain
-separate trace and scheme switching. Classic binary/ternary, sparse fixed-weight
-binary, and block binary BR support NLEV, NGSW and dual output for u32 and u64
-under their respective shape, secret-distribution, gadget and input guard contracts.
+`CbsConfig.fourier_precision` chooses BR, trace and SS precision independently;
+`CbsConfig.projection` chooses the NGSW-only projection schedule. Configure both
+before preparing the context and keys. Defaults are all `Ordinary` and `Separate`.
+NTRU NTT teaching CBS/one-hot presets explicitly select `PairedTrace`. Fourier
+backend teaching presets retain `Separate` and ordinary precision.
+
+The matrix describes production NTRU CBS and one-hot support. Binary includes
+fixed-weight binary; sparse BR requires a fixed-weight binary input secret.
+Both RustFFT and TFHE-FFT have the same supported combinations.
+
+| Backend / ring word | BR algorithm | BR precision | Trace / SS precision | Projection | Outputs |
+| --- | --- | --- | --- | --- | --- |
+| NTT, u32/u64 | Classic binary/ternary, sparse binary, block binary | `Ordinary` config marker | `Ordinary` config markers | All four strategies | NLEV, NGSW, dual |
+| Fourier, native u32 | Classic binary/ternary, sparse binary | Ordinary | Ordinary / Ordinary | Separate | NLEV, NGSW, dual |
+| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
+| Fourier, native u64 | Classic binary, block binary | Split | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
+| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
+| Fourier, native u64 | Classic binary, block binary | Split | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
+
+The four NTT strategies are `Separate`, `FusedLastStage`, `FusedLastThreeStages`
+and `PairedTrace`. NTT arithmetic does not use FFT precision; its context rejects
+non-Ordinary markers. Fourier rejects `FusedLastThreeStages`, fusion without
+split trace and SS, split u32, and split ternary/sparse BR. It does not silently
+fall back. Fourier ring Q is native; the external LWE modulus is independently chosen.
+Each row still requires the usual shape, secret-distribution, gadget and input
+guard contracts. NLEV-only and dual outputs always execute separate trace/SS,
+**with their configured precision**, even when a fused strategy is selected.
+
+For split, a canonical native u64 coefficient is split at `b=low_bits` into
+low b bits and high 64−b bits. `0<b<64` and the constructor's product-range bound
+protect representation and inverse conversion, not FFT accuracy. Trace and SS
+widths may differ; changing b, N, decomposition or branch count requires
+rebudgeting low-limb error and high-limb rounding failure,
+which is amplified by `2^b`. Successful tests do not establish a security or
+full-request decryption-failure bound. Small-ring unequal-width tests are not
+large-parameter recommendations.
+
+Both ordinary and split key generation form exact native coefficient rows.
+Ordinary material transforms complete rows once. Sparse and block BR retain
+coefficient rows and aggregate them in the native ring before the selected
+transform. Split Block BR extracts canonical limbs after aggregation, including
+negacyclic signs and wrapping carries. Its workspace holds only the selected
+aggregate spectra and reuses product scratch for limb conversion. Block and
+split require u64. Ordinary classic and sparse BR support u32 and u64.
+Only the selected representation is stored. Conversion precision still
+determines the represented error. SS reconstructs coefficients before returning ordinary
+Fourier NGSW controls; BR-internal CMux follows the BR precision. Consumer
+operations need their own precision budget. The external `primus_high_prec_lut`
+repository's `guides/development/lookup-contracts.md` covers public lifting,
+selection and post-selector rotations.
 
 Fused residuals differ from Separate, so the binary per-stage recurrence cannot
 be reused unchanged. See [`NttNtruProjectionKey`](../../crates/primus_ntru/src/scheme_switch/projection.rs)
-for pair and terminal phase equations, key-message assumptions and scratch ownership,
-and the [performance tradeoffs](../performance/README.md#ntru-projection).
-
+and the [Fourier projection key](../../crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs)
+for pair/terminal phase equations, key-message assumptions and scratch ownership.
+Fusion need not reduce total noise. PairedTrace's Fourier one-hot NGSW multi-target
+path shares the first pair; ordinary CBS, single-target, NLEV/dual and NTT paths
+retain their own schedules. Its extra 4N-word cache belongs to the one-hot
+evaluator. See [projection performance tradeoffs](../performance/README.md#ntru-projection).
 GLWE does not expose these NTRU projection choices. Its
 `CbsConfig::fourier_trace_precision` selects Ordinary or Split35 and is retained
 by `CbsParameters`. Split35 requires the Fourier backend feature `split-trace`,
@@ -220,7 +266,30 @@ remain ordinary Fourier. Evaluators obtain matching scratch from the actual key.
 There is no GLWE trace/SS fusion or paired-trace configuration. See the
 [context contract](../../crates/primus_tfhe_glwe_fourier/src/context.rs).
 
-Method-level contracts remain on NTRU [NTT](../../crates/primus_ntru/src/trace/ntt.rs) and GLWE [NTT](../../crates/primus_glwe/src/trace/ntt_operations.rs) / [Fourier](../../crates/primus_glwe/src/trace/fourier_operations.rs) trace.
+Paired Fourier trace uses unsigned `floor(c/4)` per prefix pair, followed by
+one SS-basis `floor(c/R)` with R=4 (even log₂N) or R=8 (odd log₂N). It shares
+digit FFTs and restores branch permutations after the inner products. Native
+integer lifts must be retained through later divisions; modular phase identities
+alone do not justify dropping wrap terms. The key's [rustdoc](../../crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs)
+owns the pair/terminal equations and scratch contract. Neither paired trace nor
+terminal fusion establishes independence of shared-key errors across selectors.
+
+For the native Fourier terminal, let gamma=sigma_(N+1), Pi2 retain even
+coefficients, a=floor(c/2), r=c-2a, and a=sum(g_j*d_j)+epsilon using the SS
+basis. With identity/cross key phases g_j*f²+eta_id,j and
+g_j*f*gamma(f)+eta_cross,j, respectively, the exact fused phase is
+`f*Pi2(f*c) - f*Pi2(f*r) - 2*f*Pi2(f*epsilon)
+ + sum(d_j*eta_id,j + gamma(d_j)*eta_cross,j)`.
+The cross key encrypts gamma(f), not f*gamma(f). Inverse-permute its split
+limbs offline; sum each branch's frequency inner products before restoring its
+permutation. Low/high inverse rounding remains separate, followed by native
+wrapping reconstruction and an ordinary output FFT. Add the actual
+`f*(E_low + 2^b*E_high + E_output)` error; fusion does not eliminate floor bias,
+key correlations, or the ordinary output's precision limit. The NLEV/dual path
+retains the complete trace key and separate SS. These equations require a new
+noise budget; successful consumer tests are not a failure-probability bound.
+
+Method-level contracts remain on NTRU [NTT](../../crates/primus_ntru/src/trace/ntt.rs) / [Fourier](../../crates/primus_ntru/src/trace/fourier.rs) and GLWE [NTT](../../crates/primus_glwe/src/trace/ntt_operations.rs) / [Fourier](../../crates/primus_glwe/src/trace/fourier_operations.rs) trace.
 
 ## One-hot CBS
 
@@ -234,7 +303,7 @@ BR quantization uses step W, not MW. If its actual quantized phase satisfies `u_
 
 NLEV→NGSW scheme switching preserves the complete output basis and adds f/f²-dependent errors; see [CBS parameters](../../crates/primus_tfhe_ntru/src/circuit_bootstrap.rs). Budget them at the smallest output gadget scale and at the eventual consumer.
 
-Full one-hot APIs produce all M coefficient NLEVs or transformed NGSWs. Compact NGSW APIs omit branch zero for consumers of the form `C0 + sum_{r>0} delta_r*(Cr-C0)`. They skip its projection/scheme switch, not shared BR, and do not widen the guard. The fused consumer sums all external-product errors; sequential CMux estimates cannot simply be reused. The first public lookup layer still needs all M NLEVs.
+Full one-hot APIs produce all M coefficient NLEVs or transformed NGSWs. Compact NGSW APIs omit branch zero for consumers of the form `C0 + sum_{r>0} delta_r*(Cr-C0)`. They skip its projection/scheme switch, not shared BR, and do not widen the guard. The fused consumer sums all external-product errors; sequential CMux estimates cannot simply be reused. Fourier rounds after the sum, so ciphertext coefficients can differ from separately converted products. The first public lookup layer still needs all M NLEVs.
 
 The external `primus_high_prec_lut` repository's `guides/development/lookup-contracts.md`
 defines the complete selection tree, first-layer lifting, coefficient rotations

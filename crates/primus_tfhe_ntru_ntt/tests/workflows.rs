@@ -276,6 +276,7 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     let context = TfheContext::<T, Table, _>::try_from_cbs_config(CbsConfig {
         pbs,
         projection,
+        fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
         gadget: CbsGadgetConfig {
             trace: decomposition(),
             scheme_switch: decomposition(),
@@ -959,6 +960,7 @@ fn key_generation_boundaries() {
     let invalid =
         TfheContext::<u32, Table, _>::try_from_cbs_config(primus_tfhe_ntru_ntt::CbsConfig {
             projection: primus_tfhe_ntru::NtruProjectionMethod::Separate,
+            fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
             pbs: invalid_config,
             gadget: CbsGadgetConfig {
                 trace: decomposition(),
@@ -1041,6 +1043,7 @@ fn projection_selection_is_bound_to_cbs_material() {
             pbs,
             gadget,
             projection,
+            fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
         })
         .unwrap();
         let (_, server) = context

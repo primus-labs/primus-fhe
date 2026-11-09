@@ -2,11 +2,15 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionL
 use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use primus_modulus::BarrettModulus;
+use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntru::{
-    NlevCiphertext, NlevParameters, NtruCiphertext, NtruParameters, NtruSecretKey,
-    NttNgswCiphertext, NttNlevCiphertext, NttNtruExternalProductWorkspace,
-    NttNtruGadgetEncryptWorkspace, NttNtruSchemeSwitchKey, NttNtruSecretKey, SecretKeyDistr,
+    FourierNgswCiphertext, FourierNlevCiphertext, FourierNtruEncryptWorkspace,
+    FourierNtruExternalProductWorkspace, FourierNtruGadgetEncryptWorkspace,
+    FourierNtruSchemeSwitchKey, FourierNtruSecretKey, NlevCiphertext, NlevParameters,
+    NtruCiphertext, NtruParameters, NtruSecretKey, NttNgswCiphertext, NttNlevCiphertext,
+    NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace, NttNtruSchemeSwitchKey,
+    NttNtruSecretKey, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
@@ -233,6 +237,147 @@ fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
         rand::Rng::next_u64(&mut invalid),
         rand::Rng::next_u64(&mut untouched)
     );
+}
+
+fn fourier<Table: FftTable>() {
+    let q = 1u128 << 64;
+    let table = Table::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let parameters = NtruParameters::new(
+        PolyLength::new(N),
+        16u64,
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let secret = secret();
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let mut rng = StdRng::seed_from_u64(119);
+    let mut generation = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
+    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
+    let mut scratch = FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let messages = messages(q);
+    let operands = messages.each_ref().map(|message| {
+        let mut transformed = primus_ntru::FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
+        key.encrypt_encoded_to(
+            message,
+            &mut transformed,
+            parameters.encryption_parameters(),
+            &mut fft,
+            &mut rng,
+            &mut encrypt,
+        );
+        let mut output = NtruCiphertext::<Vec<u64>>::zero(N);
+        transformed.write_torus_form(&mut output, &mut fft);
+        output
+    });
+    for log_key_basis in [3, 10] {
+        let key_parameters = NlevParameters::with_ntru_params(
+            &parameters,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(log_key_basis),
+                level_count: None,
+            },
+        );
+        for output_levels in [2, 7] {
+            let output_parameters = NlevParameters::with_ntru_params(
+                &parameters,
+                DecompositionConfig {
+                    log_basis: DecompositionBaseLog::new(8),
+                    level_count: Some(DecompositionLevelCount::new(output_levels)),
+                },
+            );
+            let ss = FourierNtruSchemeSwitchKey::generate(
+                &secret,
+                &key,
+                output_parameters.basis(),
+                &key_parameters,
+                &mut fft,
+                &mut rng,
+                &mut generation,
+            );
+            assert_eq!(ss.key_basis(), key_parameters.basis());
+            assert_eq!(ss.output_basis(), output_parameters.basis());
+            let mut encrypted =
+                FourierNlevCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
+            let mut input = NlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
+            let mut output =
+                FourierNgswCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
+            let mut row = NtruCiphertext::<Vec<u64>>::zero(N);
+            for bit in [0, 1] {
+                key.encrypt_nlev_constant_to(
+                    bit,
+                    &mut encrypted,
+                    &output_parameters,
+                    &mut fft,
+                    &mut rng,
+                    &mut generation,
+                );
+                for (transformed, mut input) in
+                    encrypted.iter_ntru(N / 2).zip(input.iter_ntru_mut(N))
+                {
+                    transformed.write_torus_form(&mut input, &mut fft);
+                }
+                ss.apply_to(&input, &mut output, &mut fft, &mut scratch);
+                for (scalar, level) in output_parameters
+                    .basis()
+                    .scalar_iter()
+                    .zip(output.iter_ntru(N / 2))
+                {
+                    level.write_torus_form(&mut row, &mut fft);
+                    assert_phase(row.as_ref(), &expected_level(scalar, bit, q), q, 1 << 26);
+                }
+                output.cmux_to(
+                    &operands[0],
+                    &operands[1],
+                    &mut row,
+                    output_parameters.basis(),
+                    &mut fft,
+                    &mut scratch,
+                );
+                assert_phase(row.as_ref(), messages[bit as usize].as_ref(), q, q / 2048);
+            }
+            output.as_mut().fill(Complex64::new(7.0, 0.0));
+            let mut wrong = FourierNtruExternalProductWorkspace::new(PolyLength::new(2 * N));
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
+                    &input,
+                    &mut output,
+                    &mut fft,
+                    &mut wrong
+                )))
+                .is_err()
+            );
+            assert!(
+                output
+                    .as_ref()
+                    .iter()
+                    .all(|&value| value == Complex64::new(7.0, 0.0))
+            );
+            let short = NlevCiphertext::new(&input.as_ref()[..input.as_ref().len() - 1]);
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
+                    &short,
+                    &mut output,
+                    &mut fft,
+                    &mut scratch
+                )))
+                .is_err()
+            );
+            assert!(
+                output
+                    .as_ref()
+                    .iter()
+                    .all(|&value| value == Complex64::new(7.0, 0.0))
+            );
+        }
+    }
+}
+
+#[test]
+fn fourier_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
+    fourier::<RustFftTable>();
+    fourier::<TfheFftTable>();
 }
 
 // Exercise the same complete algorithms with both word widths and odd/even log2(N).

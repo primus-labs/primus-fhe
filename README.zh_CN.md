@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格密文原语、LWE/GLWE/NTRU 加密、三个 TFHE 后端，以及支持分层求值的 BFV 和 BGV。
+Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格密文原语、LWE/GLWE/NTRU 加密、四个 TFHE 后端，以及支持分层求值的 BFV 和 BGV。
 
 > [!WARNING]
 > API、表示、算法和 crate 边界尚不稳定，可能直接发生不兼容修改。示例与基准参数用于功能演示，不构成安全性或失败概率推荐；项目尚未达到生产可用状态。
@@ -27,9 +27,9 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 | 家族 | NTT：显式素数环模数 | Fourier：原生字长环模数 |
 | --- | --- | --- |
 | [GLWE 参数与客户端](crates/primus_tfhe_glwe/README.zh_CN.md) | [GLWE NTT](crates/primus_tfhe_glwe_ntt/README.zh_CN.md) | [GLWE Fourier](crates/primus_tfhe_glwe_fourier/README.zh_CN.md) |
-| [NTRU 参数与客户端](crates/primus_tfhe_ntru/README.zh_CN.md) | [NTRU NTT](crates/primus_tfhe_ntru_ntt/README.zh_CN.md) | — |
+| [NTRU 参数与客户端](crates/primus_tfhe_ntru/README.zh_CN.md) | [NTRU NTT](crates/primus_tfhe_ntru_ntt/README.zh_CN.md) | [NTRU Fourier](crates/primus_tfhe_ntru_fourier/README.zh_CN.md) |
 
-GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。GLWE Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
+GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
 
 Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
 
@@ -59,7 +59,7 @@ cargo run --release -p primus_bgv --example leveled_coefficients
 | 密文表示 | [primus_lattice](crates/primus_lattice/README.zh_CN.md)：存储、算术、提取、gadget 乘法、CMUX 和可复用工作区 |
 | 加密与求值 | [primus_lwe](crates/primus_lwe/README.zh_CN.md)、[primus_glwe](crates/primus_glwe/README.zh_CN.md)、[primus_ntru](crates/primus_ntru/README.zh_CN.md)：密钥与方案原语；[primus_glwe_rns](crates/primus_glwe_rns/README.zh_CN.md)：CRT/DCRT GLWE 和 hybrid-RNS 密钥切换 |
 | BFV/BGV 系数与槽流程 | [primus_bfv](crates/primus_bfv/README.zh_CN.md)：BFV 参数、消息缩放与恢复；[primus_bgv](crates/primus_bgv/README.zh_CN.md)：p 倍误差与精确 centered 恢复；两者消费共享 batching |
-| TFHE | [primus_tfhe](crates/primus_tfhe/README.zh_CN.md)：共享外部 LWE 客户端、LUT、PBS trait 和 Boolean 求值；上方两个家族 crate 与三个后端负责绑定参数、密钥和执行过程 |
+| TFHE | [primus_tfhe](crates/primus_tfhe/README.zh_CN.md)：共享外部 LWE 客户端、LUT、PBS trait 和 Boolean 求值；上方两个家族 crate 与四个后端负责绑定参数、密钥和执行过程 |
 
 ## 构建与进一步阅读
 

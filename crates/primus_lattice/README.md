@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by GLWE NTT and Fourier, NTRU NTT, RNS GLWE implementations, and native BFV/BGV Hybrid products.
+`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by the GLWE/NTRU × Fourier/NTT TFHE paths by RNS GLWE implementations, and by native BFV/BGV Hybrid products.
 
 Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), [`primus_glwe_rns`](../primus_glwe_rns), [`primus_bfv`](../primus_bfv), and [`primus_bgv`](../primus_bgv).
 
@@ -20,8 +20,8 @@ Let `N` be the polynomial length, `k` the GLWE mask dimension, `L` the gadget le
 | `Glwe` | `k` mask polynomials followed by one body polynomial | Coefficient, NTT, Fourier, CRT/DCRT |
 | `Glev` | `L` GLWE ciphertexts in decomposition order | Coefficient, NTT, Fourier, CRT/DCRT |
 | `Ggsw` | `k+1` GLev rows | Coefficient, NTT, Fourier, CRT/DCRT |
-| `Ntru` | One polynomial `h`, with phase `f*h` under secret `f` | Coefficient, NTT |
-| `Nlev` / `Ngsw` | `L` NTRU polynomials in decomposition order | Coefficient, NTT |
+| `Ntru` | One polynomial `h`, with phase `f*h` under secret `f` | Coefficient, NTT, Fourier |
+| `Nlev` / `Ngsw` | `L` NTRU polynomials in decomposition order | Coefficient, NTT, Fourier |
 
 RLWE, RLev and RGSW use `Glwe`, `Glev` and `Ggsw` with `GlweSize::new(GlweDimension::new(1), PolyLength::new(N))`; their NTT and CRT/DCRT representations follow the same dimension-one layout.
 
@@ -29,7 +29,7 @@ That generic RLWE layout uses mask/body order. Native BFV/BGV `[c0,c1]`
 plus-phase storage follows the scheme and native Hybrid contracts; borrowing a
 view does not convert between those conventions.
 
-Types are exported through their modules, for example `glwe::Glwe`, `ggsw::NttGgsw`, and `ngsw::NttNgsw`. Prefixes identify the representation. `Torus*` aliases name native-torus uses of coefficient wrappers; they do not enforce a modulus or perform encoding.
+Types are exported through their modules, for example `glwe::Glwe`, `ggsw::NttGgsw`, and `ngsw::FourierNgsw`. Prefixes identify the representation. `Torus*` aliases name native-torus uses of coefficient wrappers; they do not enforce a modulus or perform encoding.
 
 NLev and NGSW share a storage shape but have different semantics: an NLev of `beta` contains phases `v_i*beta`; an NGSW of `beta` contains phases `v_i*f*beta`. Their valid gadget products differ, so the types are intentionally distinct.
 
@@ -66,9 +66,9 @@ Only raw coefficients are serialized. Dimensions, the packed mask/body split, mo
 | Plaintext and gadget updates | `add_plaintext_assign`, `set_trivial`, `add_gadget_diagonal_assign` |
 | Conversions | `into_ntt_form`, `write_ntt_form`, inverse coefficient conversions, `write_fourier_form`, `write_torus_form` |
 | Extraction | `extract_lwe_at_to`, compact GLWE extraction, packed RLWE extraction, `inverse_extract_glwe_to` |
-| External products | Fourier/NTT GGSW and NTT NTRU gadget products; DCRT GLev polynomial products and GGSW products |
+| External products | Fourier/NTT GGSW and NTRU gadget products; DCRT GLev polynomial products and GGSW products |
 | CMUX | GGSW/NGSW `cmux_to`, `cmux_k_to`, `cmux_monomial_to` |
-| Ternary rotation | NTT/Fourier GGSW and NTT NGSW `cmux_ternary_monomial_to` |
+| Ternary rotation | NTT/Fourier GGSW and NGSW `cmux_ternary_monomial_to` |
 
 Availability depends on the type and representation. RNS scalar/factor inputs use `primus_rns::Residues` and `ResidueFactors` in modulus order.
 
@@ -111,8 +111,8 @@ These low-level operations deliberately omit some checks. Invalid inputs may sil
 | --- | --- |
 | `NttGlweExternalProductWorkspace` / `FourierGlweExternalProductWorkspace` | GLWE layout and decomposition levels in `GadgetSize` |
 | `NttGlweTernaryCmuxWorkspace` / `FourierGlweTernaryCmuxWorkspace` | Fixed `GadgetSize` |
-| `NttNtruExternalProductWorkspace` | Polynomial length |
-| `NttNtruCmuxWorkspace` | Polynomial length and decomposition levels |
+| `NttNtruExternalProductWorkspace` / `FourierNtruExternalProductWorkspace` | Polynomial length |
+| `NttNtruCmuxWorkspace` / `FourierNtruCmuxWorkspace` | Polynomial length and decomposition levels |
 | `DcrtGlevMulWorkspace` | RNS gadget layout and product-modulus limb width |
 
 Workspaces provide reusable scratch, without validating key, basis, table or modulus identity. Overwriting external products initialize their buffers, so valid calls need no reset; accumulating APIs require valid existing output. GLWE external-product workspace `with_rebound` temporarily changes decomposition depth while preserving the GLWE shape and restores the original layout after the call; `resize` can change buffer sizes.

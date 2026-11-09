@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Parameters and external LWE clients for NTRU-TFHE. See the [NTT backend](../primus_tfhe_ntru_ntt/README.md) for contexts, evaluation keys, evaluators and complete examples. Operation and encoding choices are in the [shared guide](../primus_tfhe/README.md).
+Parameters and external LWE clients for NTRU-TFHE. Choose [NTT](../primus_tfhe_ntru_ntt/README.md) or [Fourier](../primus_tfhe_ntru_fourier/README.md) for contexts, evaluation keys, evaluators and complete examples. Operation and encoding choices are in the [shared guide](../primus_tfhe/README.md).
 
 ## Experimental paired parameters
 
@@ -32,7 +32,7 @@ PBS and CBS both require `key_switching`; CBS outputs ring/gadget ciphertexts, w
 
 BR and KS use separate `GadgetEncryptionConfig { decomposition, noise_standard_deviation }` values, with coefficient-unit noise at their respective moduli. CBS `output`, `trace` and `scheme_switch` each select a `DecompositionConfig`. Decomposition bases and random draws remain independent; `level_count: None` selects maximum supported levels, not necessarily zero truncation error (see [decomposition precision](../primus_decompose/README.md)).
 
-`ClientKey` contains independently sampled external secret s and ring secret f. Only f requires NTRU invertibility. External secrets may be binary/ternary and need neither padding nor odd weight. `client.external_lwe_secret_key()` returns s at q; family client factories check its recorded modulus. Complete PBS/CBS generation also requires f's signed coefficient magnitudes to fit below explicit return q. See [parameter](src/parameters.rs) and [NTRU secret-generation](../primus_ntru/README.md#parameters-and-keys) contracts.
+`ClientKey` contains independently sampled external secret s and ring secret f. Only f requires NTRU invertibility and, for Fourier, inverse stability. External secrets may be binary/ternary and need neither padding nor odd weight. `client.external_lwe_secret_key()` returns s at q; family client factories check its recorded modulus. Complete PBS/CBS generation also requires f's signed coefficient magnitudes to fit below explicit return q. See [parameter](src/parameters.rs) and [NTRU secret-generation](../primus_ntru/README.md#parameters-and-keys) contracts.
 
 Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q rounding → phase extraction → LWE KS at q to s. ManyLUT shares BR and returns each output separately; `context.allocate_lwe_ciphertext()` uses n. The LUT itself is public, but NTRU lifting and BR controls contribute encryption noise. Parameter construction does not establish security or a complete noise budget.
 
@@ -40,9 +40,9 @@ Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q round
 
 Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Boolean, MVB, CBS and one-hot. Select sparse explicitly through `config.method`; the `SparseTernary` secret distribution alone does not select bucket aggregation. External fixed weights may be even; [shared sparse restrictions](../primus_tfhe/README.md#selecting-blind-rotation) still apply.
 
-The NTT backend uses `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
+Both backends share `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. NTT residues and native coefficients remain distinct representations. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
-The NTRU NTT backend also supports `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. The NTT backend supports scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
+Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Both backends support scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
 
 ## Clients and LUTs
 
@@ -64,9 +64,9 @@ Compile identity or a custom function with `compile_cbs_identity`, `compile_cbs_
 
 `accumulator_client(client.accumulator_ntru_secret_key(), t_ring)` prepares Scaled candidates at Q. t_ring is independent of external input t; candidates must share f, Q and encoding. CBS binds the complete output basis, and BR decomposition must resolve the LUT and smallest output gadget scale. Layout checks do not prove actual secret identity or sufficient noise margin. See [CBS consumption and examples](../primus_tfhe/README.md#cbs-output-and-consumption).
 
-NTT reverse trace uses modular inverses. Scheme switching multiplies input error by f and decomposition error by f². Publishing `NGSW_f[f]` needs a justified key-dependent-message/circular-security assumption; see the [NTRU contract](../primus_ntru/README.md#same-secret-scheme-switching).
+NTT reverse trace uses modular inverses; Fourier uses native integer halving with additional FFT error. Scheme switching multiplies input error by f and decomposition error by f². Publishing `NGSW_f[f]` needs a justified key-dependent-message/circular-security assumption; see the [NTRU contract](../primus_ntru/README.md#same-secret-scheme-switching).
 
-`CbsConfig.projection` selects the NGSW-only algorithm: `Separate` (the enum default), `FusedLastStage`, `FusedLastThreeStages`, or `PairedTrace`. NTRU NTT performance presets explicitly use `PairedTrace`. NLEV-only and dual outputs retain separate trace/SS. Changing strategy requires reassessing the noise budget; see [`NtruProjectionMethod`](../primus_ntru/src/scheme_switch/mod.rs). Choose before preparing parameters/keys; see the [NTT configuration example](../primus_tfhe_ntru_ntt/README.md#parameters-and-representation).
+`CbsConfig.projection` selects the NGSW-only algorithm: `Separate` (the enum default), `FusedLastStage`, `FusedLastThreeStages`, or `PairedTrace`. NTRU NTT performance presets explicitly use `PairedTrace`; Fourier supports `Separate` and, with split trace and SS, `FusedLastStage` or `PairedTrace`; other choices are rejected before constructing its FFT table. NLEV-only and dual outputs retain separate trace/SS with their configured precision. Changing strategy requires reassessing the noise budget; see [`NtruProjectionMethod`](../primus_ntru/src/scheme_switch/mod.rs). Choose before preparing parameters/keys; see the [NTT configuration example](../primus_tfhe_ntru_ntt/README.md#parameters-and-representation).
 
 ## One-hot CBS
 
@@ -93,7 +93,8 @@ first lift (`c=d`). Grouped BR has no independent classic initializer: request
 `KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` or
 `try_generate_public_lift_key`. Do not derive this material by summing the
 first group's bit/dummy controls. The lift retains its own generation parameters
-and adds its own decomposition/encryption error.
+and adds its own decomposition/encryption error; Fourier split BR still uses
+ordinary Fourier material for this public lift.
 
 Full output covers δ_r(m), r=0..M-1. Compact NGSW slot r-1 represents r=1..M-1; m=0 makes all those target bits zero. `cmux_k_to` consumes these nonzero controls with C0 as default. NLev output is in coefficient form at Q and must be transformed before public lifting; NGSW is in the backend's transform representation for CMux.
 

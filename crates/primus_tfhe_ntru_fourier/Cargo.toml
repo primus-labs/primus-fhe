@@ -1,0 +1,88 @@
+[package]
+name = "primus_tfhe_ntru_fourier"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_lwe = { path = "../primus_lwe" }
+primus_encoding = { path = "../primus_encoding" }
+primus_decompose = { path = "../primus_decompose" }
+primus_data = { path = "../primus_data" }
+primus_fft = { path = "../primus_fft" }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice", features = ["fourier"] }
+primus_modulus = { path = "../primus_modulus" }
+primus_ntru = { path = "../primus_ntru", features = ["fourier"] }
+primus_reduce = { path = "../primus_reduce" }
+primus_poly = { path = "../primus_poly" }
+primus_tfhe = { path = "../primus_tfhe" }
+primus_tfhe_ntru = { path = "../primus_tfhe_ntru" }
+
+num-traits = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+
+# Examples select their concrete FFT engine.
+[[example]]
+name = "ntru_fourier_basic"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_boolean"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_circuit_bootstrap"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_mvb_thresholds"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_one_hot"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_many_lut"
+required-features = ["rustfft"]
+
+[[example]]
+name = "ntru_fourier_sparse"
+required-features = ["rustfft"]
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "pbs"
+harness = false
+
+[[bench]]
+name = "many_lut"
+harness = false
+
+[[bench]]
+name = "mvb"
+harness = false
+
+[[bench]]
+name = "cbs"
+harness = false
+
+[[bench]]
+name = "one_hot"
+harness = false
+
+[features]
+default = ["rustfft"]
+rustfft = ["primus_fft/rustfft"]
+tfhe-fft = ["primus_fft/tfhe-fft"]
+simd = [
+    "primus_integer/simd",
+    "primus_lattice/simd",
+    "primus_ntru/simd",
+    "primus_tfhe_ntru/simd",
+]

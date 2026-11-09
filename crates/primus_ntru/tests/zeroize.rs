@@ -11,8 +11,11 @@ use std::{
     sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering},
 };
 
-use primus_modulus::BarrettModulus;
+use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntru::{
+    FourierNgswCiphertext, FourierNtruCiphertext, FourierNtruDecryptWorkspace,
+    FourierNtruEncryptWorkspace, FourierNtruGadgetEncryptWorkspace, FourierNtruSecretKey,
     NlevParameters, NtruError, NtruParameters, NtruSecretKey, NttNgswCiphertext,
     NttNtruGadgetEncryptWorkspace, NttNtruSecretKey, SecretKeyDistr,
 };
@@ -25,7 +28,7 @@ struct ObservingAllocator;
 thread_local! {
     static RECORDING: Cell<bool> = const { Cell::new(false) };
 }
-static WATCHED: [AtomicPtr<u8>; 3] = [const { AtomicPtr::new(ptr::null_mut()) }; 3];
+static WATCHED: [AtomicPtr<u8>; 9] = [const { AtomicPtr::new(ptr::null_mut()) }; 9];
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 static RELEASED: AtomicUsize = AtomicUsize::new(0);
 static ERASED: AtomicBool = AtomicBool::new(true);
@@ -134,7 +137,8 @@ fn secret_buffers_are_reused_and_erased() {
     );
 
     let mut coefficients = vec![0i32; N];
-    // f = X is invertible at each NTT point.
+    // f = X is invertible in both domains and exercises nonzero real and
+    // imaginary components in the Fourier key and a nonzero native inverse.
     coefficients[1] = 1;
     let mut coefficient_key = NtruSecretKey::<u32>::new(coefficients, distr);
     let modulus = BarrettModulus::new(132_120_577u32);
@@ -144,11 +148,31 @@ fn secret_buffers_are_reused_and_erased() {
         || NttNtruSecretKey::try_from_coeff_secret_key(&coefficient_key, modulus, &ntt).unwrap(),
         |_| {},
     );
+    let table = RustFftTable::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    // FFT key, encoded secret buffers, inverse, and native inverse scratch.
+    assert_erased(
+        8,
+        || FourierNtruSecretKey::try_from_coeff_secret_key(&coefficient_key, &mut fft).unwrap(),
+        |_| {},
+    );
+
     let mut ntt_key =
         NttNtruSecretKey::try_from_coeff_secret_key(&coefficient_key, modulus, &ntt).unwrap();
+    let mut fourier_key =
+        FourierNtruSecretKey::try_from_coeff_secret_key(&coefficient_key, &mut fft).unwrap();
     let ntt_params = NtruParameters::new(PolyLength::new(N), 4, modulus, distr, 0.7);
+    let fourier_params =
+        NtruParameters::new(PolyLength::new(N), 4, NativeModulus::new(), distr, 0.7);
     let ntt_gadget = NlevParameters::with_ntru_params(
         &ntt_params,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(4),
+            level_count: Some(DecompositionLevelCount::new(3)),
+        },
+    );
+    let fourier_gadget = NlevParameters::with_ntru_params(
+        &fourier_params,
         DecompositionConfig {
             log_basis: DecompositionBaseLog::new(4),
             level_count: Some(DecompositionLevelCount::new(3)),
@@ -157,6 +181,11 @@ fn secret_buffers_are_reused_and_erased() {
     let mut rng = StdRng::seed_from_u64(42);
     let message = Polynomial::new(vec![1u32; N]);
     let mut ntt_output = NttNgswCiphertext::<Vec<u32>>::zero(ntt_gadget.nlev_len());
+    let mut fourier_output =
+        FourierNgswCiphertext::<Vec<_>>::zero(fourier_gadget.fourier_nlev_len());
+    let mut cipher = FourierNtruCiphertext::<Vec<_>>::zero(N / 2);
+    let mut phase = Polynomial::new(vec![0u32; N]);
+
     // Explicit zeroization preserves reusable workspace lengths. A second
     // operation fills each workspace again before its destructor is observed.
     assert_erased(
@@ -176,6 +205,52 @@ fn secret_buffers_are_reused_and_erased() {
             }
         },
     );
+    assert_erased(
+        2,
+        || FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+        |workspace| {
+            for _ in 0..2 {
+                workspace.zeroize();
+                fourier_key.encrypt_ngsw_to(
+                    &message,
+                    &mut fourier_output,
+                    &fourier_gadget,
+                    &mut fft,
+                    &mut rng,
+                    workspace,
+                );
+            }
+        },
+    );
+    assert_erased(
+        2,
+        || FourierNtruEncryptWorkspace::new(PolyLength::new(N)),
+        |workspace| {
+            for _ in 0..2 {
+                workspace.zeroize();
+                fourier_key.encrypt_message_to(
+                    &message,
+                    &mut cipher,
+                    &fourier_params,
+                    PlaintextEmbedding::Unsigned,
+                    &mut fft,
+                    &mut rng,
+                    workspace,
+                );
+            }
+        },
+    );
+    assert_erased(
+        1,
+        || FourierNtruDecryptWorkspace::new(PolyLength::new(N)),
+        |workspace| {
+            for _ in 0..2 {
+                workspace.zeroize();
+                fourier_key.decrypt_phase_to(&cipher, &mut phase, &mut fft, workspace);
+            }
+        },
+    );
+
     // f = X - root has one zero NTT evaluation and other nonzero values:
     // failed inversion must erase the partially constructed transformed key.
     let mut roots = vec![0u32; N];
@@ -219,6 +294,39 @@ fn secret_buffers_are_reused_and_erased() {
     );
     assert!(words.0.next().is_none());
 
+    let mut words = Words(script.iter());
+    assert_erased(
+        9,
+        || {
+            FourierNtruSecretKey::generate_pair(
+                fourier_params.encryption_parameters(),
+                &mut fft,
+                &mut words,
+            )
+        },
+        |result| {
+            let (coeff, key) = result.as_ref().unwrap();
+            assert_eq!(coeff.as_slice(), coefficient_key.as_slice());
+            let mut check_fft = FftEngine::new(&table);
+            let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
+            let mut decrypt = FourierNtruDecryptWorkspace::new(PolyLength::new(N));
+            let cipher = key.encrypt_message(
+                &message,
+                &fourier_params,
+                PlaintextEmbedding::Unsigned,
+                &mut check_fft,
+                &mut rng,
+                &mut encrypt,
+            );
+            assert_eq!(
+                key.decrypt_message(&cipher, &fourier_params, &mut check_fft, &mut decrypt)
+                    .as_ref(),
+                message.as_ref(),
+            );
+        },
+    );
+    assert!(words.0.next().is_none());
+
     // Panic after writing a nonzero coefficient block but before completing
     // the sample. All allocated secret buffers must be erased during unwind.
     let script = [2];
@@ -236,9 +344,66 @@ fn secret_buffers_are_reused_and_erased() {
         },
         |result| assert!(result.is_err()),
     );
+    let mut words = Words(script.iter());
+    assert_erased(
+        3,
+        || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                FourierNtruSecretKey::generate_pair(
+                    fourier_params.encryption_parameters(),
+                    &mut fft,
+                    &mut words,
+                )
+            }))
+        },
+        |result| assert!(result.is_err()),
+    );
+
+    // Every all-one candidate is nonzero but fails the parity check before
+    // FFT. Generation allocates the three candidate buffers once and erases them when
+    // the search exhausts its attempt bound.
+    let rejecting_params = NtruParameters::new(
+        PolyLength::new(N),
+        4,
+        NativeModulus::<u32>::new(),
+        SecretKeyDistr::binary(1.0),
+        0.7,
+    );
+    assert_erased(
+        3,
+        || {
+            FourierNtruSecretKey::generate_pair(
+                rejecting_params.encryption_parameters(),
+                &mut fft,
+                &mut rng,
+            )
+        },
+        |result| assert!(matches!(result, Err(NtruError::KeyGenerationExhausted))),
+    );
+
     coefficient_key.zeroize();
     ntt_key.zeroize();
+    fourier_key.zeroize();
     assert!(coefficient_key.as_slice().is_empty());
     assert_eq!(ntt_key.poly_length(), 0);
     assert_eq!(ntt_key.cipher_modulus(), 132_120_577);
+    assert_eq!(fourier_key.poly_length(), 0);
+
+    // Reject a destroyed Fourier key even in release mode: multiplying by an
+    // empty inverse would otherwise leave the encoded message and noise exposed.
+    let mut workspace = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fourier_key.encrypt_message_to(
+                &message,
+                &mut cipher,
+                &fourier_params,
+                PlaintextEmbedding::Unsigned,
+                &mut fft,
+                &mut rng,
+                &mut workspace,
+            );
+        }))
+        .is_err()
+    );
 }

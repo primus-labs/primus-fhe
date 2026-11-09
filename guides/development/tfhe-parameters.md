@@ -13,6 +13,7 @@ Start from the concrete backend's `experimental` operation config. Examples fix 
 | GLWE NTT | [experimental.rs](../../crates/primus_tfhe_glwe_ntt/src/experimental.rs) | [Examples](../../crates/primus_tfhe_glwe_ntt/README.md#operation-examples) |
 | GLWE Fourier | [experimental.rs](../../crates/primus_tfhe_glwe_fourier/src/experimental.rs) | [Examples](../../crates/primus_tfhe_glwe_fourier/README.md#operation-examples) |
 | NTRU NTT | [experimental.rs](../../crates/primus_tfhe_ntru_ntt/src/experimental.rs) | [Examples](../../crates/primus_tfhe_ntru_ntt/README.md#operation-examples) |
+| NTRU Fourier | [experimental.rs](../../crates/primus_tfhe_ntru_fourier/src/experimental.rs) | [Examples](../../crates/primus_tfhe_ntru_fourier/README.md#operation-examples) |
 
 Application parameters are maintained in the external repositories. See
 `primus_omr/README.md` for two-stage presets and
@@ -22,7 +23,7 @@ Here t is the message modulus, not the number of padded inputs: a front-half inp
 
 | Config | Teaching workload and message domains |
 | --- | --- |
-| `CLASSIC_PBS_U64` | All three backends: Rounded 32→32, classic binary. Form z=2x+y, apply score=min(z,6), then price=2*score+[score>=4]. |
+| `CLASSIC_PBS_U64` | All four backends: Rounded 32→32, classic binary. Form z=2x+y, apply score=min(z,6), then price=2*score+[score>=4]. |
 | `CLASSIC_PBS_U64` with `messages=PbsMessageConfig::new(4)` | Boolean access rule: admin OR (member AND NOT revoked), Rounded 4→4. |
 | `SPARSE_PBS_U64` | Same scoring pipeline and 32→32 messages, fixed-weight binary sparse BR with three copies and 64 buckets. |
 | `CLASSIC_MANY_LUT_U64` | Rounded 16→8, inputs 0..8, two lanes/stride two: grade=x/2 and flag=[x>=5], then code=2*grade+flag. |
@@ -43,7 +44,7 @@ Classic is the default for every entry except the two explicitly sparse configs.
 | Native32 / Native64 | `NativeModulus<u32/u64>`, implicit 2^32 / 2^64 | Fourier accumulator; also GLWE external modulus |
 | q24 | `PowOf2Modulus<u32/u64>`, 2^24 | NTRU backend teaching configs |
 
-These Barrett values fit `Q<2^(BITS-2)` and support the NTT lengths used here. Explicit powers of two use `PowOf2Modulus`; native moduli are implicit. Fourier TFHE uses Native accumulator moduli.
+These Barrett values fit `Q<2^(BITS-2)` and support the NTT lengths used here. Explicit powers of two use `PowOf2Modulus`; native moduli are implicit. Fourier TFHE uses Native accumulator moduli, including when NTRU's external LWE uses q24.
 
 For the u64 configs, n denotes the small BR-control dimension in GLWE and the independent external dimension in NTRU. The GLWE teaching constants below have k=1 and q=Q; their contexts also support independent q/Q, demonstrated by `ntt_two_moduli`. NTRU uses independent external q and ring Q secrets; its backend teaching configs use q24.
 
@@ -107,12 +108,12 @@ A `DecompositionConfig` fixes `log_basis` and optionally `level_count`. With
 this can still discard low bits. An explicit count does not extend to fill the
 modulus. See [decomposition precision](../../crates/primus_decompose/README.md).
 
-The backend config sources above own BR, KS, trace, SS and output gadgets.
-Output gadget precision is distinct from the internal switching bases. Before
-generating keys, choose the NTRU NTT projection and GLWE Fourier trace precision.
-NTRU NTT teaching CBS and one-hot presets use PairedTrace. GLWE Fourier teaching
-presets use Ordinary trace. The [numerical contracts](bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
-describe the supported choices and GLWE's trace-only Split35 setting.
+The backend config sources above own BR, KS, trace, SS and output gadgets; output
+gadget precision is distinct from the internal switching bases. Select precision
+and projection before generating keys. Defaults are Ordinary/Separate; NTRU NTT
+teaching CBS/one-hot presets explicitly use PairedTrace.
+Fourier teaching presets remain Ordinary/Separate. The current [support matrix](bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+also explains GLWE's separate trace-only Split35 context setting.
 
 ## Current backend benchmarks
 
@@ -128,7 +129,7 @@ The crate-local benchmarks consume the operation configs but measure the followi
 | GLWE `modulus_domains` | Benchmark-local q=Q/q1024, both PBS orders; NTT and TFHE-FFT. |
 | `one_hot` | NTRU `CLASSIC_ONE_HOT_U64`: three nonzero NGSWs and four-way CMux at t_ring=8. |
 
-Fourier benches select RustFFT, TFHE-FFT or both, using the same numerical config but engine-compatible material. Sources and commands: [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md#benchmarks), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md#benchmarks), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md#benchmarks).
+Fourier benches select RustFFT, TFHE-FFT or both, using the same numerical config but engine-compatible material. Sources and commands: [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md#benchmarks), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md#benchmarks), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md#benchmarks), [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md#benchmarks).
 
 The opt-in PBS Low/High, identity CBS and modulus-domain comparisons define their
 parameters in their respective benchmark files. Use the [benchmark guide](testing.md#tfhe-benchmarks)

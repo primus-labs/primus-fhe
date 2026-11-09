@@ -6,10 +6,11 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{NtruEncryptionParameters, SecretKeyDistr};
 
-/// A small signed polynomial `f` used to derive an NTT key.
+/// A small signed polynomial `f` shared by all NTRU transform backends.
 ///
 /// Signed coefficients are intentionally stored independently of a ciphertext
-/// modulus: `-1` is encoded as `q - 1` when converting to an NTT key.
+/// modulus: `-1` is encoded as `q - 1` for NTT and as the native two's-complement
+/// bit pattern for Fourier only when the key is converted to that backend.
 /// Conversion to an explicit modulus `q` requires every coefficient's unsigned
 /// magnitude to be strictly less than `q`. Generated keys satisfy this bound
 /// for their parameter modulus; imported keys and conversions to another
@@ -74,7 +75,7 @@ impl<T: FheUint> NtruSecretKey<T> {
     }
 
     /// Returns the proposal distribution. Transform-domain key generation
-    /// conditions it on invertibility.
+    /// conditions it on invertibility and, for Fourier, the numerical guard.
     #[inline]
     pub fn distr(&self) -> SecretKeyDistr {
         self.distr
@@ -88,8 +89,10 @@ impl<T: FheUint> NtruSecretKey<T> {
 
     /// Samples a coefficient key from `params`.
     ///
-    /// This method samples signed coefficients without checking invertibility. Use
-    /// `NttNtruSecretKey::generate` (feature `ntt`) for an encryption key.
+    /// This method does not impose backend-specific invertibility. Use
+    /// `NttNtruSecretKey::generate` (feature `ntt`) or
+    /// `FourierNtruSecretKey::generate` (feature `fourier`) when an immediately
+    /// usable encryption key is required.
     pub fn generate<R, M>(params: &NtruEncryptionParameters<T, M>, rng: &mut R) -> Self
     where
         R: rand::Rng + rand::CryptoRng,

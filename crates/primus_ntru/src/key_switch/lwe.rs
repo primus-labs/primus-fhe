@@ -21,7 +21,7 @@ pub use evaluator::{LweReturnBatchWorkspace, LweReturnEvaluator};
 /// Evaluation rounds each NTRU coefficient from Q to q, extracts an LWE under
 /// the signed coefficient vector of f, then uses an ordinary LWE key switch at q.
 /// The target secret has an independent dimension and need not be NTRU-invertible.
-/// No transform table is needed; transformed ciphertexts must first be recovered to
+/// No NTT/FFT table is needed; transformed ciphertexts must first be recovered to
 /// coefficients. Source and target share the integer type T (no word-width cast).
 /// Both moduli may be native or explicit, including Q = q.
 ///

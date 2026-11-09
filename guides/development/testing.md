@@ -47,9 +47,8 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 | 包或能力 | 默认与选择方式 |
 | --- | --- |
 | `primus_fft` | 默认不启用 FFT 引擎；用 `rustfft`、`tfhe-fft` 或两者 |
-| `primus_lattice`、`primus_glwe` | 按需选择 `ntt`、`rustfft`、`tfhe-fft`；FFT 引擎 feature 同时启用 Fourier 能力 |
-| `primus_ntru` | 用 `ntt` 启用 NTT API。系数类型及 NTRU→LWE 返回无额外 feature 要求 |
-| GLWE Fourier 后端 | 默认 RustFFT；加 `--features tfhe-fft` 启用双引擎；用 `--no-default-features --features tfhe-fft` 单选 TFHE-FFT |
+| `primus_lattice`、`primus_glwe`、`primus_ntru` | 按需选择 `ntt`、`rustfft`、`tfhe-fft`；FFT 引擎 feature 同时启用 Fourier 能力 |
+| 两个 TFHE Fourier 后端 | 默认 RustFFT；加 `--features tfhe-fft` 启用双引擎；用 `--no-default-features --features tfhe-fft` 单选 TFHE-FFT |
 | `primus_encoding`、`primus_bfv`、`primus_bgv` | 默认无 batching；显式选 `batching` 启用共享槽编码，BGV 系数工作流无需 `encoding/rns`；BFV 正常依赖显式启用 `encoding/rns` |
 | GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`；GLWE Fourier 本身包含系数建钥用的内部辅助 NTT/CRT 依赖，不启用 NTT GLWE API |
 
@@ -79,6 +78,7 @@ BFV/BGV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，
 
 ```sh
 cargo nextest run -p primus_fft --lib --tests --features rustfft,tfhe-fft
+cargo check -p primus_tfhe_ntru_fourier --lib --no-default-features --features tfhe-fft
 cargo nextest run -p primus_glwe -p primus_tfhe_glwe_fourier --lib --tests --no-default-features --features tfhe-fft,split-trace
 ```
 
@@ -195,15 +195,16 @@ level恢复仍有独立caller合同，`try_bind_ciphertext`对已知来源的raw
 
 ## TFHE benchmarks
 
-三个后端的基准位于各自 `benches/`，每个文件就地组织参数和准备工作。选择一个包与操作：
+四后端的基准位于各自 `benches/`，每个文件就地组织参数和准备工作。选择一个包与操作：
 
 ```sh
 just bench primus_tfhe_glwe_ntt pbs
+just bench-smoke primus_tfhe_ntru_fourier one_hot
 ```
 
 `just bench <package> <target> [Cargo options…]` 执行 Criterion 测量；`bench-smoke` 追加 `-- --test`，执行构造、请求和校验，不做统计采样。Smoke 仍有密钥生成和大参数运算成本，不能把它的耗时当作求值延迟。
 
-一次测量三个后端的普通 u64 PBS（GLWE Fourier 使用默认 RustFFT）：
+一次测量四后端的普通 u64 PBS（Fourier 使用默认 RustFFT）：
 
 ```sh
 cargo bench -p 'primus_tfhe_*_ntt' -p 'primus_tfhe_*_fourier' --bench pbs -- 'classic_dense/u64$'

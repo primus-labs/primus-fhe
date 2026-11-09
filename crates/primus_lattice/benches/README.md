@@ -9,6 +9,7 @@ Choose one target to measure a lattice operation. Parameters and case names are 
 | --- | --- | --- |
 | [glwe_fourier](glwe_fourier.rs) | GGSW external product, monomial CMux, fused/two-CMux ternary rotation; both FFT engines | `rustfft,tfhe-fft` |
 | [glwe_ntt](glwe_ntt.rs) | GGSW coefficient/NTT-output external product, monomial CMux, fused/two-CMux ternary rotation | `ntt` |
+| [ntru_fourier](ntru_fourier.rs) | NGSW coefficient/Fourier-output external product and monomial CMux; both FFT engines | `rustfft,tfhe-fft` |
 | [ntru_ntt](ntru_ntt.rs) | NGSW coefficient/NTT-output external product and monomial CMux | `ntt` |
 | [extraction](extraction.rs) | Full NTRU extraction, compact GLWE extraction and inverse GLWE extraction | None |
 | [rns_glev](rns_glev.rs) | CRT/BigUint polynomial × DCRT GLev, with DCRT output or accumulation | `rns` |
@@ -29,6 +30,7 @@ Run from the workspace root:
 ```sh
 cargo bench -p primus_lattice --bench glwe_fourier --features rustfft,tfhe-fft
 cargo bench -p primus_lattice --bench glwe_ntt --features ntt
+cargo bench -p primus_lattice --bench ntru_fourier --features rustfft,tfhe-fft
 cargo bench -p primus_lattice --bench ntru_ntt --features ntt
 cargo bench -p primus_lattice --bench extraction
 cargo bench -p primus_lattice --bench rns_glev --features rns

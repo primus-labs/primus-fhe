@@ -89,6 +89,9 @@ where
     pub fn try_from_cbs_parameters(
         parameters: CbsParameters<T, LM>,
     ) -> Result<Self, TfheContextError<T>> {
+        if parameters.fourier_precision() != crate::FourierCbsPrecision::ORDINARY {
+            return Err(crate::TfheParameterError::UnsupportedFourierPrecision.into());
+        }
         let domain = parameters.pbs_parameters();
         let table = Table::new(
             domain.poly_length(),

@@ -17,16 +17,16 @@ English | [简体中文](README.zh_CN.md)
 
 Key/table setup and buffer allocation stay outside timing. Encryption includes sampling, encoding and required transforms. Parameters and fixed seeds are in each file; these workloads do not establish matched security across backends.
 
-Phase extraction does not include decoding. Trace and reverse trace have different output scales. `lwe_return` excludes blind rotation; its inputs are canonical coefficient polynomials. `ternary_cmux` compares the complete rotation in each path.
+Phase extraction does not include decoding. Trace and reverse trace have different output scales. `lwe_return` excludes blind rotation; its inputs are canonical coefficient polynomials. `ternary_cmux` compares the complete rotation in each path; Fourier results can have different rounding errors.
 
 ## Run
 
 ```sh
-cargo bench -p primus_ntru --bench encryption --features ntt
-cargo bench -p primus_ntru --bench primitives --features ntt
-cargo bench -p primus_ntru --bench constant_gadget --features ntt
+cargo bench -p primus_ntru --bench encryption --features ntt,rustfft,tfhe-fft
+cargo bench -p primus_ntru --bench primitives --features ntt,rustfft,tfhe-fft
+cargo bench -p primus_ntru --bench constant_gadget --features ntt,rustfft
 cargo bench -p primus_ntru --bench lwe_return
-cargo bench -p primus_ntru --bench ternary_cmux --features ntt
+cargo bench -p primus_ntru --bench ternary_cmux --features ntt,rustfft,tfhe-fft
 ```
 
-Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples. Validation commands are in the workspace [testing guide](../../../guides/development/testing.md).
+Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples. These feature lists include each target's required FFT engines. Validation commands are in the workspace [testing guide](../../../guides/development/testing.md).

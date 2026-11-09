@@ -481,6 +481,7 @@ fn independent_cbs_material_must_match_ring_and_trace_modulus() {
 fn one_hot_negative_rotation_has_left_closed_guard_and_zero_padding() {
     let cbs = CbsParameters::try_from_config(CbsConfig {
         projection: primus_tfhe_ntru::NtruProjectionMethod::Separate,
+        fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
         pbs: config(),
         gadget: gadget(),
     })

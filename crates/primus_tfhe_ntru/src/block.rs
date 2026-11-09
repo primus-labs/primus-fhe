@@ -32,7 +32,8 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
     /// final dummy independently encrypt these values under the same accumulator
     /// secret, modulus and gadget scales. Every first-block control is NLEV; all later
     /// controls are NGSW. Coefficients must be canonical under that modulus.
-    /// The backend BR owner must retain the same basis and modulus.
+    /// The backend BR owner must retain the same basis and modulus. Coefficient
+    /// payloads recovered from Fourier representations retain their rounding error.
     ///
     /// # Errors
     /// Rejects zero or incomplete blocks, overflowing storage, or a coefficient

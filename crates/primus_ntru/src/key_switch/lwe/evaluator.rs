@@ -11,7 +11,7 @@ use super::{
 };
 use crate::NtruCiphertext;
 
-/// Coefficient-domain NTRU→LWE returns, independent of blind rotation and transform scratch.
+/// Coefficient-domain NTRU→LWE returns, independent of blind rotation and NTT/FFT scratch.
 ///
 /// Borrows the Q→q, f→s key and binds q without allocating. Callers prepare
 /// only the scalar and/or batch workspace their operations need, independently
@@ -82,7 +82,7 @@ impl<'a, T: FheUint, LM: RingContext<T>> LweReturnEvaluator<'a, T, LM> {
     /// at the key's generation-time Q. The bound modulus supplies q. The phase
     /// approximates `(q/Q)*(f*c)[index]` modulo q: coefficient rounding is weighted
     /// by f, followed by secret-weighted decomposition error and key-entry noise.
-    /// These errors and any previous NTRU error need a joint decoding budget.
+    /// These errors and any previous NTRU/FFT error need a joint decoding budget.
     /// This operation does not decode or re-encode plaintexts.
     ///
     /// # Panics
@@ -275,7 +275,7 @@ impl<T: FheUint> LweReturnBatchWorkspace<T> {
     }
 
     /// Starts an empty stream, discarding any previous prefix without clearing buffers.
-    /// Source and blind-rotation buffers remain independently usable between appends.
+    /// Source and BR/FFT buffers remain independently usable between appends.
     pub fn begin_batch(&mut self) {
         self.prepared = Some(0);
     }

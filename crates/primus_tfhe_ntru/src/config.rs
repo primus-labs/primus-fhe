@@ -48,8 +48,31 @@ pub struct CbsConfig<T: FheUint, M: RingContext<T>, LM: RingContext<T> = M> {
     /// Trace, scheme-switch and output gadget decompositions.
     pub gadget: CbsGadgetConfig,
     /// Complete NGSW-only projection algorithm. Separate is the generic default;
-    /// NLEV/dual use independent trace/SS regardless of projection choice.
+    /// Fourier also supports FusedLastStage and PairedTrace with split trace and SS.
+    /// NLEV/dual use independent trace/SS
+    /// with the configured Fourier precision, regardless of projection choice.
     /// Choose before preparing parameters and generating keys; supplied material
     /// must match. Switching strategy requires reassessing the noise budget.
     pub projection: crate::NtruProjectionMethod,
+    /// Independent Fourier precision choices; NTT accepts only ordinary.
+    pub fourier_precision: FourierCbsPrecision,
+}
+
+/// Precision of BR, trace and SS material. Downstream LUT CMux remains ordinary.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct FourierCbsPrecision {
+    /// Includes the initial public lift and all BR CMux operations.
+    pub blind_rotation: primus_ntru::FourierPrecision,
+    /// Reverse-trace automorphism products.
+    pub trace: primus_ntru::FourierPrecision,
+    /// NLEV-to-NGSW products; output converts back to ordinary Fourier.
+    pub scheme_switch: primus_ntru::FourierPrecision,
+}
+impl FourierCbsPrecision {
+    /// The unchanged direct-Fourier baseline.
+    pub const ORDINARY: Self = Self {
+        blind_rotation: primus_ntru::FourierPrecision::Ordinary,
+        trace: primus_ntru::FourierPrecision::Ordinary,
+        scheme_switch: primus_ntru::FourierPrecision::Ordinary,
+    };
 }

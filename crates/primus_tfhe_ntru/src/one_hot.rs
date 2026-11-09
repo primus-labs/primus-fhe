@@ -1,4 +1,4 @@
-//! Packed one-hot geometry for NTRU CBS.
+//! Packed one-hot geometry shared by the NTT and Fourier CBS backends.
 
 use primus_decompose::DecompositionLevelCount;
 use primus_encoding::RoundedCodec;

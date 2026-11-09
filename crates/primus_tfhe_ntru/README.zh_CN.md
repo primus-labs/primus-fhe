@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-NTRU-TFHE 的参数及外部 LWE 客户端。Context、求值密钥、evaluator 和完整示例见 [NTT 后端](../primus_tfhe_ntru_ntt/README.zh_CN.md)，操作和编码选择见[公共指南](../primus_tfhe/README.zh_CN.md)。
+NTRU-TFHE 的参数及外部 LWE 客户端。Context、求值密钥、evaluator 和完整示例见 [NTT](../primus_tfhe_ntru_ntt/README.zh_CN.md) 或 [Fourier](../primus_tfhe_ntru_fourier/README.zh_CN.md) 后端，操作和编码选择见[公共指南](../primus_tfhe/README.zh_CN.md)。
 
 ## 实验配套参数
 
@@ -32,7 +32,7 @@ PBS 和 CBS 都要求 `key_switching`。CBS 输出环/gadget 密文，完整组�
 
 BR 和 KS 分别使用 `GadgetEncryptionConfig { decomposition, noise_standard_deviation }`，噪声以各自模数下的系数为单位。CBS 的 `output`、`trace` 和 `scheme_switch` 各选择一组 `DecompositionConfig`。分解基和随机采样彼此独立，`level_count: None` 选择最大支持层数，不必然消除截断误差，见[分解精度](../primus_decompose/README.zh_CN.md)。
 
-`ClientKey` 包含独立采样的外部秘密 s 和环秘密 f。只有 f 需要 NTRU 可逆性；外部秘密可为 binary/ternary，无需补零或奇数重量。`client.external_lwe_secret_key()` 返回 q 下的 s，家族客户端工厂检查其记录的模数。完整 PBS/CBS 生成还要求 f 的有符号系数幅度小于显式返回 q。见[参数](src/parameters.rs)和 [NTRU 秘密生成](../primus_ntru/README.zh_CN.md#参数与密钥)契约。
+`ClientKey` 包含独立采样的外部秘密 s 和环秘密 f。只有 f 需要 NTRU 可逆性及 Fourier 逆稳定性；外部秘密可为 binary/ternary，无需补零或奇数重量。`client.external_lwe_secret_key()` 返回 q 下的 s，家族客户端工厂检查其记录的模数。完整 PBS/CBS 生成还要求 f 的有符号系数幅度小于显式返回 q。见[参数](src/parameters.rs)和 [NTRU 秘密生成](../primus_ntru/README.zh_CN.md#参数与密钥)契约。
 
 普通 PBS 顺序为 f,Q 下盲旋转 → 逐系数 Q→q 最近舍入 → 相位提取 → q 下 LWE KS 到 s。ManyLUT 共享 BR，再分别返回各输出；`context.allocate_lwe_ciphertext()` 使用 n。LUT 本身是公开的，但 NTRU 提升和 BR 控制会贡献加密噪声。参数构造不建立安全性或完整噪声预算。
 
@@ -40,9 +40,9 @@ BR 和 KS 分别使用 `GadgetEncryptionConfig { decomposition, noise_standard_d
 
 Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boolean、MVB、CBS 和 one-hot。Sparse 须通过 `config.method` 显式选择，`SparseTernary` 秘密分布本身不会选择桶聚合。外部固定重量可以为偶数，仍须满足[共享 sparse 限制](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
-NTT 后端使用 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
+两后端共享 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
-NTRU NTT 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。选择 `BlockOccupancy::AtMostOne` 允许空块，或选择 `ExactlyOne` 要求每块恰有一个 `1`。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存全部 bit 控制；仅 `AtMostOne` 额外独立加密 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTT 后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
+两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。选择 `BlockOccupancy::AtMostOne` 允许空块，或选择 `ExactlyOne` 要求每块恰有一个 `1`。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存全部 bit 控制；仅 `AtMostOne` 额外独立加密 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。两后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
 
 ## 客户端与 LUT
 
@@ -64,9 +64,9 @@ NTRU NTT 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::Block
 
 `accumulator_client(client.accumulator_ntru_secret_key(), t_ring)` 准备 Q 下的 Scaled 候选，t_ring 独立于外部输入 t；候选须共享 f、Q 和编码。CBS 绑定完整输出 basis，BR 分解须能解析 LUT 和最小输出 gadget 尺度。布局检查不证明实际秘密身份或足够的噪声余量。见 [CBS 消费与示例](../primus_tfhe/README.zh_CN.md#cbs-输出与消费)。
 
-NTT reverse trace 使用模逆元。Scheme switching 的输入误差乘 f，分解误差乘 f²；发布 `NGSW_f[f]` 需要有依据的 key-dependent-message/circular-security 假设，见 [NTRU 契约](../primus_ntru/README.zh_CN.md#同一秘密下的-scheme-switching)。
+NTT reverse trace 使用模逆元，Fourier 使用原生整数减半及额外 FFT 误差。Scheme switching 的输入误差乘 f，分解误差乘 f²；发布 `NGSW_f[f]` 需要有依据的 key-dependent-message/circular-security 假设，见 [NTRU 契约](../primus_ntru/README.zh_CN.md#同一秘密下的-scheme-switching)。
 
-`CbsConfig.projection` 选择仅输出 NGSW 时的算法：`Separate`（枚举默认值）、`FusedLastStage`、`FusedLastThreeStages` 或 `PairedTrace`。NTRU NTT 性能预设显式使用 `PairedTrace`。NLEV-only 和双输出保留独立 trace/SS。切换策略需要重新评估噪声预算，见 [`NtruProjectionMethod`](../primus_ntru/src/scheme_switch/mod.rs)。在准备参数/密钥前选择；见 [NTT 配置示例](../primus_tfhe_ntru_ntt/README.zh_CN.md#参数与表示)。
+`CbsConfig.projection` 选择仅输出 NGSW 时的算法：`Separate`（枚举默认值）、`FusedLastStage`、`FusedLastThreeStages` 或 `PairedTrace`。NTRU NTT 性能预设显式使用 `PairedTrace`；Fourier 支持 `Separate`，以及 trace、SS 均为 split 时的 `FusedLastStage` 或 `PairedTrace`，其他选择在建 FFT 表前被拒绝。NLEV-only 和双输出保留独立 trace/SS，精度仍按配置选择。切换策略需要重新评估噪声预算，见 [`NtruProjectionMethod`](../primus_ntru/src/scheme_switch/mod.rs)。在准备参数/密钥前选择；见 [NTT 配置示例](../primus_tfhe_ntru_ntt/README.zh_CN.md#参数与表示)。
 
 ## One-hot CBS
 
@@ -90,7 +90,7 @@ NTT reverse trace 使用模逆元。Scheme switching 的输入误差乘 f，分�
 分组 BR 没有独立的 classic initializer，应通过
 `KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` 或
 `try_generate_public_lift_key` 请求独立材料，不从首组 bit/dummy 控制相加派生。
-Lift 保留自身生成参数，并引入自身的分解和加密误差。
+Lift 保留自身生成参数，并引入自身的分解和加密误差；Fourier split BR 的公开提升仍使用 ordinary Fourier 材料。
 
 完整输出覆盖 δ_r(m)，r=0..M-1；紧凑 NGSW 的位置 r-1 对应 r=1..M-1，m=0 时这些目标 bit 均为零。`cmux_k_to` 以 C0 为默认项消费非零控制。NLev 输出为 Q 下系数表示，用于公开多项式提升前须变换；NGSW 使用后端变换表示供 CMux 消费。
 
