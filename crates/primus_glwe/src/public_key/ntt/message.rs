@@ -3,6 +3,7 @@
 use super::{NttGlwePublicEncryptWorkspace, NttGlwePublicKey};
 use crate::{GlweParameters, NttGlweCiphertext, PlaintextEmbedding};
 use primus_data::{Data, DataMut};
+use primus_distr::SecretKeySampler;
 use primus_integer::FheUint;
 use primus_ntt::NttTable;
 use primus_poly::Polynomial;
@@ -18,11 +19,19 @@ where
     /// # Panics
     ///
     /// Inherits [`Self::encrypt_message_to`]'s layout and plaintext-range panic conditions.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::encrypt_message_to`]'s ephemeral-sampler contract.
     #[must_use]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "explicit public-encryption sampler and resources"
+    )]
     pub fn encrypt_message<M, Table, R, A>(
         &self,
         input: &Polynomial<A>,
         params: &GlweParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         embedding: PlaintextEmbedding,
         ntt: &Table,
         rng: &mut R,
@@ -35,7 +44,16 @@ where
         A: Data<Elem = T>,
     {
         let mut output = NttGlweCiphertext::zero(params.glwe_len());
-        self.encrypt_message_to(input, &mut output, params, embedding, ntt, rng, workspace);
+        self.encrypt_message_to(
+            input,
+            &mut output,
+            params,
+            ephemeral_sampler,
+            embedding,
+            ntt,
+            rng,
+            workspace,
+        );
         output
     }
 
@@ -45,6 +63,11 @@ where
     ///
     /// `workspace` holds one reusable ephemeral polynomial of `params.poly_length().get()`
     /// coefficients. It may be reused across keys with the same polynomial length.
+    /// `ephemeral_sampler` is prepared separately for one full length-N polynomial
+    /// by [`GlweParameters::try_ephemeral_sampler`]; each call samples fresh r.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::encrypt_encoded_to`]'s ephemeral-sampler contract.
     ///
     /// # Panics
     ///
@@ -62,6 +85,7 @@ where
         input: &Polynomial<A>,
         output: &mut NttGlweCiphertext<B>,
         params: &GlweParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         embedding: PlaintextEmbedding,
         ntt: &Table,
         rng: &mut R,
@@ -82,6 +106,7 @@ where
             input.as_view(),
             output.as_mut_view(),
             params,
+            ephemeral_sampler,
             embedding,
             ntt,
             rng,
@@ -103,6 +128,7 @@ impl<T: FheUint> NttGlwePublicKey<&[T]> {
         input: Polynomial<&[T]>,
         output: NttGlweCiphertext<&mut [T]>,
         params: &GlweParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         embedding: PlaintextEmbedding,
         ntt: &Table,
         rng: &mut R,
@@ -125,6 +151,7 @@ impl<T: FheUint> NttGlwePublicKey<&[T]> {
         self.encrypt_kernel_to(
             output,
             params.encryption_parameters(),
+            ephemeral_sampler,
             ntt,
             rng,
             workspace,

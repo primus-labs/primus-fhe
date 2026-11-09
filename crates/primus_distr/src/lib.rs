@@ -15,10 +15,11 @@
 //!   discrete Gaussian with support on signed integers.
 //!
 //! [`SecretKeyDistr`] describes secret-coefficient distributions and validates
-//! probabilities and fixed weights. Cryptosystems select supported variants;
-//! Gaussian sampler constructors validate Gaussian parameters.
+//! probabilities, fixed weights and block partitions. Cryptosystems select
+//! supported variants; Gaussian sampler constructors validate Gaussian parameters.
 //! [`SecretKeySampler`] prepares reusable
-//! whole-key sampling, including Gaussian tables and fixed-weight validation.
+//! whole-key sampling, including Gaussian tables, fixed weights and uniform
+//! block-binary categories.
 //!
 //! # Sampler selection
 //!
@@ -74,7 +75,7 @@ pub use signed_discrete_gaussian::{
 };
 
 mod secret_key_distr;
-pub use secret_key_distr::SecretKeyDistr;
+pub use secret_key_distr::{BlockOccupancy, SecretKeyDistr};
 
 mod secret_key_sampler;
 pub use secret_key_sampler::SecretKeySampler;

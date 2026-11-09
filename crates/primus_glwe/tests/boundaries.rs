@@ -8,7 +8,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
 use primus_glwe::{
-    FourierGlweAutomorphismKey, FourierGlweCiphertext, FourierGlweEncryptor,
+    BlockOccupancy, FourierGlweAutomorphismKey, FourierGlweCiphertext, FourierGlweEncryptor,
     FourierGlweKeySwitchingKey, FourierGlweTraceKey, GadgetSize, GlevParameters, GlweCiphertext,
     GlweEncryptionParameters, GlweKeySwitchingParameters, GlweParameters, GlweSecretKey, GlweSize,
     GlweSizeError, NttGgswCiphertext, NttGlevCiphertext, NttGlweCiphertext,
@@ -409,6 +409,9 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
     let public_key =
         NttGlwePublicKey::generate(&key, params.encryption_parameters(), &table, &mut rng);
     let message = Polynomial::new(vec![3u32; N]);
+    let ephemeral = params
+        .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
+        .unwrap();
     let mut workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(N));
 
     let mut gadget_workspace = NttGlweGadgetEncryptWorkspace::new(gadget.size());
@@ -525,6 +528,7 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
                         &message,
                         &mut output,
                         &params,
+                        &ephemeral,
                         PlaintextEmbedding::Unsigned,
                         &wrong_table,
                         &mut rng,
@@ -578,6 +582,7 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
                     &message,
                     &mut output,
                     &params,
+                    &ephemeral,
                     PlaintextEmbedding::Unsigned,
                     &table,
                     &mut rng,
@@ -812,6 +817,83 @@ fn glev_construction_reuses_basis_and_rejects_incompatible_domains_or_layouts() 
                 level_count: None
             }
         ),
+        Err(GlevParameterError::InvalidSize(_))
+    ));
+}
+
+/// A padded return key retains the logical block partition, not a new kN-sized sample.
+#[test]
+fn padded_lwe_gadget_parameters_validate_logical_prefix_and_full_layout() {
+    use std::sync::Arc;
+
+    use primus_decompose::primitive::ApproxSignedBasis;
+    use primus_glwe::GlevParameterError;
+    use primus_lattice::LweDimension;
+
+    let size = GlweSize::new(GlweDimension::new(1), PolyLength::new(32));
+    let inner = Arc::new(GlweEncryptionParameters::new(
+        NativeModulus::<u32>::new(),
+        SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy: BlockOccupancy::AtMostOne,
+        },
+        0.7,
+    ));
+    let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(3), None);
+    let make = |size, dimension, basis| {
+        GlevParameters::try_from_padded_lwe_parts(
+            size,
+            LweDimension::new(dimension),
+            Arc::clone(&inner),
+            basis,
+        )
+    };
+
+    // n=6 consists of two width-three blocks; the 26 public zeros add no blocks.
+    let padded = make(size, 6, basis.clone()).unwrap();
+    assert_eq!(padded.glwe_size(), size);
+    assert_eq!(padded.basis(), &basis);
+    assert!(std::ptr::eq(padded.encryption_parameters(), inner.as_ref()));
+    // Ordinary construction still requires the complete 32 coefficients to
+    // form valid blocks. The padded constructor must not weaken this boundary.
+    assert!(matches!(
+        GlevParameters::try_from_parts(size, Arc::clone(&inner), basis.clone()),
+        Err(GlevParameterError::SecretKey(
+            primus_distr::SecretKeySamplerError::InvalidBlockLength {
+                length: 32,
+                block_size: 3
+            }
+        ))
+    ));
+    assert!(matches!(
+        make(size, 5, basis.clone()),
+        Err(GlevParameterError::SecretKey(
+            primus_distr::SecretKeySamplerError::InvalidBlockLength {
+                length: 5,
+                block_size: 3
+            }
+        ))
+    ));
+    assert!(matches!(
+        make(size, 33, basis.clone()),
+        Err(GlevParameterError::PaddedSecretDimensionExceedsCapacity {
+            logical_dimension: 33,
+            capacity: 32
+        })
+    ));
+    let explicit_basis = ApproxSignedBasis::new(Some(257), DecompositionBaseLog::new(3), None);
+    assert!(matches!(
+        make(size, 6, explicit_basis),
+        Err(GlevParameterError::BasisModulusMismatch)
+    ));
+
+    // Prefix validation cannot bypass overflow of the physical GGSW layout.
+    let huge = GlweSize::new(
+        GlweDimension::new(1usize << (usize::BITS / 2)),
+        PolyLength::new(32),
+    );
+    assert!(matches!(
+        make(huge, 6, basis),
         Err(GlevParameterError::InvalidSize(_))
     ));
 }

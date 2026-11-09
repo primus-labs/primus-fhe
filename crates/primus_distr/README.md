@@ -22,7 +22,7 @@ The scalar sampler types above implement `rand::distr::Distribution`. Batch help
 
 ## Secret-key distribution parameters
 
-`SecretKeyDistr` describes a complete binary, ternary, fixed-weight or Gaussian key; it is not a scalar sampler. Use `binary(one_probability)` or `ternary(negative_one_probability, one_probability)` for custom probabilities. Each probability must be finite and in `[0, 1]`, and the ternary sum must not exceed one. Cryptosystems choose which variants they support.
+`SecretKeyDistr` describes a complete binary, ternary, fixed-weight, block-binary or Gaussian key; it is not a scalar sampler. Use `binary(one_probability)` or `ternary(negative_one_probability, one_probability)` for custom probabilities. Each probability must be finite and in `[0, 1]`, and the ternary sum must not exceed one. Cryptosystems choose which variants they support.
 
 | Constructor | Distribution |
 | --- | --- |
@@ -31,6 +31,10 @@ The scalar sampler types above implement `rand::distr::Distribution`. Batch help
 | `fixed_composition_ternary(length, negative_weight, positive_weight)` | Exact separate counts of negative and positive ones |
 
 Weights apply to the complete logical key. Constructors reject excessive weights and sum overflow, but do not retain the length; sampling checks the actual output length before writing or drawing randomness.
+
+`BlockBinary { block_size: w, occupancy }` samples independent consecutive blocks. With `BlockOccupancy::AtMostOne`, each block chooses uniformly from zero and its `w` one-hot vectors; total weight is random. With `ExactlyOne`, it chooses uniformly from only the one-hot vectors; total weight is the block count. Neither is the uniform global fixed-weight distribution.
+
+The size `w` must be positive but need not be a power of two; `AtMostOne` additionally requires `w+1` to fit `usize`. Complete key length must be a positive multiple of `w`. `validate_length` and sampling reject empty keys and incomplete blocks before writing or drawing randomness. `ExactlyOne` at `w=1` is deterministically all ones, not a secure secret choice.
 
 Prepare `SecretKeySampler<T>` with `try_new(distribution)` (fallible) or `new(distribution)` (panicking). Use `sample_signed` / `sample_signed_to` for `T::SignedInteger` output, or `sample_encoded` / `sample_encoded_to` for canonical residues. The `_to` methods overwrite caller storage without allocating.
 

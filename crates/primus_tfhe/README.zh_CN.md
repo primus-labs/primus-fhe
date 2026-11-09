@@ -36,14 +36,18 @@ ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分�
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | GLWE sparse fixed-weight binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
+| GLWE block binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | NTRU classic binary/ternary | 支持 | 支持 | 支持 | 支持 |
 | NTRU sparse fixed-weight binary | 支持 | 支持 | 支持 | 支持 |
+| NTRU NTT block binary | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
 
 三个后端均提供私钥及 LWE 公钥客户端。GLWE Fourier 支持 RustFFT 和 TFHE-FFT，环模数仅支持 Native。示例配置用于算术教学，未评估安全性及失败概率。NTRU 的外部 LWE 秘密独立于环秘密，只有环秘密需要可逆性筛选。
 
 ## 选择盲旋转算法
 
 三个后端均导出 `BlindRotationMethod`，通过 `config.method` 选择；仅改变秘密分布不会切换算法。`Classic` 支持 binary/ternary，包括固定重量分布。显式的 `Sparse { copy_count, bucket_count }` 要求 fixed-weight binary 且 `0<h<n`，不支持 sparse ternary。公开映射重试后匹配仍失败时返回错误，不更改客户端秘密或回退到 classic。
+
+`SecretKeyDistr::BlockBinary { block_size, occupancy }` 独立采样连续块。`BlockOccupancy::AtMostOne` 均匀选择空块或一个位置为 `1` 的状态；`ExactlyOne` 只选择一个位置为 `1` 的状态。逻辑密钥长度须是块宽的非零整数倍。`Classic` 可使用两种分布；`Block` 在三个后端中选择直接按块聚合。全部 bit 控制都参与计算，包括加密的零。仅 `AtMostOne` 增加独立加密的空块 dummy；`ExactlyOne` 不存储或采样它。Block 秘密需要单独评估噪声与安全成本。GLWE ring-KS 保留逻辑 LWE 前缀并补公开零尾，填充后的环长度无需也能被块宽整除。
 
 普通 PBS 先构造 `TfheContext::try_from_pbs_config(config)`，再调用 `context.try_generate_keys(rng)` 得到 `(ClientKey, ServerKey)`。CBS 或 NTRU one-hot 使用 CBS 工厂：
 

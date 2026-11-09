@@ -13,11 +13,14 @@ use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, LweDimension};
 use primus_lwe::LweEncryptionParameters;
 use primus_reduce::{ModulusSwitch, RingContext};
-use primus_tfhe::{BlindRotationMethod, ModulusConfig, ModulusConfigError, PbsMessageConfig};
+use primus_tfhe::{
+    BlindRotationMethod, ModulusConfig, ModulusConfigError, PbsMessageConfig,
+    rotation::RotationModulusSwitch,
+};
 
 use crate::{
     GadgetEncryptionConfig, GgswParameters, GlevParameters, GlweKeySwitchingParameters, PbsConfig,
-    TfheParameterError,
+    SecretKeyDistr, TfheParameterError,
 };
 
 /// Execution order of programmable bootstrapping and key switching.
@@ -47,6 +50,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
     /// Prepares the common domain and ring KS from numerical choices.
     /// Checks binary/ternary controls, n <= kN and representability of 2N before
     /// returning the prepared state. Input and accumulator secrets are independent.
+    /// The Block method additionally requires a block-binary control distribution.
     pub fn try_from_config(config: PbsConfig<T, M, LM>) -> Result<Self, TfheParameterError>
     where
         M: TryFrom<ModulusConfig<M>, Error = ModulusConfigError>,
@@ -58,6 +62,11 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         let distribution = small_lwe.secret_key_distr();
         if !distribution.is_binary() && !distribution.is_ternary() {
             return Err(TfheParameterError::UnsupportedInputLweSecretKey);
+        }
+        if config.method == BlindRotationMethod::Block
+            && !matches!(distribution, SecretKeyDistr::BlockBinary { .. })
+        {
+            return Err(TfheParameterError::InvalidBlockSecretDistribution);
         }
 
         let bsk_size = GlweSize::try_new(config.bsk_dimension, config.bsk_poly_length)
@@ -83,9 +92,8 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
                 capacity: capacity.get(),
             });
         }
-        if T::try_from(blind_rotation_ggsw.poly_length().get() * 2).is_err() {
-            return Err(TfheParameterError::RotationDomainTooLarge);
-        }
+        let two_n = 2 * blind_rotation_ggsw.poly_length().get();
+        T::try_from(two_n).map_err(|_| TfheParameterError::RotationDomainTooLarge)?;
 
         let key_switching_params = Self::derive_glwe_key_switching(
             &small_lwe,
@@ -95,12 +103,15 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         let ring_modulus = blind_rotation_ggsw.cipher_modulus();
         let ring_to_small = (ring_modulus.explicit_value() != small_lwe.cipher_modulus_value())
             .then(|| ModulusSwitch::new(ring_modulus, small_lwe.cipher_modulus()));
+        let rotation_modulus_switch =
+            RotationModulusSwitch::new(small_lwe.cipher_modulus(), two_n, 1);
         Ok(Self {
             evaluation: PbsEvaluationParameters {
                 small_dimension: small_lwe.dimension(),
                 small_modulus: small_lwe.cipher_modulus_value(),
                 small_secret_distr: small_lwe.secret_key_distr(),
                 ring_to_small,
+                rotation_modulus_switch,
                 pbs_order: config.order,
                 blind_rotation_params: blind_rotation_ggsw,
                 key_switching_params,
@@ -150,8 +161,15 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
             key_switching.noise_standard_deviation,
         )
         .map_err(TfheParameterError::KeySwitchingEncryption)?;
-        let output = GlevParameters::try_from_parts(output_size, Arc::new(inner), basis)
-            .map_err(TfheParameterError::KeySwitchingParameters)?;
+        // Only the logical LWE prefix follows the sampler's distribution. Its
+        // public zero tail completes ring components and need not complete blocks.
+        let output = GlevParameters::try_from_padded_lwe_parts(
+            output_size,
+            small_lwe.dimension(),
+            Arc::new(inner),
+            basis,
+        )
+        .map_err(TfheParameterError::KeySwitchingParameters)?;
         GlweKeySwitchingParameters::try_new(accumulator.dimension(), output)
             .map_err(|error| TfheParameterError::KeySwitchingParameters(error.into()))
     }

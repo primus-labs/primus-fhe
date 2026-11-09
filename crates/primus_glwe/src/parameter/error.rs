@@ -20,6 +20,11 @@ pub enum GlweParameterError {
     /// Invalid secret sampling configuration, weight or output modulus.
     #[error(transparent)]
     SecretKey(#[from] SecretKeySamplerError),
+    /// Following the recipient joint secret law is supported only for rank one.
+    #[error(
+        "following the recipient secret requires GLWE rank one; specify a length-N ephemeral distribution"
+    )]
+    EphemeralFollowingRequiresRankOne,
     /// Invalid coefficient-domain Gaussian noise.
     #[error("invalid GLWE noise distribution")]
     Noise(#[from] GaussianError),
@@ -37,6 +42,14 @@ pub enum GlevParameterError {
     /// The basis and GLWE ciphertext use different moduli.
     #[error("GLev decomposition basis must match the GLWE ciphertext modulus")]
     BasisModulusMismatch,
+    /// The logical LWE prefix does not fit the padded GLWE mask.
+    #[error("logical secret dimension {logical_dimension} exceeds padded GLWE capacity {capacity}")]
+    PaddedSecretDimensionExceedsCapacity {
+        /// Number of coefficients in the unpadded LWE secret.
+        logical_dimension: usize,
+        /// Number of coefficients available in the GLWE mask.
+        capacity: usize,
+    },
     /// The gadget layout cannot be represented by `usize` lengths.
     #[error(transparent)]
     InvalidSize(#[from] GlweSizeError),

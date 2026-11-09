@@ -1,4 +1,4 @@
-//! Bounded unreduced accumulation of rotated sparse selectors.
+//! Bounded unreduced accumulation of rotated sparse or block selectors.
 
 use primus_integer::FheUint;
 use primus_lattice::GadgetSize;
@@ -25,28 +25,31 @@ pub(super) fn max_group_len<T: FheUint>(q: T) -> usize {
 /// cover a whole GGSW or one polynomial-aligned tile; it owns no allocation.
 pub(super) struct AggregationLane<'a, T> {
     /// u64 rotation descriptors in the aggregation call's four-index group order.
-    /// Each entry must match this lane's exponents, the current bucket and
-    /// polynomial length; reuse is limited to that bucket's tiles.
-    /// An empty slice selects on-demand addressing. u32 always passes an empty slice.
+    /// Each entry must match this lane's exponents, the current control group and
+    /// polynomial length; reuse is limited to that group's tiles.
+    /// A partial prefix is valid: remaining groups use on-demand addressing.
+    /// u32 always passes an empty slice.
     pub(super) prepared: &'a [FourRotations],
     pub(super) exponents: &'a [usize],
     pub(super) coefficients: &'a mut [T],
 }
 
 /// Visit each source tile across all lanes before advancing through the key.
-/// Batch scheduling reuses the single-input arithmetic kernels and reduction boundaries.
-/// u32 uses bounded batches; u64 retains the single-input whole-bucket or lazy-pair boundaries.
-pub(super) fn aggregate_bucket_many<T: FheUint, const LANES: usize>(
-    indices: &[usize],
+/// Indexed sparse buckets and contiguous blocks supply one coordinate per selector.
+/// Batch scheduling reuses the single-input arithmetic and reduction boundaries:
+/// bounded batches for u32, a whole-group bias or lazy pairs for u64.
+pub(super) fn aggregate_controls_many_assign<T: FheUint, const LANES: usize>(
+    indices: impl ExactSizeIterator<Item = usize> + Clone,
     selections: &[T],
     lanes: &mut [AggregationLane<'_, T>; LANES],
     size: GadgetSize,
     modulus: BarrettModulus<T>,
 ) {
     if T::BITS == 64 {
-        aggregate_bucket_u64(indices, selections, lanes, size, modulus);
+        aggregate_controls_u64_many_assign(indices, selections, lanes, size, modulus);
         return;
     }
+    let count = indices.len();
     let n = size.glwe_size().poly_length().get();
     let control_len = size.ggsw_len();
     // Bound the working set to whole polynomials; each lane has its own tile.
@@ -60,19 +63,23 @@ pub(super) fn aggregate_bucket_many<T: FheUint, const LANES: usize>(
             exponents: lane.exponents,
             coefficients: &mut lane.coefficients[start..end],
         });
-        if indices.len() >= 4 && u32_batch_len != 0 {
+        let mut indices = indices.clone();
+        if count >= 4 && u32_batch_len != 0 {
             // Canonical in/out for every bounded batch, including its short tail.
-            for (indices, selections) in indices
-                .chunks(u32_batch_len)
-                .zip(selections.chunks(u32_batch_len * control_len))
-            {
+            for selections in selections.chunks(u32_batch_len * control_len) {
+                let count = selections.len() / control_len;
                 add_rotated_group_many_assign(
-                    indices, selections, &mut tiles, start, size, modulus,
+                    indices.by_ref().take(count),
+                    selections,
+                    &mut tiles,
+                    start,
+                    size,
+                    modulus,
                 );
             }
         } else {
-            // Short buckets and moduli without four-source headroom stay canonical.
-            for (&index, source) in indices.iter().zip(selections.chunks_exact(control_len)) {
+            // Short groups and moduli without four-source headroom stay canonical.
+            for (index, source) in indices.zip(selections.chunks_exact(control_len)) {
                 for lane in &mut tiles {
                     for (acc, source) in lane
                         .coefficients
@@ -96,7 +103,7 @@ pub(super) fn aggregate_bucket_many<T: FheUint, const LANES: usize>(
 /// An m*q bias keeps every intermediate in [0,(2m+1)q); the proof applies per lane.
 #[inline]
 fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
-    indices: &[usize],
+    indices: impl ExactSizeIterator<Item = usize>,
     selections: &[T],
     lanes: &mut [AggregationLane<'_, T>; LANES],
     tile_start: usize,
@@ -115,9 +122,10 @@ fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
     }
     // Native kernels need no q correction: the group bound prevents actual wrapping.
     // Share each four-source key tile across lanes; their rotation exponents differ.
-    let (groups, remaining) = indices.as_chunks::<4>();
+    let mut indices = indices;
     let mut selection_groups = selections.chunks_exact(4 * control_len);
-    for (indices, group) in groups.iter().zip(selection_groups.by_ref()) {
+    for group in selection_groups.by_ref() {
+        let indices: [usize; 4] = std::array::from_fn(|_| indices.next().expect("control index"));
         let sources = std::array::from_fn(|i| {
             &group[i * control_len + tile_start..i * control_len + tile_end]
         });
@@ -130,9 +138,9 @@ fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
             );
         }
     }
-    let (pairs, tail) = remaining.as_chunks::<2>();
     let mut selection_pairs = selection_groups.remainder().chunks_exact(2 * control_len);
-    for (indices, pair) in pairs.iter().zip(selection_pairs.by_ref()) {
+    for pair in selection_pairs.by_ref() {
+        let indices: [usize; 2] = std::array::from_fn(|_| indices.next().expect("control index"));
         let (a, b) = pair.split_at(control_len);
         for lane in lanes.iter_mut() {
             primus_poly::add_mul_monomial_pair_assign(
@@ -146,7 +154,7 @@ fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
             );
         }
     }
-    if let Some(&index) = tail.first() {
+    if let Some(index) = indices.next() {
         let source = &selection_pairs.remainder()[tile_start..tile_end];
         for lane in lanes.iter_mut() {
             for (acc, source) in lane
@@ -167,42 +175,151 @@ fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
     }
 }
 
-/// Adds one bounded group of rotated selectors into an initialized canonical
-/// tile, then restores canonical residues. The key/workspace own control layout,
-/// polynomial-aligned tile bounds and exponent validity; the caller establishes
-/// indices.len() <= max_group_len(q). With m sources, an initial m*q bias keeps
-/// every intermediate in [0,(2m+1)q), so even negative terms cannot wrap.
-/// For u64, a nonempty `prepared` supplies one descriptor per complete four-element
-/// group in `indices`, in order, built from this input's exponents and polynomial
-/// length. It is reused only within this bucket; tails still use `exponents`.
-/// An empty slice selects on-demand addressing. u32 always passes an empty slice.
+/// Aggregates one already initialized control ciphertext using the single-input
+/// tile schedule. Sparse buckets pass an indexed exponent iterator; block keys
+/// pass contiguous exponents. No map or online allocation is needed, and the
+/// original word-width-specific grouping/reduction boundaries are preserved.
 #[inline]
-#[allow(clippy::too_many_arguments)]
-pub(super) fn add_rotated_group_assign<T: FheUint>(
-    indices: &[usize],
+pub(crate) fn aggregate_controls_assign<T: FheUint>(
+    exponents: impl ExactSizeIterator<Item = usize> + Clone,
     selections: &[T],
-    exponents: &[usize],
+    rotation_groups: &mut [FourRotations],
+    aggregate: &mut [T],
+    size: GadgetSize,
+    modulus: BarrettModulus<T>,
+) {
+    let count = exponents.len();
+    let n = size.glwe_size().poly_length().get();
+    let control_len = size.ggsw_len();
+    let tile_length = tile_len::<T>(n);
+    let group_capacity = max_group_len(modulus.value());
+    let u32_batch_len = group_capacity.min(28) & !3;
+    let use_groups = T::BITS == 64 && count >= 4 && count <= group_capacity;
+    let prepared_count = if use_groups {
+        rotation_groups.len().min(count / 4)
+    } else {
+        0
+    };
+    let prepared = &mut rotation_groups[..prepared_count];
+    let mut group_exponents = exponents.clone();
+    for plan in prepared.iter_mut() {
+        *plan = FourRotations::new(
+            std::array::from_fn(|_| group_exponents.next().expect("control exponent")),
+            n,
+        );
+    }
+    for (tile_index, tile) in aggregate.chunks_mut(tile_length).enumerate() {
+        let start = tile_index * tile_length;
+        let end = start + tile.len();
+        let mut tile_exponents = exponents.clone();
+        if T::BITS == 32 && count >= 4 && u32_batch_len != 0 {
+            // Each batch begins and ends canonical, including the final tail.
+            for selections in selections.chunks(u32_batch_len * control_len) {
+                let count = selections.len() / control_len;
+                add_rotated_group_assign(
+                    tile_exponents.by_ref().take(count),
+                    selections,
+                    &[],
+                    tile,
+                    start,
+                    size,
+                    modulus,
+                );
+            }
+        } else if T::BITS != 64 {
+            for (exponent, selection) in tile_exponents.zip(selections.chunks_exact(control_len)) {
+                for (acc, source) in tile
+                    .chunks_exact_mut(n)
+                    .zip(selection[start..end].chunks_exact(n))
+                {
+                    Polynomial(acc).add_mul_monomial_assign(&Polynomial(source), exponent, modulus);
+                }
+            }
+        } else if use_groups {
+            add_rotated_group_assign(
+                tile_exponents,
+                selections,
+                prepared,
+                tile,
+                start,
+                size,
+                modulus,
+            );
+        } else {
+            // Retain the original [0,2q) lazy pair/single fallback. Ordinary NTT
+            // receives canonical residues only after the complete control sum.
+            let mut pairs = selections.chunks_exact(2 * control_len);
+            for pair in pairs.by_ref() {
+                let (a, b) = pair.split_at(control_len);
+                primus_poly::lazy_add_mul_monomial_pair_assign(
+                    tile,
+                    &a[start..end],
+                    tile_exponents.next().expect("control exponent"),
+                    &b[start..end],
+                    tile_exponents.next().expect("control exponent"),
+                    n,
+                    modulus,
+                );
+            }
+            if let Some(exponent) = tile_exponents.next() {
+                primus_poly::lazy_add_mul_monomial_assign(
+                    tile,
+                    &pairs.remainder()[start..end],
+                    exponent,
+                    n,
+                    modulus,
+                );
+            }
+        }
+    }
+    if T::BITS == 64 && !use_groups {
+        use primus_reduce::ReduceOnceSlice;
+        modulus.reduce_once_slice_assign(aggregate);
+    }
+}
+
+/// Consumes actual exponents in control order, so indexed sparse buckets and
+/// contiguous blocks share the coefficient kernel without an index-map buffer.
+/// The exact-size iterator and selections have one entry per control. Dispatch
+/// and address preparation remain outside the coefficient loops.
+///
+/// The caller establishes matching layouts and m <= max_group_len(q). Starting
+/// from canonical residues, an m*q bias bounds every prefix by [0,(2m+1)q),
+/// including negative rotations; one final reduction restores canonical output.
+/// Nonempty u64 plans match the same exponents, in complete four-control groups,
+/// and are reused only across this sum's tiles. u32 passes no plans.
+#[inline]
+fn add_rotated_group_assign<T: FheUint>(
+    exponents: impl ExactSizeIterator<Item = usize>,
+    selections: &[T],
     prepared: &[FourRotations],
     acc: &mut [T],
     tile_start: usize,
     size: GadgetSize,
     modulus: BarrettModulus<T>,
 ) {
-    debug_assert!(indices.len() <= max_group_len(modulus.value()));
+    let count = exponents.len();
+    debug_assert!(count <= max_group_len(modulus.value()));
     let n = size.glwe_size().poly_length().get();
     let control_len = size.ggsw_len();
     let tile_end = tile_start + acc.len();
-    let bias = T::as_from(indices.len()) * modulus.value();
+    let bias = T::as_from(count) * modulus.value();
     for value in acc.iter_mut() {
         *value += bias;
     }
 
     // Native kernels provide word addition/subtraction with no q correction.
     // The proven bound prevents actual wrapping; final reduction is modulo q.
-    let (groups, remaining) = indices.as_chunks::<4>();
+    // Prepared groups need no repeated exponent lookup. Skip their prefix once
+    // so only immediate groups and the pair/single tail consume the iterator.
+    let prepared_count = if T::BITS == 64 {
+        prepared.len().min(count / 4)
+    } else {
+        0
+    };
+    let mut exponents = exponents.skip(4 * prepared_count);
     let mut selection_groups = selections.chunks_exact(4 * control_len);
-    for (group_index, (indices, group)) in groups.iter().zip(selection_groups.by_ref()).enumerate()
-    {
+    for (group_index, group) in selection_groups.by_ref().enumerate() {
         let sources = std::array::from_fn(|i| {
             &group[i * control_len + tile_start..i * control_len + tile_end]
         });
@@ -214,34 +331,43 @@ pub(super) fn add_rotated_group_assign<T: FheUint>(
             let rotations = if let Some(rotations) = prepared.get(group_index) {
                 rotations
             } else {
-                immediate = FourRotations::new(indices.map(|i| exponents[i]), n);
+                immediate = FourRotations::new(
+                    std::array::from_fn(|_| exponents.next().expect("control exponent")),
+                    n,
+                );
                 &immediate
             };
             rotations.add_assign(acc, sources, n);
         } else {
-            add_four_rotations_assign(acc, sources, indices.map(|i| exponents[i]), n);
+            add_four_rotations_assign(
+                acc,
+                sources,
+                std::array::from_fn(|_| exponents.next().expect("control exponent")),
+                n,
+            );
         }
     }
-    let (pairs, tail) = remaining.as_chunks::<2>();
     let mut selection_pairs = selection_groups.remainder().chunks_exact(2 * control_len);
-    for (indices, pair) in pairs.iter().zip(selection_pairs.by_ref()) {
+    for pair in selection_pairs.by_ref() {
+        let first_exponent = exponents.next().expect("control exponent");
+        let second_exponent = exponents.next().expect("control exponent");
         let (a, b) = pair.split_at(control_len);
         primus_poly::add_mul_monomial_pair_assign(
             acc,
             &a[tile_start..tile_end],
-            exponents[indices[0]],
+            first_exponent,
             &b[tile_start..tile_end],
-            exponents[indices[1]],
+            second_exponent,
             n,
             NativeModulus::new(),
         );
     }
-    if let Some(&index) = tail.first() {
+    if let Some(exponent) = exponents.next() {
         let source = &selection_pairs.remainder()[tile_start..tile_end];
         for (acc, source) in acc.chunks_exact_mut(n).zip(source.chunks_exact(n)) {
             Polynomial(acc).add_mul_monomial_assign(
                 &Polynomial(source),
-                exponents[index],
+                exponent,
                 NativeModulus::new(),
             );
         }
@@ -358,7 +484,7 @@ struct RotationSegment {
 /// Input-dependent addressing for four controls, reused across a bucket's tiles.
 /// Empty trailing segments represent coincident wrap points, including shift zero.
 #[derive(Clone, Default)]
-pub(super) struct FourRotations {
+pub(crate) struct FourRotations {
     segments: [RotationSegment; 5],
 }
 
@@ -486,12 +612,12 @@ fn add_segment<T: FheUint, const NEGATIVES: u8>(
     }
 }
 
-/// u64 tile traversal preserving the single-input whole-bucket bias/reduction
+/// u64 tile traversal preserving the single-input whole-group bias/reduction
 /// boundary, or its original lazy-pair fallback. Only the
 /// order of independent lane operations changes: tile -> source group -> lane.
 /// Key coefficients stay canonical and are read through borrowed tile slices.
-fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
-    indices: &[usize],
+fn aggregate_controls_u64_many_assign<T: FheUint, const LANES: usize>(
+    indices: impl ExactSizeIterator<Item = usize> + Clone,
     selections: &[T],
     lanes: &mut [AggregationLane<'_, T>; LANES],
     size: GadgetSize,
@@ -500,22 +626,23 @@ fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
     debug_assert_eq!(T::BITS, 64);
     let n = size.glwe_size().poly_length().get();
     let control_len = size.ggsw_len();
-    let use_groups = indices.len() >= 4 && indices.len() <= max_group_len(modulus.value());
+    let count = indices.len();
+    let use_groups = count >= 4 && count <= max_group_len(modulus.value());
     for start in (0..control_len).step_by(tile_len::<T>(n)) {
         let end = (start + tile_len::<T>(n)).min(control_len);
+        let mut indices = indices.clone();
         if use_groups {
             // Same m*q bound as add_rotated_group_assign, independently per lane.
-            let bias = T::as_from(indices.len()) * modulus.value();
+            let bias = T::as_from(count) * modulus.value();
             for lane in lanes.iter_mut() {
                 for value in &mut lane.coefficients[start..end] {
                     *value += bias;
                 }
             }
-            let (groups, remaining) = indices.as_chunks::<4>();
             let mut selection_groups = selections.chunks_exact(4 * control_len);
-            for (group_index, (indices, group)) in
-                groups.iter().zip(selection_groups.by_ref()).enumerate()
-            {
+            for (group_index, group) in selection_groups.by_ref().enumerate() {
+                let indices: [usize; 4] =
+                    std::array::from_fn(|_| indices.next().expect("control index"));
                 let sources =
                     std::array::from_fn(|i| &group[i * control_len + start..i * control_len + end]);
                 // Borrow one source tile, consume it for all lanes before moving
@@ -531,9 +658,10 @@ fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
                     rotations.add_assign(&mut lane.coefficients[start..end], sources, n);
                 }
             }
-            let (pairs, tail) = remaining.as_chunks::<2>();
             let mut selection_pairs = selection_groups.remainder().chunks_exact(2 * control_len);
-            for (indices, pair) in pairs.iter().zip(selection_pairs.by_ref()) {
+            for pair in selection_pairs.by_ref() {
+                let indices: [usize; 2] =
+                    std::array::from_fn(|_| indices.next().expect("control index"));
                 let (a, b) = pair.split_at(control_len);
                 for lane in lanes.iter_mut() {
                     primus_poly::add_mul_monomial_pair_assign(
@@ -547,7 +675,7 @@ fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
                     );
                 }
             }
-            if let Some(&index) = tail.first() {
+            if let Some(index) = indices.next() {
                 let source = &selection_pairs.remainder()[start..end];
                 for lane in lanes.iter_mut() {
                     for (acc, source) in lane.coefficients[start..end]
@@ -568,9 +696,10 @@ fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
         } else {
             // Do not replace the single-input fallback by a differently grouped
             // sum. Keep its [0,2q) pair/single arithmetic and final one correction.
-            let (pairs, tail) = indices.as_chunks::<2>();
             let mut selection_pairs = selections.chunks_exact(2 * control_len);
-            for (indices, pair) in pairs.iter().zip(selection_pairs.by_ref()) {
+            for pair in selection_pairs.by_ref() {
+                let indices: [usize; 2] =
+                    std::array::from_fn(|_| indices.next().expect("control index"));
                 let (a, b) = pair.split_at(control_len);
                 for lane in lanes.iter_mut() {
                     primus_poly::lazy_add_mul_monomial_pair_assign(
@@ -584,7 +713,7 @@ fn aggregate_bucket_u64<T: FheUint, const LANES: usize>(
                     );
                 }
             }
-            if let Some(&index) = tail.first() {
+            if let Some(index) = indices.next() {
                 let source = &selection_pairs.remainder()[start..end];
                 for lane in lanes.iter_mut() {
                     primus_poly::lazy_add_mul_monomial_assign(
@@ -644,85 +773,102 @@ mod tests {
     // Independent lane/sign oracle for the new schedule, including multiple
     // tiles, immediate/prepared descriptors and moduli without bucket headroom.
     #[test]
-    fn u64_lanes_match_integer_oracle() {
+    fn lane_tile_schedules_match_integer_oracle() {
         for q in [1_125_899_906_826_241u64, u64::MAX / 9] {
-            for n in [32, 512] {
-                let size = GadgetSize::new(
-                    GlweSize::new(GlweDimension::new(1), PolyLength::new(n)),
-                    DecompositionLevelCount::new(2),
-                );
-                let len = size.ggsw_len();
-                for m in [0, 1, 3, 4, 7, 9] {
-                    let indices: Vec<_> = (0..m).rev().collect();
-                    let exponents: [Vec<_>; 4] = std::array::from_fn(|lane| {
-                        (0..m)
-                            .map(|i| (i * 17 + lane * (n - 1)) & (2 * n - 1))
-                            .collect()
-                    });
-                    let sources: Vec<_> = (0..m * len)
-                        .map(|i| match i % 3 {
-                            0 => 0,
-                            1 => q - 1,
-                            _ => (i as u64).wrapping_mul(0x9e3779b97f4a7c15) % q,
-                        })
-                        .collect();
-                    let initial: Vec<_> = (0..len)
-                        .map(|i| if i & 1 == 0 { 0 } else { q - 1 })
-                        .collect();
-                    let expected: [Vec<_>; 4] = exponents.each_ref().map(|exponents| {
-                        let mut result: Vec<_> = initial.iter().map(|&x| i128::from(x)).collect();
-                        for (&index, source) in indices.iter().zip(sources.chunks_exact(len)) {
-                            for (out, poly) in
-                                result.chunks_exact_mut(n).zip(source.chunks_exact(n))
-                            {
-                                for (i, &x) in poly.iter().enumerate() {
-                                    let dest = i + exponents[index];
-                                    out[dest & (n - 1)] += if dest & n == 0 {
-                                        i128::from(x)
-                                    } else {
-                                        -i128::from(x)
-                                    };
-                                }
+            check_lane_tile_schedules(q);
+        }
+        for q in [67_104_769u32, 134_215_681, u32::MAX / 9] {
+            check_lane_tile_schedules(q);
+        }
+    }
+
+    fn check_lane_tile_schedules<T: FheUint>(q: T) {
+        let modulus = BarrettModulus::new(q);
+        let q: u64 = q.as_into();
+        for n in [32, 512] {
+            let size = GadgetSize::new(
+                GlweSize::new(GlweDimension::new(1), PolyLength::new(n)),
+                DecompositionLevelCount::new(2),
+            );
+            let len = size.ggsw_len();
+            for m in [0, 1, 3, 4, 7, 9, 29] {
+                let indices: Vec<_> = (0..m).rev().collect();
+                let exponents: [Vec<_>; 4] = std::array::from_fn(|lane| {
+                    (0..m)
+                        .map(|i| (i * 17 + lane * (n - 1)) & (2 * n - 1))
+                        .collect()
+                });
+                let sources: Vec<_> = (0..m * len)
+                    .map(|i| match i % 3 {
+                        0 => 0,
+                        1 => q - 1,
+                        _ => (i as u64).wrapping_mul(0x9e3779b97f4a7c15) % q,
+                    })
+                    .collect();
+                let initial: Vec<_> = (0..len)
+                    .map(|i| if i & 1 == 0 { 0 } else { q - 1 })
+                    .collect();
+                let expected: [Vec<_>; 4] = exponents.each_ref().map(|exponents| {
+                    let mut result: Vec<_> = initial.iter().map(|&x| i128::from(x)).collect();
+                    for (&index, source) in indices.iter().zip(sources.chunks_exact(len)) {
+                        for (out, poly) in result.chunks_exact_mut(n).zip(source.chunks_exact(n)) {
+                            for (i, &x) in poly.iter().enumerate() {
+                                let dest = i + exponents[index];
+                                out[dest & (n - 1)] += if dest & n == 0 {
+                                    i128::from(x)
+                                } else {
+                                    -i128::from(x)
+                                };
                             }
                         }
-                        result
-                            .into_iter()
-                            .map(|x| x.rem_euclid(i128::from(q)) as u64)
-                            .collect()
-                    });
-                    for prepare in [false, true] {
-                        let plans: [Vec<_>; 4] = exponents.each_ref().map(|exponents| {
-                            if prepare {
-                                indices
-                                    .as_chunks::<4>()
-                                    .0
-                                    .iter()
-                                    .map(|group| FourRotations::new(group.map(|i| exponents[i]), n))
-                                    .collect()
-                            } else {
-                                Vec::new()
-                            }
-                        });
-                        let mut actual: [_; 4] = std::array::from_fn(|_| initial.clone());
-                        let mut lane_index = 0;
-                        let mut lanes = actual.each_mut().map(|coefficients| {
-                            let lane = lane_index;
-                            lane_index += 1;
-                            AggregationLane {
-                                prepared: &plans[lane],
-                                exponents: &exponents[lane],
-                                coefficients,
-                            }
-                        });
-                        aggregate_bucket_many(
-                            &indices,
-                            &sources,
-                            &mut lanes,
-                            size,
-                            BarrettModulus::new(q),
-                        );
-                        assert_eq!(actual, expected, "q={q} n={n} m={m} prepare={prepare}");
                     }
+                    result
+                        .into_iter()
+                        .map(|x| x.rem_euclid(i128::from(q)) as u64)
+                        .collect()
+                });
+                let sources: Vec<T> = sources.into_iter().map(T::as_from).collect();
+                let initial: Vec<T> = initial.into_iter().map(T::as_from).collect();
+                let expected: [Vec<T>; 4] =
+                    expected.map(|values| values.into_iter().map(T::as_from).collect());
+                let prepared_counts: &[usize] = if T::BITS == 64 {
+                    &[0, 1, usize::MAX]
+                } else {
+                    &[0]
+                };
+                for &prepared_count in prepared_counts {
+                    let plans: [Vec<_>; 4] = exponents.each_ref().map(|exponents| {
+                        if prepared_count != 0 {
+                            indices
+                                .as_chunks::<4>()
+                                .0
+                                .iter()
+                                .take(prepared_count)
+                                .map(|group| FourRotations::new(group.map(|i| exponents[i]), n))
+                                .collect()
+                        } else {
+                            Vec::new()
+                        }
+                    });
+                    let mut actual: [_; 4] = std::array::from_fn(|_| initial.clone());
+                    let mut lane_index = 0;
+                    let mut lanes = actual.each_mut().map(|coefficients| {
+                        let lane = lane_index;
+                        lane_index += 1;
+                        AggregationLane {
+                            prepared: &plans[lane],
+                            exponents: &exponents[lane],
+                            coefficients,
+                        }
+                    });
+                    aggregate_controls_many_assign(
+                        indices.iter().copied(),
+                        &sources,
+                        &mut lanes,
+                        size,
+                        modulus,
+                    );
+                    assert_eq!(actual, expected, "q={q} n={n} m={m} plans={prepared_count}");
                 }
             }
         }
@@ -806,9 +952,8 @@ mod tests {
                             .zip(sources.chunks(group_len * len))
                         {
                             add_rotated_group_assign(
-                                indices,
+                                indices.iter().map(|&index| exponents[index]),
                                 sources,
-                                &exponents,
                                 &[],
                                 &mut candidate[range.clone()],
                                 tile_start,
@@ -824,25 +969,30 @@ mod tests {
                             .iter()
                             .map(|indices| FourRotations::new(indices.map(|i| exponents[i]), n))
                             .collect();
-                        let mut reused: Vec<T> = (0..len)
-                            .map(|i| T::as_from(if i & 1 == 0 { 0 } else { q - 1 }))
-                            .collect();
-                        for tile_start in (0..len).step_by(2 * n) {
-                            add_rotated_group_assign(
-                                &indices,
-                                &sources,
-                                &exponents,
-                                &prepared,
-                                &mut reused[tile_start..tile_start + 2 * n],
-                                tile_start,
-                                size,
-                                modulus,
+                        // A reused workspace may retain fewer plans than the
+                        // current block; the remaining groups are prepared on demand.
+                        for prepared in [&prepared[..prepared.len().min(1)], &prepared[..]] {
+                            let mut reused: Vec<T> = (0..len)
+                                .map(|i| T::as_from(if i & 1 == 0 { 0 } else { q - 1 }))
+                                .collect();
+                            for tile_start in (0..len).step_by(2 * n) {
+                                add_rotated_group_assign(
+                                    indices.iter().map(|&index| exponents[index]),
+                                    &sources,
+                                    prepared,
+                                    &mut reused[tile_start..tile_start + 2 * n],
+                                    tile_start,
+                                    size,
+                                    modulus,
+                                );
+                            }
+                            assert_eq!(
+                                reused,
+                                candidate,
+                                "prepared addressing q={q} n={n} m={m} pattern={pattern} plans={}",
+                                prepared.len()
                             );
                         }
-                        assert_eq!(
-                            reused, candidate,
-                            "prepared addressing q={q} n={n} m={m} pattern={pattern}"
-                        );
                     }
                     let candidate: Vec<u64> = candidate.into_iter().map(|x| x.as_into()).collect();
                     assert_eq!(

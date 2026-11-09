@@ -107,6 +107,8 @@ NTT 的 `generate_pair` 同时返回系数私钥和变换私钥。Fourier 先用
 
 NTT 私钥运算不需要工作区。Fourier 加密复用准备好的 encryptor，无需额外传工作区；解密使用 `FourierGlweDecryptWorkspace`。NTT 公钥加密使用 `NttGlwePublicEncryptWorkspace<T>`。复用这些资源，调用方持有的明文和相位输出按自身生命周期擦除。Encryptor 只在准备时检查声明的 sampler 支持，拥有析构时擦除的精确乘积缓存和一行系数缓冲。导入任意系数可用 `FourierGlweEncryptor::from_coeff_secret_key`，采用完整 signed 字宽界；u64 此时使用成本较高的 O(kN²) schoolbook 乘法。
 
+NTT 公钥加密还显式借用 `SecretKeySampler<T>`，用于一个完整长度 N 的临时多项式 r。通过 `params.try_ephemeral_sampler(None)?` 跟随完整 rank-one 接收方秘密分布，或通过 `params.try_ephemeral_sampler(Some(distribution))?` 在任意 rank 下显式选择长度 N 的分布，并复用返回的 sampler。rank>1 不支持隐式跟随；带公开零尾的 LWE 密钥须显式选择分布。调用时将 sampler 与加密参数一同传入，scratch 保持独立复用。`Some(SecretKeyDistr::SparseTernary)` 保留原公钥加密分布。每次加密重新采样 r；更换分布须单独评估噪声和安全性。
+
 NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt_message_coeff_to`，用于系数密文。最后一个参数是无需预先清零的 N 元素 scratch 切片。加密后其中保留秘密相关乘积，宜使用 `zeroize::Zeroizing<Vec<T>>` 等可擦除的拥有者。
 
 已编码 NTT 输入必须是 `[0, q)` 中的规范系数。密钥、参数、表和输出布局须匹配；Fourier 值须使用密钥生成时的同一 FFT 表实例。非法明文可能在部分写入或消耗随机数后失败。精确缓冲区及失败契约见[私钥](src/secret_key)和[公钥](src/public_key)方法。

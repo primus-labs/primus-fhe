@@ -3,6 +3,7 @@
 use super::{NttGlwePublicEncryptWorkspace, NttGlwePublicKey};
 use crate::{GlweEncryptionParameters, NttGlweCiphertext};
 use primus_data::{Data, DataMut};
+use primus_distr::SecretKeySampler;
 use primus_integer::FheUint;
 use primus_ntt::NttTable;
 use primus_poly::{NttPolynomial, Polynomial};
@@ -17,10 +18,16 @@ where
     /// Encrypts an already encoded coefficient polynomial without plaintext scaling.
     /// The table defines N; the public key contains k mask polynomials and a body.
     /// No plaintext codec or separate parameter layout is needed.
+    /// `ephemeral_sampler` describes one complete length-N r, not a kN key.
+    /// Prepare it with [`crate::GlweParameters::try_ephemeral_sampler`] and reuse
+    /// it with independent random draws; sparse ternary is an explicit choice.
     ///
     /// # Correctness
     ///
     /// Input coefficients must be canonical residues modulo the ciphertext modulus.
+    /// The sampler must satisfy [`SecretKeySampler::sample_encoded_to`]'s modulus
+    /// precondition for q. Changing the distribution changes public-key security
+    /// and noise assumptions; sharing a sampler does not reuse r samples.
     /// Use [`crate::NttGlweSecretKey::decrypt_phase_to`] to recover encoded coefficients with noise;
     /// ordinary decryption also applies plaintext decoding.
     ///
@@ -29,11 +36,16 @@ where
     /// Panics before sampling or writes if the key is not a sequence of at least
     /// two complete polynomials, the output length differs from the key, input/workspace lengths
     /// differ from N, or the parameter and table moduli differ.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "explicit public-encryption sampler and resources"
+    )]
     pub fn encrypt_encoded_to<M, Table, R, A, B>(
         &self,
         input: &Polynomial<A>,
         output: &mut NttGlweCiphertext<B>,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -54,6 +66,7 @@ where
             input.as_view(),
             output.as_mut_view(),
             params,
+            ephemeral_sampler,
             ntt,
             rng,
             workspace,
@@ -65,11 +78,15 @@ where
     /// # Panics
     ///
     /// Inherits [`Self::encrypt_encoded_to`]'s resource checks, without an input
-    /// polynomial length check.
+    /// polynomial length check. Invalid fixed weights/blocks fail before sampling.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::encrypt_encoded_to`]'s ephemeral-sampler contract.
     pub fn encrypt_zeros_to<M, Table, R, B>(
         &self,
         output: &mut NttGlweCiphertext<B>,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -83,6 +100,7 @@ where
         NttGlwePublicKey::from(self.key.as_view()).encrypt_zeros_kernel_to(
             output.as_mut_view(),
             params,
+            ephemeral_sampler,
             ntt,
             rng,
             workspace,
@@ -94,10 +112,14 @@ where
     /// # Panics
     ///
     /// Inherits [`Self::encrypt_zeros_to`]'s resource checks.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::encrypt_zeros_to`]'s ephemeral-sampler contract.
     #[must_use]
     pub fn encrypt_zeros<M, Table, R>(
         &self,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -108,7 +130,7 @@ where
         R: rand::Rng + rand::CryptoRng,
     {
         let mut output = NttGlweCiphertext::zero(self.key.as_ref().len());
-        self.encrypt_zeros_to(&mut output, params, ntt, rng, workspace);
+        self.encrypt_zeros_to(&mut output, params, ephemeral_sampler, ntt, rng, workspace);
         output
     }
 
@@ -128,11 +150,16 @@ where
 impl<T: FheUint> NttGlwePublicKey<&[T]> {
     /// Input length was checked at the public entry; resource checks precede sampling.
     /// Add encoded coefficients without plaintext scaling after body noise sampling.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "explicit public-encryption sampler and resources"
+    )]
     fn encrypt_encoded_kernel_to<M, Table, R>(
         &self,
         input: Polynomial<&[T]>,
         output: NttGlweCiphertext<&mut [T]>,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -141,15 +168,24 @@ impl<T: FheUint> NttGlwePublicKey<&[T]> {
         Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
-        self.encrypt_kernel_to(output, params, ntt, rng, workspace, |body| {
-            Polynomial::new(body).add_assign(&input, params.cipher_modulus());
-        });
+        self.encrypt_kernel_to(
+            output,
+            params,
+            ephemeral_sampler,
+            ntt,
+            rng,
+            workspace,
+            |body| {
+                Polynomial::new(body).add_assign(&input, params.cipher_modulus());
+            },
+        );
     }
 
     fn encrypt_zeros_kernel_to<M, Table, R>(
         &self,
         output: NttGlweCiphertext<&mut [T]>,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -158,16 +194,29 @@ impl<T: FheUint> NttGlwePublicKey<&[T]> {
         Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
-        self.encrypt_kernel_to(output, params, ntt, rng, workspace, |_| {});
+        self.encrypt_kernel_to(
+            output,
+            params,
+            ephemeral_sampler,
+            ntt,
+            rng,
+            workspace,
+            |_| {},
+        );
     }
 
     /// Validates output/resources, then encrypts with a statically dispatched body
     /// addition. The boundary establishes complete key polynomials and input length.
     /// `add_message` runs once after body noise sampling and before its transform.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "explicit public-encryption sampler and resources"
+    )]
     pub(super) fn encrypt_kernel_to<M, Table, R>(
         &self,
         mut output: NttGlweCiphertext<&mut [T]>,
         params: &GlweEncryptionParameters<T, M>,
+        ephemeral_sampler: &SecretKeySampler<T>,
         ntt: &Table,
         rng: &mut R,
         workspace: &mut NttGlwePublicEncryptWorkspace<T>,
@@ -196,11 +245,7 @@ impl<T: FheUint> NttGlwePublicKey<&[T]> {
 
         let modulus = params.cipher_modulus();
         let ephemeral = &mut workspace.ephemeral;
-        primus_distr::sample_sparse_ternary_values_to(
-            ephemeral,
-            params.cipher_modulus_minus_one(),
-            rng,
-        );
+        ephemeral_sampler.sample_encoded_to(ephemeral, params.cipher_modulus_minus_one(), rng);
         ntt.transform_slice(ephemeral);
         let ephemeral = NttPolynomial(ephemeral.as_slice());
 

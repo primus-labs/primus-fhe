@@ -1,4 +1,5 @@
 use num_traits::{ConstOne, ConstZero};
+use primus_glwe::BlockOccupancy;
 use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, GlweSize};
 use primus_reduce::RingContext;
@@ -105,7 +106,8 @@ impl<T: FheUint> ClientKey<T> {
     /// The small LWE coefficients occupy the prefix in their natural order;
     /// the remaining coefficients are zero. Ternary `q-1` residues are decoded
     /// to signed `-1`, including for explicit moduli. `parameters` must already
-    /// have passed [`Self::check_compatible`].
+    /// have passed [`Self::check_compatible`]. Block partitions belong only to
+    /// the logical LWE prefix; the public zero tail need not form whole blocks.
     ///
     /// # Panics
     ///
@@ -171,7 +173,8 @@ impl<T: FheUint> ClientKey<T> {
     /// The owning small-LWE modulus is checked before creating any raw key view.
     ///
     /// Imported small-LWE coefficients must be `0/1`, or also `q-1` for ternary
-    /// distributions. This does not validate fixed weights or the accumulator's
+    /// distributions. Block-binary secrets must satisfy their declared occupancy.
+    /// This does not validate fixed weights or the accumulator's
     /// coefficient magnitudes; transform backends retain their range contracts.
     pub fn check_compatible<M, LM>(
         &self,
@@ -220,6 +223,34 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         }
         if key.distr() != self.small_lwe().secret_key_distr() {
             return Err(TfheKeyError::LweSecretKeyDistributionMismatch);
+        }
+        if let crate::SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy,
+        } = key.distr()
+        {
+            // Parameters established n % block_size == 0. Check coefficients
+            // and occupancy in one full scan, without stopping on secret data.
+            let mut invalid_coefficient = false;
+            let mut invalid_block = false;
+            let require_one = occupancy == BlockOccupancy::ExactlyOne;
+            for block in key.as_ref().chunks_exact(block_size) {
+                let mut occupied = false;
+                for &coefficient in block {
+                    let selected = coefficient == T::ONE;
+                    invalid_coefficient |= coefficient > T::ONE;
+                    invalid_block |= occupied & selected;
+                    occupied |= selected;
+                }
+                invalid_block |= require_one & !occupied;
+            }
+            if invalid_coefficient {
+                return Err(TfheKeyError::InvalidLweSecretKeyCoefficient);
+            }
+            if invalid_block {
+                return Err(TfheKeyError::InvalidLweSecretKeyBlock);
+            }
+            return Ok(());
         }
         let ternary = key.distr().is_ternary();
         let minus_one = self.small_lwe().cipher_modulus().minus_one();

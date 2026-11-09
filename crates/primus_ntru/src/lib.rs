@@ -84,7 +84,7 @@ pub use parameter::{
     NlevParameterError, NlevParameters, NtruEncryptionParameters, NtruParameterError,
     NtruParameters,
 };
-pub use primus_distr::SecretKeyDistr;
+pub use primus_distr::{BlockOccupancy, SecretKeyDistr};
 pub use primus_lattice::LweDimension;
 #[cfg(feature = "ntt")]
 pub use primus_lattice::workspace::{NttNtruCmuxWorkspace, NttNtruExternalProductWorkspace};

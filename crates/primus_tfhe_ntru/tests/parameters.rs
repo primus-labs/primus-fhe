@@ -4,14 +4,14 @@ use primus_decompose::primitive::ApproxSignedBasis;
 use primus_encoding::RoundedCodec;
 use primus_lwe::{LweDimension, LweSecretKey};
 use primus_modulus::{BarrettModulus, PowOf2Modulus};
-use primus_ntru::{NtruSecretKey, SecretKeyDistr};
+use primus_ntru::{BlockOccupancy, NtruSecretKey, SecretKeyDistr};
 use primus_shape::PolyLength;
 use primus_tfhe::{BlindRotationMethod, DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_ntru::{
     CbsConfig, CbsGadgetConfig, CbsGadgetParameters, CbsParameters, CircuitBootstrapParameterError,
     ClientKey, DecompositionConfig, GadgetEncryptionConfig, KeyGenerationError, LookupTableError,
     LweConfig, ModulusConfig, OneHotBootstrapError, OneHotLookupTable, PbsConfig, PbsMessageConfig,
-    PbsParameters, TfheKeyError,
+    PbsParameters, TfheKeyError, TfheParameterError,
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -54,6 +54,77 @@ fn gadget() -> CbsGadgetConfig {
             log_basis: DecompositionBaseLog::new(2),
             level_count: Some(DecompositionLevelCount::new(3)),
         },
+    }
+}
+
+/// Both occupancy modes bind complete groups and reject the other mode's payload.
+#[test]
+fn block_storage_binds_complete_nlev_ngsw_groups() {
+    use primus_tfhe_ntru::{BlockBootstrappingKeyError, BlockNtruBootstrappingKey};
+
+    let parameters = PbsParameters::try_from_config(config()).unwrap();
+    let gadget = parameters.blind_rotation();
+    let control_len = gadget.nlev_len();
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let controls_per_block = 3 + usize::from(occupancy == BlockOccupancy::AtMostOne);
+        let data: Vec<u32> = (0..2 * controls_per_block * control_len)
+            .map(|index| index as u32)
+            .collect();
+        let key = BlockNtruBootstrappingKey::try_new(
+            data.clone(),
+            LweDimension::new(6),
+            3,
+            occupancy,
+            gadget,
+        )
+        .unwrap();
+        assert_eq!(key.block_count(), 2);
+        assert_eq!(key.occupancy(), occupancy);
+        assert_eq!(key.controls().input_dimension(), LweDimension::new(6));
+        for block_index in 0..2 {
+            let (range, controls) = key.block_data(block_index);
+            assert_eq!(range, 3 * block_index..3 * (block_index + 1));
+            assert_eq!(
+                controls,
+                &data[controls_per_block * block_index * control_len
+                    ..controls_per_block * (block_index + 1) * control_len]
+            );
+        }
+        for block_size in [0, 4] {
+            assert!(matches!(
+                BlockNtruBootstrappingKey::try_new(
+                    data.clone(),
+                    LweDimension::new(6),
+                    block_size,
+                    occupancy,
+                    gadget,
+                ),
+                Err(BlockBootstrappingKeyError::InvalidBlockGeometry { .. })
+            ));
+        }
+        // Incomplete payloads and complete payloads for the other mode are invalid.
+        for len in [data.len() - 1, (14 - 2 * controls_per_block) * control_len] {
+            assert!(matches!(
+                BlockNtruBootstrappingKey::try_new(
+                    vec![0; len],
+                    LweDimension::new(6),
+                    3,
+                    occupancy,
+                    gadget,
+                ),
+                Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
+            ));
+        }
+        assert!(matches!(
+            BlockNtruBootstrappingKey::try_new(
+                vec![],
+                LweDimension::new(usize::MAX - 1),
+                1,
+                occupancy,
+                gadget,
+            ),
+            Err(BlockBootstrappingKeyError::StorageSizeOverflow)
+        ));
     }
 }
 
@@ -184,6 +255,9 @@ fn return_generation_rejects_incompatible_secrets_before_sampling() {
                 f_distr = SecretKeyDistr::UniformTernary
             }
             TfheKeyError::AccumulatorSecretOutsideLweModulus => f[0] = 1024,
+            TfheKeyError::InvalidClientSecretKeyBlock => {
+                panic!("block occupancy has a separate distribution-aware case")
+            }
         }
         let client = ClientKey::new(
             LweSecretKey::new(s, s_distr, PowOf2Modulus::new(q)),
@@ -209,6 +283,89 @@ fn return_generation_rejects_incompatible_secrets_before_sampling() {
             assert_eq!(rng.next_u64(), untouched.next_u64());
         }
     }
+}
+
+/// Imported logical blocks are checked before generating any return rows.
+#[test]
+fn block_controls_validate_imports_before_return_key_sampling() {
+    let mut cfg = config();
+    cfg.external_lwe.dimension = LweDimension::new(6);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        cfg.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
+            cfg.method = method;
+            let parameters = PbsParameters::try_from_config(cfg).unwrap();
+            let empty_block = if occupancy == BlockOccupancy::ExactlyOne {
+                Err(TfheKeyError::InvalidClientSecretKeyBlock)
+            } else {
+                Ok(())
+            };
+            for (coefficients, expected) in [
+                (vec![0; 6], empty_block.clone()),
+                (vec![0, 0, 0, 0, 1, 0], empty_block.clone()),
+                (vec![0, 1, 0, 0, 0, 1], Ok(())),
+                (
+                    vec![1, 1, 0, 0, 0, 0],
+                    Err(TfheKeyError::InvalidClientSecretKeyBlock),
+                ),
+                (
+                    vec![2, 0, 0, 0, 0, 0],
+                    Err(TfheKeyError::InvalidClientSecretKeyCoefficient),
+                ),
+            ] {
+                let mut f = vec![0; parameters.poly_length().get()];
+                f[0] = 1;
+                let check_distribution = coefficients == [0, 1, 0, 0, 0, 1];
+                let client = ClientKey::new(
+                    LweSecretKey::new(
+                        coefficients,
+                        cfg.external_lwe.secret_key_distr,
+                        parameters.external_lwe().cipher_modulus(),
+                    ),
+                    NtruSecretKey::new(f, cfg.bsk_secret_distr),
+                );
+                assert_eq!(client.check_compatible(&parameters), expected);
+                if check_distribution {
+                    let mut other = cfg;
+                    other.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                        block_size: 3,
+                        occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                            BlockOccupancy::ExactlyOne
+                        } else {
+                            BlockOccupancy::AtMostOne
+                        },
+                    };
+                    other.method = BlindRotationMethod::Classic;
+                    let other = PbsParameters::try_from_config(other).unwrap();
+                    assert_eq!(
+                        client.check_compatible(&other),
+                        Err(TfheKeyError::ClientSecretKeyDistributionMismatch)
+                    );
+                }
+                let mut rng = StdRng::seed_from_u64(79);
+                let mut untouched = StdRng::seed_from_u64(79);
+                let result = parameters.try_generate_lwe_return_key(&client, &mut rng);
+                match expected {
+                    Ok(()) => assert!(result.is_ok()),
+                    Err(expected) => {
+                        assert!(
+                            matches!(result, Err(KeyGenerationError::ClientKey(error)) if error == expected)
+                        );
+                        assert_eq!(rng.next_u64(), untouched.next_u64());
+                    }
+                }
+            }
+        }
+    }
+    let mut wrong_distribution = config();
+    wrong_distribution.method = BlindRotationMethod::Block;
+    assert!(matches!(
+        PbsParameters::try_from_config(wrong_distribution),
+        Err(TfheParameterError::InvalidBlockSecretDistribution)
+    ));
 }
 
 #[test]

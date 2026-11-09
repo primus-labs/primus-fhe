@@ -1,12 +1,13 @@
 //! Ordinary GLWE layout and plaintext encoding.
 
+use std::{borrow::Cow, sync::Arc};
+
 use primus_distr::{DiscreteGaussian, SecretKeySampler};
 use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, GlweSize};
 use primus_reduce::RingContext;
 use primus_shape::PolyLength;
 use rand::distr::Uniform;
-use std::sync::Arc;
 
 use super::{GlweEncryptionParameters, GlweParameterError};
 use crate::{ScaledCodec, SecretKeyDistr};
@@ -114,6 +115,10 @@ where
 
     /// Binds an ordinary message codec to an existing gadget's GLWE domain.
     /// Shares prepared samplers; the gadget basis is neither copied nor retained.
+    /// Inherits the gadget's secret domain, including a logical LWE prefix and
+    /// public zero tail when built with
+    /// [`super::GlevParameters::try_from_padded_lwe_parts`]. Such a key must be
+    /// supplied with that padding, rather than sampled over the full mask length.
     ///
     /// # Errors
     /// Rejects a codec with another ciphertext modulus.
@@ -124,7 +129,7 @@ where
         if plaintext_codec.ciphertext_modulus() != gadget.cipher_modulus() {
             return Err(GlweParameterError::CodecModulusMismatch);
         }
-        // The gadget already checked fixed secret weights against this layout.
+        // The gadget already established its secret domain for this layout.
         Ok(Self::from_matching_parts(
             gadget.glwe_size(),
             Arc::clone(&gadget.encryption_parameters),
@@ -143,6 +148,38 @@ where
             size,
             encryption_parameters,
             plaintext_codec,
+        }
+    }
+
+    /// Prepares the distribution of the single ephemeral polynomial used by
+    /// multiplication-based public encryption. `None` borrows the recipient's
+    /// sampler for a rank-one ring; `Some` explicitly describes a complete
+    /// length-N polynomial, independently of the rank-k recipient key.
+    ///
+    /// Fixed weights and blocks apply to N, never to kN or a truncated prefix.
+    /// Reuse the returned sampler across encryptions; each call draws fresh r.
+    /// Changing this law requires a separate public-encryption security/noise budget.
+    ///
+    /// # Correctness
+    /// Following assumes the recipient uses the full, unpadded secret distribution.
+    /// Parameters derived from a padded LWE secret require an explicit N-domain law.
+    ///
+    /// # Errors
+    /// Rejects implicit following at rank > 1, or an explicit distribution whose
+    /// probabilities, complete length-N geometry or support at q are invalid.
+    pub fn try_ephemeral_sampler(
+        &self,
+        distribution: Option<SecretKeyDistr>,
+    ) -> Result<Cow<'_, SecretKeySampler<T>>, GlweParameterError> {
+        if let Some(distribution) = distribution {
+            let sampler = SecretKeySampler::try_new(distribution)?;
+            sampler.validate_length(self.poly_length().get())?;
+            sampler.validate_modulus(self.cipher_modulus_minus_one())?;
+            Ok(Cow::Owned(sampler))
+        } else if self.dimension().get() == 1 {
+            Ok(Cow::Borrowed(self.secret_key_sampler()))
+        } else {
+            Err(GlweParameterError::EphemeralFollowingRequiresRankOne)
         }
     }
 

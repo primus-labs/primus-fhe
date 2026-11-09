@@ -57,6 +57,9 @@ fn ntt_encryption(c: &mut Criterion) {
         );
         let pk = NttGlwePublicKey::generate(&sk, params.encryption_parameters(), &ntt, &mut rng);
         let mut public_workspace = NttGlwePublicEncryptWorkspace::new(poly_length);
+        let ephemeral = params
+            .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
+            .unwrap();
         let mut ciphertext = sk.encrypt_message(
             &message,
             &params,
@@ -97,6 +100,7 @@ fn ntt_encryption(c: &mut Criterion) {
                     black_box(&message),
                     &mut ciphertext,
                     black_box(&params),
+                    &ephemeral,
                     PlaintextEmbedding::Unsigned,
                     &ntt,
                     &mut rng,
