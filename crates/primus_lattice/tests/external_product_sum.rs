@@ -3,13 +3,14 @@
 
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
+use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable, TorusFftValue};
 use primus_integer::FheUint;
 use primus_lattice::{
-    nlev::{Nlev, NttNlev},
+    nlev::{FourierNlev, FourierNlevOwned, Nlev, NttNlev},
     ntru::Ntru,
-    workspace::NttNtruExternalProductWorkspace,
+    workspace::{FourierNtruExternalProductWorkspace, NttNtruExternalProductWorkspace},
 };
-use primus_modulus::BarrettModulus;
+use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntt::{NttTable, U32NttTable, U64NttTable};
 use primus_poly::{Polynomial, PolynomialIter};
 use primus_reduce::{Reduce, RingContext};
@@ -193,3 +194,111 @@ fn ntt_sum_matches_separate_products_and_polynomial_oracle() {
 // The independent integer convolution is the phase oracle for f=1. u64 includes
 // low bits that FFT cannot represent exactly; allow an absolute torus error of
 // 2^-42 (one unit for u32), not bitwise equality with separately rounded products.
+fn fourier<T: TorusFftValue, Table: FftTable>() {
+    let modulus = NativeModulus::<T>::new();
+    let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(8), None);
+    let table = Table::new(PolyLength::new(32));
+    let mut fft = FftEngine::new(&table);
+    let values = (0..3 * N)
+        .map(|i| T::as_from((i as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)))
+        .collect();
+    let SumFixture {
+        gadgets,
+        inputs,
+        messages,
+    } = fixture(&basis, modulus, values);
+    let gadgets: Vec<_> = gadgets
+        .iter()
+        .map(|g| {
+            let mut transformed = FourierNlevOwned::zero(basis.level_count().get() * N / 2);
+            g.write_fourier_form(&mut transformed, &mut fft);
+            transformed
+        })
+        .collect();
+    let mut workspace = FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut output = Ntru::new(vec![T::MAX; N]);
+    let tolerance = T::ONE << T::BITS.saturating_sub(42);
+    // Counts and output length are checked before writes. The last two cases
+    // fail after a valid first product, exercising recovery from dirty scratch.
+    let gadget_views = [gadgets[0].as_view(), gadgets[1].as_view()];
+    let input_views = [inputs[0].as_view(), inputs[1].as_view()];
+    let short_input = [
+        input_views[0].as_view(),
+        Polynomial::new(&inputs[1].as_ref()[..N - 1]),
+    ];
+    let gadget_len = gadgets[1].as_ref().len();
+    let short_gadget = [
+        gadget_views[0].as_view(),
+        FourierNlev::new(&gadgets[1].as_ref()[..gadget_len - 1]),
+    ];
+    for (gadgets, inputs, output_len) in [
+        (&gadget_views[..], &input_views[..1], N),
+        (&gadget_views[..1], &input_views[..], N),
+        (&gadget_views[..], &input_views[..], N - 1),
+        (&gadget_views[..], &short_input[..], N),
+        (&short_gadget[..], &input_views[..], N),
+    ] {
+        output.as_mut().fill(T::ONE);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                FourierNlev::external_product_sum_to(
+                    gadgets,
+                    inputs,
+                    Ntru::new(&mut output.as_mut()[..output_len]),
+                    &basis,
+                    &mut fft,
+                    &mut workspace,
+                );
+            }))
+            .is_err()
+        );
+        // Fourier keeps its partial sum in scratch until final conversion.
+        assert!(output.as_ref().iter().all(|&x| x == T::ONE));
+    }
+
+    // A valid call after late failures overwrites all stale transform state.
+    for count in [3, 1, 0] {
+        FourierNlev::external_product_sum_to(
+            &gadgets[..count],
+            &inputs[..count],
+            output.as_mut_view(),
+            &basis,
+            &mut fft,
+            &mut workspace,
+        );
+        let mut separate = Ntru::<Vec<T>>::zero(N);
+        let mut product = Ntru::<Vec<T>>::zero(N);
+        for (gadget, input) in gadgets[..count].iter().zip(&inputs[..count]) {
+            gadget.external_product_to(input, &mut product, &basis, &mut fft, &mut workspace);
+            separate.add_assign(&product, modulus);
+        }
+        let expected = expected_sum(&inputs[..count], &messages[..count], modulus);
+        for ((&actual, &expected), &separate) in output
+            .as_ref()
+            .iter()
+            .zip(expected.as_ref())
+            .zip(separate.as_ref())
+        {
+            for reference in [expected, separate] {
+                let distance = actual
+                    .wrapping_sub(reference)
+                    .min(reference.wrapping_sub(actual));
+                assert!(
+                    distance <= tolerance,
+                    "distance={distance:?}, tolerance={tolerance:?}"
+                );
+            }
+        }
+        if count == 0 {
+            assert!(output.as_ref().iter().all(|&x| x == T::ZERO));
+        }
+    }
+}
+
+#[test]
+fn fourier_sum_preserves_torus_phase() {
+    fourier::<u32, RustFftTable>();
+    fourier::<u64, RustFftTable>();
+    fourier::<u32, TfheFftTable>();
+    fourier::<u64, TfheFftTable>();
+}

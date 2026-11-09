@@ -1,10 +1,13 @@
-use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use primus_modulus::BarrettModulus;
+use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntru::{
-    NlevParameters, NtruCiphertext, NtruParameters, NtruSecretKey, NttNtruCiphertext,
+    FourierNtruCiphertext, FourierNtruEncryptWorkspace, FourierNtruGadgetEncryptWorkspace,
+    FourierNtruSecretKey, FourierNtruTraceKey, FourierNtruTraceWorkspace, NlevParameters,
+    NtruCiphertext, NtruParameters, NtruSecretKey, NttNtruCiphertext,
     NttNtruGadgetEncryptWorkspace, NttNtruSecretKey, NttNtruTraceKey, NttNtruTraceWorkspace,
     SecretKeyDistr,
 };
@@ -290,6 +293,135 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
     }
 }
 
+fn fourier_trace<Table: FftTable>() {
+    let q = 1u128 << 64;
+    let table = Table::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let parameters = NtruParameters::new(
+        PolyLength::new(N),
+        64u64,
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let gadget = NlevParameters::with_ntru_params(
+        &parameters,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: Some(DecompositionLevelCount::new(7)),
+        },
+    );
+    let secret = secret();
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let mut rng = StdRng::seed_from_u64(0x4646_545f_5452_4143);
+    let trace = FourierNtruTraceKey::generate(
+        &secret,
+        &key,
+        &gadget,
+        &mut fft,
+        &mut rng,
+        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+    );
+    let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut coefficients = vec![0; 2 * N];
+    let mut external_product =
+        primus_ntru::FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let m = message(q);
+    let mut transformed = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
+    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
+    key.encrypt_encoded_to(
+        &Polynomial(m.as_slice()),
+        &mut transformed,
+        parameters.encryption_parameters(),
+        &mut fft,
+        &mut rng,
+        &mut encrypt,
+    );
+    let mut input = NtruCiphertext::<Vec<u64>>::zero(N);
+    transformed.write_torus_form(&mut input, &mut fft);
+    check_operations(
+        &input,
+        &m,
+        secret.as_slice(),
+        q,
+        |operation, output| match operation {
+            Operation::Trace(r) => trace.apply_partial_to(
+                &input,
+                r,
+                &mut NtruCiphertext::new(output),
+                &mut fft,
+                &mut workspace,
+            ),
+            Operation::Reverse(r) => trace.apply_reverse_partial_to(
+                &input,
+                r,
+                &mut NtruCiphertext::new(output),
+                &mut fft,
+                &mut workspace,
+            ),
+            Operation::Project(indices) => {
+                trace.project_coefficients_to(&input, indices, output, &mut fft, &mut workspace)
+            }
+            Operation::ProjectPrefixShared(count) => trace
+                .project_prefix_coefficients_with_scratch_to(
+                    &input,
+                    count,
+                    output,
+                    &mut fft,
+                    &mut coefficients,
+                    &mut external_product,
+                ),
+            Operation::ProjectPrefix(count) => trace.project_prefix_coefficients_to(
+                &input,
+                count,
+                output,
+                &mut fft,
+                &mut workspace,
+            ),
+            Operation::Expand(count) => trace.expand_partial_coefficients_to(
+                &input,
+                count,
+                output,
+                &mut fft,
+                &mut workspace,
+            ),
+        },
+    );
+    for log_count in 0..=N.trailing_zeros() {
+        let count = 1 << log_count;
+        let mut m = m.clone();
+        m[count..].fill(0);
+        key.encrypt_encoded_to(
+            &Polynomial(m.as_slice()),
+            &mut transformed,
+            parameters.encryption_parameters(),
+            &mut fft,
+            &mut rng,
+            &mut encrypt,
+        );
+        transformed.write_torus_form(&mut input, &mut fft);
+        let mut expanded = vec![7; count * N];
+        trace.expand_partial_coefficients_to(
+            &input,
+            count,
+            &mut expanded,
+            &mut fft,
+            &mut workspace,
+        );
+        for (cipher, &value) in expanded.as_chunks::<N>().0.iter().zip(&m[..count]) {
+            let mut expected = vec![0; N];
+            expected[0] = value;
+            assert_phase(cipher, &expected, secret.as_slice(), q);
+        }
+    }
+}
+
+#[test]
+fn fourier_trace_projection_and_expansion_match_ring_phases() {
+    fourier_trace::<RustFftTable>();
+    fourier_trace::<TfheFftTable>();
+}
+
 // Deterministic zero-noise evaluation-key fixture. This is not a production RNG.
 struct ZeroRng;
 impl TryRng for ZeroRng {
@@ -308,7 +440,7 @@ impl TryRng for ZeroRng {
 impl TryCryptoRng for ZeroRng {}
 
 #[test]
-fn reverse_trace_preserves_modular_halving() {
+fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
     const N: usize = 32;
     let mut secret = vec![0; N];
     secret[0] = 1;
@@ -352,6 +484,50 @@ fn reverse_trace_preserves_modular_halving() {
     assert!(
         catch_unwind(AssertUnwindSafe(|| {
             trace.apply_reverse_to(&input, &mut output, modulus, &table, &mut wrong);
+        }))
+        .is_err()
+    );
+    assert_eq!(output.as_ref(), &[7; N]);
+
+    let table = RustFftTable::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let params = NtruParameters::new(
+        PolyLength::new(N),
+        4u32,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    let params = NlevParameters::with_ntru_params(
+        &params,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: None,
+        },
+    );
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let trace = FourierNtruTraceKey::generate(
+        &secret,
+        &key,
+        &params,
+        &mut fft,
+        &mut ZeroRng,
+        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+    );
+    input.as_mut().fill(0);
+    input.as_mut()[0] = 1;
+    input.as_mut()[2] = u32::MAX;
+    let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
+    trace.apply_reverse_partial_to(&input, N / 2, &mut output, &mut fft, &mut workspace);
+    // floor(1/2) and floor((2^32-1)/2), then the even projection doubles them.
+    expected[0] = 0;
+    expected[2] = u32::MAX - 1;
+    assert_eq!(output.as_ref(), expected);
+    let mut wrong = FourierNtruTraceWorkspace::new(PolyLength::new(2 * N));
+    output.as_mut().fill(7);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            trace.apply_reverse_to(&input, &mut output, &mut fft, &mut wrong);
         }))
         .is_err()
     );
@@ -400,6 +576,45 @@ fn ntt_trace_generation_rejects_incompatible_resources_before_sampling() {
         let mut workspace = NttNtruGadgetEncryptWorkspace::new(workspace_length);
         assert_rejected_before_sampling(|rng| {
             let _ = NttNtruTraceKey::generate(secret, key, &gadget, table, rng, &mut workspace);
+        });
+    }
+}
+
+#[test]
+fn fourier_trace_generation_rejects_incompatible_resources_before_sampling() {
+    let length = PolyLength::new(N);
+    let wrong_length = PolyLength::new(2 * N);
+    let table = RustFftTable::new(length);
+    let wrong_table = RustFftTable::new(wrong_length);
+    let secret = secret();
+    let wrong_secret = NtruSecretKey::new(vec![0; 2 * N], SecretKeyDistr::SparseTernary);
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut FftEngine::new(&table))
+        .unwrap();
+    let parameters = NtruParameters::new(
+        length,
+        4u64,
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let gadget = NlevParameters::with_ntru_params(
+        &parameters,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(10),
+            level_count: None,
+        },
+    );
+
+    for (secret, table, workspace_length) in [
+        (&wrong_secret, &table, length),
+        (&secret, &wrong_table, length),
+        (&secret, &table, wrong_length),
+    ] {
+        let mut fft = FftEngine::new(table);
+        let mut workspace = FourierNtruGadgetEncryptWorkspace::new(workspace_length);
+        assert_rejected_before_sampling(|rng| {
+            let _ =
+                FourierNtruTraceKey::generate(secret, &key, &gadget, &mut fft, rng, &mut workspace);
         });
     }
 }

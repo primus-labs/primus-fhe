@@ -17,16 +17,16 @@
 
 密钥、表和缓冲区分配在计时外准备；加密计时包含采样、编码及所需变换。参数和固定 seed 就地记录在各文件中，这些负载不证明不同后端具有相同安全性。
 
-相位提取不包含解码；trace 与 reverse trace 的输出尺度不同。`lwe_return` 不包含盲旋转，输入为规范系数多项式。`ternary_cmux` 比较两条路径的完整旋转。
+相位提取不包含解码；trace 与 reverse trace 的输出尺度不同。`lwe_return` 不包含盲旋转，输入为规范系数多项式。`ternary_cmux` 比较两条路径的完整旋转，Fourier 结果可能有不同的舍入误差。
 
 ## 运行
 
 ```sh
-cargo bench -p primus_ntru --bench encryption --features ntt
-cargo bench -p primus_ntru --bench primitives --features ntt
-cargo bench -p primus_ntru --bench constant_gadget --features ntt
+cargo bench -p primus_ntru --bench encryption --features ntt,rustfft,tfhe-fft
+cargo bench -p primus_ntru --bench primitives --features ntt,rustfft,tfhe-fft
+cargo bench -p primus_ntru --bench constant_gadget --features ntt,rustfft
 cargo bench -p primus_ntru --bench lwe_return
-cargo bench -p primus_ntru --bench ternary_cmux --features ntt
+cargo bench -p primus_ntru --bench ternary_cmux --features ntt,rustfft,tfhe-fft
 ```
 
-追加 `-- '<regex>'` 筛选用例，或追加 `-- --test` 只做 smoke check、不采集计时样本。验证命令见 workspace [测试指南](../../../guides/development/testing.md)。
+追加 `-- '<regex>'` 筛选用例，或追加 `-- --test` 只做 smoke check、不采集计时样本。以上 features 包含各 target 必需的 FFT engine。验证命令见 workspace [测试指南](../../../guides/development/testing.md)。

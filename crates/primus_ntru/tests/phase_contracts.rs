@@ -5,11 +5,13 @@ use primus_decompose::primitive::ApproxSignedBasis;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_distr::sample_gaussian_values_to;
 use primus_encoding::PlaintextEmbedding;
-use primus_modulus::BarrettModulus;
+use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntru::{
-    NlevCiphertext, NlevParameters, NtruCiphertext, NtruParameters, NtruSecretKey,
-    NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace, NttNtruSecretKey,
-    NttNtruTraceKey, NttNtruTraceWorkspace, SecretKeyDistr,
+    FourierNtruGadgetEncryptWorkspace, FourierNtruSecretKey, FourierNtruTraceKey,
+    FourierNtruTraceWorkspace, NlevCiphertext, NlevParameters, NtruCiphertext, NtruParameters,
+    NtruSecretKey, NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace,
+    NttNtruSecretKey, NttNtruTraceKey, NttNtruTraceWorkspace, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
@@ -313,6 +315,120 @@ fn fused_public_initialization_has_the_predicted_decomposition_residual() {
     }
 }
 
+fn check_native_lift<Table: FftTable>() {
+    let ring = Ring(1i128 << 32);
+    let inverse = ring.inverse(SECRET);
+    let table = Table::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let secret = NtruSecretKey::<u32>::new(
+        SECRET.map(|x| x as i32).to_vec(),
+        SecretKeyDistr::SparseTernary,
+    );
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let params = NtruParameters::new(
+        PolyLength::new(N),
+        4u32,
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let mut encryption = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
+    let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
+    for levels in [3, 4] {
+        let gadget = NlevParameters::with_ntru_params(
+            &params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(8),
+                level_count: Some(DecompositionLevelCount::new(levels)),
+            },
+        );
+        let basis = gadget.basis();
+        let mut workspace = primus_ntru::FourierNtruCmuxWorkspace::new(
+            PolyLength::new(N),
+            DecompositionLevelCount::new(levels),
+        );
+        let mut initializer =
+            primus_lattice::nlev::FourierNlev::<Vec<_>>::zero(gadget.fourier_nlev_len());
+        let mut positive = initializer.clone();
+        let mut negative = initializer.clone();
+        key.encrypt_nlev_constant_to(
+            1,
+            &mut initializer,
+            &gadget,
+            &mut fft,
+            &mut ZeroRng,
+            &mut encryption,
+        );
+        for (ternary, bit) in [(false, 0), (false, 1), (true, -1), (true, 0), (true, 1)] {
+            key.encrypt_nlev_constant_to(
+                u32::from(bit == 1),
+                &mut positive,
+                &gadget,
+                &mut fft,
+                &mut ZeroRng,
+                &mut encryption,
+            );
+            key.encrypt_nlev_constant_to(
+                u32::from(bit == -1),
+                &mut negative,
+                &gadget,
+                &mut fft,
+                &mut ZeroRng,
+                &mut encryption,
+            );
+            for input in [
+                embedded_fixture(&[0, 1, 127, 128, 257, ring.0 - 1, ring.0 / 2, ring.0 / 2 + 1]),
+                embedded_fixture(&[256, 512, 768, 1024, 0, ring.0 - 256, ring.0 - 512, 1]),
+            ] {
+                let decomposed = digits(ring, input, basis);
+                let reconstructed: Poly = std::array::from_fn(|i| {
+                    decomposed
+                        .iter()
+                        .zip(basis.scalar_iter())
+                        .map(|(d, g)| d[i] * i128::from(g))
+                        .sum()
+                });
+                if levels == 3 {
+                    assert_ne!(ring.scale(reconstructed, 1), input);
+                } else {
+                    assert_eq!(ring.scale(reconstructed, 1), input);
+                }
+                let public = Polynomial::new(coefficients(input));
+                for exponent in 0..2 * N {
+                    let rotation = match bit {
+                        -1 => (2 * N - exponent) % (2 * N),
+                        0 => 0,
+                        _ => exponent,
+                    };
+                    let expected_phase = ring.rotate(reconstructed, rotation);
+                    let expected = ring.mul(inverse, expected_phase);
+                    initializer.lift_monomial_to(
+                        &positive,
+                        ternary.then_some(&negative),
+                        &public,
+                        exponent,
+                        &mut output,
+                        basis,
+                        &mut fft,
+                        &mut workspace,
+                    );
+                    // This small native-u32 fixture rounds back to the exact
+                    // modular coefficient result with either FFT engine.
+                    let actual = polynomial(output.as_ref());
+                    assert_eq!(actual, expected);
+                    assert_eq!(ring.mul(SECRET, actual), expected_phase);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn native_fused_lift_matches_modular_inverse_and_decomposition_residual() {
+    check_native_lift::<RustFftTable>();
+    check_native_lift::<TfheFftTable>();
+}
+
 // Exact same-secret automorphism is f^-1 * sigma(f*c). This reference follows
 // the algebra, not the production permutation/key-switch implementation.
 fn modular_trace(ring: Ring, input: Poly, retained: usize) -> Poly {
@@ -322,6 +438,37 @@ fn modular_trace(ring: Ring, input: Poly, retained: usize) -> Poly {
         let half = ring.scale(output, inverse_scalar(2, ring.0).unwrap());
         let auto = ring.mul(inverse, ring.auto(ring.mul(SECRET, half), (1 << k) + 1));
         output = ring.add(half, auto);
+    }
+    output
+}
+
+// Zero sampled noise and all four base-256 digits give an exact same-secret
+// automorphism modulo 2^32. Native halving still floors canonical coefficients.
+fn native_trace(ring: Ring, inverse: Poly, input: Poly, retained: usize) -> Poly {
+    let mut output = input;
+    let mut expected_phase = project(ring.mul(SECRET, input), retained);
+    for k in retained.trailing_zeros() + 1..=N.trailing_zeros() {
+        let parity = output.map(|x| x % 2);
+        let half = output.map(|x| x / 2);
+        let degree = (1 << k) + 1;
+        let auto = ring.mul(inverse, ring.auto(ring.mul(SECRET, half), degree));
+        // Subsequent reverse steps are coefficient projectors. The Q/2 lift
+        // ambiguity vanishes modulo Q. This closed-form phase oracle does
+        // not repeat the ciphertext recurrence above.
+        expected_phase = ring.sub(
+            expected_phase,
+            project(ring.mul(SECRET, parity), 1 << (k - 1)),
+        );
+        output = ring.add(half, auto);
+    }
+    assert_eq!(ring.mul(SECRET, output), expected_phase);
+    let projection = project(ring.mul(SECRET, input), retained);
+    let levels = (N / retained).trailing_zeros();
+    let norm: i128 = SECRET.iter().map(|x| x.abs()).sum();
+    for error in ring.sub(expected_phase, projection) {
+        let distance = error.min(ring.0 - error);
+        // Only the unsigned floor contributes error in this exact fixture.
+        assert!(distance <= norm * i128::from(levels));
     }
     output
 }
@@ -411,6 +558,71 @@ fn ntt_reverse_trace_matches_exact_same_secret_oracle() {
             assert_eq!(polynomial(output.as_ref()), expected);
         }
     }
+}
+
+fn check_native_trace<Table: FftTable>() {
+    let ring = Ring(1i128 << 32);
+    let inverse = ring.inverse(SECRET);
+    let table = Table::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let secret = NtruSecretKey::new(
+        SECRET.map(|x| x as i32).to_vec(),
+        SecretKeyDistr::SparseTernary,
+    );
+    let params = NtruParameters::new(
+        PolyLength::new(N),
+        4u32,
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let gadget = NlevParameters::with_ntru_params(
+        &params,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: None,
+        },
+    );
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let trace = FourierNtruTraceKey::generate(
+        &secret,
+        &key,
+        &gadget,
+        &mut fft,
+        &mut ZeroRng,
+        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+    );
+    let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
+    // Repeat all eight-bit parity masks across the ring at three ranges.
+    // The number of cases stays fixed when the supported ring length increases.
+    let parity_inputs = [0, ring.0 / 2 - 2, ring.0 - 2]
+        .into_iter()
+        .flat_map(|base| {
+            (0..1usize << 8)
+                .map(move |bits| std::array::from_fn(|i| base + ((bits >> (i % 8)) & 1) as i128))
+        });
+    for input in trace_inputs(ring).into_iter().chain(parity_inputs) {
+        for retained in [1, 2, 4, N] {
+            let expected = native_trace(ring, inverse, input, retained);
+            let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
+            trace.apply_reverse_partial_to(
+                &NtruCiphertext::new(coefficients(input)),
+                retained,
+                &mut output,
+                &mut fft,
+                &mut workspace,
+            );
+            // Both engines round this small native-u32 fixture back to the
+            // exact modular result, including the unsigned floor error.
+            assert_eq!(polynomial(output.as_ref()), expected);
+        }
+    }
+}
+
+#[test]
+fn native_reverse_trace_matches_modular_keys_and_projected_floor_errors() {
+    check_native_trace::<RustFftTable>();
+    check_native_trace::<TfheFftTable>();
 }
 
 #[test]

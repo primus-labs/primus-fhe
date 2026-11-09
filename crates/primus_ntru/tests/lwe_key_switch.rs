@@ -767,9 +767,52 @@ fn check_ntt_encryption<T: FheUint, Table: primus_ntt::MonomialNttTable<ValueT =
     check_encrypted_return(&input, &secret, modulus);
 }
 
+// Include each FFT backend's torus recovery error in the encrypted return check.
+fn check_fourier_encryption<T: primus_fft::TorusFftValue, Table: primus_fft::FftTable>() {
+    use primus_fft::FftEngine;
+    use primus_ntru::{FourierNtruEncryptWorkspace, FourierNtruSecretKey, NtruParameters};
+    use primus_poly::Polynomial;
+    let table = Table::new(PolyLength::new(32));
+    let mut fft = FftEngine::new(&table);
+    let modulus = NativeModulus::<T>::new();
+    let params = NtruParameters::new(
+        PolyLength::new(32),
+        T::as_from(16u32),
+        modulus,
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let mut rng = StdRng::seed_from_u64(0x4e54524654);
+    let (secret, transformed) =
+        FourierNtruSecretKey::generate_pair(params.encryption_parameters(), &mut fft, &mut rng)
+            .unwrap();
+    let message = Polynomial::new(
+        (0..32usize)
+            .map(|i| T::as_from((3 * i + 1) % 8))
+            .collect::<Vec<_>>(),
+    );
+    let mut input = NtruCiphertext::zero(32);
+    transformed
+        .encrypt_message(
+            &message,
+            &params,
+            PlaintextEmbedding::Unsigned,
+            &mut fft,
+            &mut rng,
+            &mut FourierNtruEncryptWorkspace::new(PolyLength::new(32)),
+        )
+        .write_torus_form(&mut input, &mut fft);
+    check_encrypted_return(&input, &secret, modulus);
+}
+
 // Cover backend conversion and key independence beyond synthetic coefficient fixtures.
 #[test]
-fn encrypted_ntt_return_to_independent_noninvertible_lwe_secret() {
+fn encrypted_ntt_and_fourier_return_to_independent_noninvertible_lwe_secret() {
+    use primus_fft::{RustFftTable, TfheFftTable};
     check_ntt_encryption::<u32, primus_ntt::U32NttTable>(132_120_577);
     check_ntt_encryption::<u64, primus_ntt::U64NttTable>(1_125_899_906_826_241);
+    check_fourier_encryption::<u32, RustFftTable>();
+    check_fourier_encryption::<u32, TfheFftTable>();
+    check_fourier_encryption::<u64, RustFftTable>();
+    check_fourier_encryption::<u64, TfheFftTable>();
 }

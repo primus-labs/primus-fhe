@@ -45,6 +45,11 @@ harness = false
 required-features = ["ntt"]
 
 [[bench]]
+name = "ntru_fourier"
+harness = false
+required-features = ["rustfft", "tfhe-fft"]
+
+[[bench]]
 name = "ntru_ntt"
 harness = false
 required-features = ["ntt"]
@@ -66,7 +71,7 @@ required-features = ["rns"]
 # Targets declare the representations and concrete FFT engines they exercise.
 [[test]]
 name = "cmux_k"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "external_product"
@@ -74,7 +79,7 @@ required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "external_product_sum"
-required-features = ["ntt"]
+required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "fourier"

@@ -3,6 +3,7 @@
 use primus_decompose::{DecompositionConfig, primitive::ApproxSignedBasis};
 use primus_encoding::RoundedCodec;
 use primus_integer::FheUint;
+use primus_modulus::NativeModulus;
 use primus_ntru::NlevParameters;
 use primus_reduce::RingContext;
 use primus_shape::PolyLength;
@@ -221,5 +222,14 @@ impl<T: FheUint, M: RingContext<T>> CbsGadgetParameters<T, M> {
     pub fn is_compatible<LM: RingContext<T>>(&self, tfhe: &PbsParameters<T, M, LM>) -> bool {
         self.poly_length() == tfhe.poly_length()
             && self.output_basis.modulus() == tfhe.accumulator_ntru().cipher_modulus_value()
+    }
+}
+
+impl<T: FheUint> CbsGadgetParameters<T, NativeModulus<T>> {
+    /// Returns the number of complex values in the output Fourier NLev/NGSW.
+    #[must_use]
+    #[inline]
+    pub fn output_fourier_nlev_len(&self) -> usize {
+        self.output_nlev_len / 2
     }
 }

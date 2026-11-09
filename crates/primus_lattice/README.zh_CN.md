@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE NTT、GLWE Fourier、NTRU NTT 路径、RNS GLWE 实现和原生 BFV/BGV Hybrid product 共同使用。
+`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE/NTRU × Fourier/NTT 四条 TFHE 路径、RNS GLWE 实现和原生 BFV/BGV Hybrid product 共同使用。
 
 密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns)、[`primus_bfv`](../primus_bfv)、[`primus_bgv`](../primus_bgv) 等更高层负责。
 
@@ -20,15 +20,15 @@
 | `Glwe` | `k` 个掩码多项式，后接一个 body 多项式 | 系数、NTT、Fourier、CRT/DCRT |
 | `Glev` | 按分解顺序排列的 `L` 个 GLWE 密文 | 系数、NTT、Fourier、CRT/DCRT |
 | `Ggsw` | `k+1` 行 GLev | 系数、NTT、Fourier、CRT/DCRT |
-| `Ntru` | 单个多项式 `h`，在秘密多项式 `f` 下的相位为 `f*h` | 系数、NTT |
-| `Nlev` / `Ngsw` | 按分解顺序排列的 `L` 个 NTRU 多项式 | 系数、NTT |
+| `Ntru` | 单个多项式 `h`，在秘密多项式 `f` 下的相位为 `f*h` | 系数、NTT、Fourier |
+| `Nlev` / `Ngsw` | 按分解顺序排列的 `L` 个 NTRU 多项式 | 系数、NTT、Fourier |
 
 RLWE、RLev 和 RGSW 分别使用 `Glwe`、`Glev` 和 `Ggsw`，并配合 `GlweSize::new(GlweDimension::new(1), PolyLength::new(N))`；NTT 和 CRT/DCRT 表示同样使用维度为 1 的布局。
 
 这里的通用 RLWE 布局使用 mask/body 顺序。原生 BFV/BGV 的 `[c0,c1]` plus-phase
 存储遵循方案层和 native Hybrid 契约；借用 view 不会自动转换这两种约定。
 
-类型通过对应模块导出，例如 `glwe::Glwe`、`ggsw::NttGgsw`、`ngsw::NttNgsw`。前缀表示数据形式。`Torus*` 是系数类型在 native torus 场景下的别名，不会强制模数，也不执行编码。
+类型通过对应模块导出，例如 `glwe::Glwe`、`ggsw::NttGgsw`、`ngsw::FourierNgsw`。前缀表示数据形式。`Torus*` 是系数类型在 native torus 场景下的别名，不会强制模数，也不执行编码。
 
 NLev 与 NGSW 的存储形状相同，但语义不同：`beta` 的 NLev 各层相位为 `v_i*beta`，而 `beta` 的 NGSW 各层相位为 `v_i*f*beta`。它们适用的 gadget product 不同，因此保留为独立类型。
 
@@ -65,9 +65,9 @@ NLev 与 NGSW 的存储形状相同，但语义不同：`beta` 的 NLev 各层�
 | 明文与 gadget 更新 | `add_plaintext_assign`、`set_trivial`、`add_gadget_diagonal_assign` |
 | 表示转换 | `into_ntt_form`、`write_ntt_form`、逆变换到系数形式、`write_fourier_form`、`write_torus_form` |
 | 样本抽取 | `extract_lwe_at_to`、GLWE 紧凑抽取、打包 RLWE 抽取、`inverse_extract_glwe_to` |
-| 外积 | Fourier/NTT GGSW 与 NTT NTRU gadget product；DCRT GLev 多项式乘法和 GGSW 乘法 |
+| 外积 | Fourier/NTT GGSW 与 NTRU gadget product；DCRT GLev 多项式乘法和 GGSW 乘法 |
 | CMUX | GGSW/NGSW 的 `cmux_to`、`cmux_k_to`、`cmux_monomial_to` |
-| Ternary 旋转 | NTT/Fourier GGSW 和 NTT NGSW 的 `cmux_ternary_monomial_to` |
+| Ternary 旋转 | NTT/Fourier GGSW 和 NGSW 的 `cmux_ternary_monomial_to` |
 
 实际支持的接口取决于类型和表示。RNS scalar/factor 参数使用按模数顺序排列的 `primus_rns::Residues` 和 `ResidueFactors`。
 
@@ -107,8 +107,8 @@ Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridMod
 | --- | --- |
 | `NttGlweExternalProductWorkspace` / `FourierGlweExternalProductWorkspace` | `GadgetSize` 中的 GLWE 布局与分解层数 |
 | `NttGlweTernaryCmuxWorkspace` / `FourierGlweTernaryCmuxWorkspace` | 固定 `GadgetSize` |
-| `NttNtruExternalProductWorkspace` | 多项式长度 |
-| `NttNtruCmuxWorkspace` | 多项式长度与分解层数 |
+| `NttNtruExternalProductWorkspace` / `FourierNtruExternalProductWorkspace` | 多项式长度 |
+| `NttNtruCmuxWorkspace` / `FourierNtruCmuxWorkspace` | 多项式长度与分解层数 |
 | `DcrtGlevMulWorkspace` | RNS gadget 布局与乘积模数的 limb 宽度 |
 
 工作区提供可复用 scratch，不验证密钥、basis、table 或模数身份。覆盖式外积会初始化所需缓冲区，合法调用之间无需 reset；累加接口要求输出已有有效值。GLWE 外积工作区的 `with_rebound` 临时改变分解层数，保持 GLWE 形状，并在调用结束后恢复原布局；`resize` 可改变缓冲区尺寸。

@@ -17,6 +17,7 @@ pub struct CbsParameters<T: FheUint, M: RingContext<T>, LM: RingContext<T> = M> 
     gadget: CbsGadgetParameters<T, M>,
     input_codec: RoundedCodec<T, LM>,
     projection: crate::NtruProjectionMethod,
+    fourier_precision: crate::FourierCbsPrecision,
 }
 
 impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> CbsParameters<T, M, LM> {
@@ -26,11 +27,55 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> CbsParameters<T, M, LM> 
         M: TryFrom<primus_tfhe::ModulusConfig<M>, Error = primus_tfhe::ModulusConfigError>,
         LM: TryFrom<primus_tfhe::ModulusConfig<LM>, Error = primus_tfhe::ModulusConfigError>,
     {
-        Self::try_with_config(
+        let mut result = Self::try_with_config(
             PbsParameters::try_from_config(config.pbs)?,
             config.gadget,
             config.projection,
-        )
+        )?;
+        result.fourier_precision = config.fourier_precision;
+        for (precision, basis, branches) in [
+            (
+                config.fourier_precision.blind_rotation,
+                result.pbs.blind_rotation().basis(),
+                3u128,
+            ),
+            (
+                config.fourier_precision.trace,
+                result.gadget.trace().basis(),
+                1,
+            ),
+            (
+                config.fourier_precision.scheme_switch,
+                result.gadget.scheme_switch().basis(),
+                1,
+            ),
+        ] {
+            if let crate::FourierPrecision::Split { low_bits } = precision {
+                if T::BITS != 64
+                    || result
+                        .pbs
+                        .accumulator_ntru()
+                        .cipher_modulus_value()
+                        .is_some()
+                    || !(1..64).contains(&low_bits)
+                {
+                    return Err(TfheParameterError::UnsupportedFourierPrecision);
+                }
+                // Leave one bit below signed-i128 saturation in the inverse
+                // conversion. This bounds arithmetic range, not FFT accuracy.
+                let factor = result.pbs.poly_length().get() as u128
+                    * basis.level_count().get() as u128
+                    * branches;
+                let width = low_bits.max(64 - low_bits);
+                let bound = factor
+                    .checked_mul(1u128 << (basis.log_basis().get() - 1))
+                    .and_then(|v| v.checked_mul((1u128 << width) - 1));
+                if !bound.is_some_and(|v| v < (1u128 << 126)) {
+                    return Err(TfheParameterError::UnsupportedFourierPrecision);
+                }
+            }
+        }
+        Ok(result)
     }
 
     /// Adds CBS to an already prepared PBS domain without rebuilding its samplers.
@@ -52,7 +97,14 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> CbsParameters<T, M, LM> 
             gadget,
             input_codec,
             projection,
+            fourier_precision: crate::FourierCbsPrecision::ORDINARY,
         })
+    }
+
+    /// Returns the representation required of all three evaluation materials.
+    #[must_use]
+    pub fn fourier_precision(&self) -> crate::FourierCbsPrecision {
+        self.fourier_precision
     }
 
     /// Returns the NGSW-only projection strategy. Backend construction checks support;
@@ -115,7 +167,9 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> CbsParameters<T, M, LM> 
             .compile_lookup_table_slice(&self.input_codec, values)
     }
 
-    /// Recovers the shared PBS parameters and drops the CBS gadgets.
+    /// Recovers the shared PBS parameters, dropping CBS gadgets and Fourier precision.
+    /// A new PBS-only context requires ordinary BR material; this conversion
+    /// does not convert an existing split BSK into ordinary material.
     #[must_use]
     pub fn into_pbs_parameters(self) -> PbsParameters<T, M, LM> {
         self.pbs

@@ -65,9 +65,12 @@ precision limits. [Fourier error budget](../development/bootstrapping-contracts.
 
 Choose the projection strategy before generating keys and preparing scratch.
 NTT CBS performance presets use `PairedTrace`; the default configuration uses
-`Separate`. Historical NTT results showed faster trace-plus-scheme-switch
-projection with higher key and scratch costs than `Separate`. Compare the full
-request and its error budget when selecting a strategy.
+`Separate`. Fourier fusion and pairing require split trace and scheme switching,
+and NLEV-only or dual outputs use separate operations. Historical NTT paired
+trace reduced the measured trace-plus-switching projection at higher key and
+scratch costs than `Separate`. Fourier complete one-hot and LUT results were
+mixed, including cases where faster projection did not reduce request time.
+Compare the complete request and its error budget before choosing a strategy.
 [Projection and precision contract](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
 
 ## Historical evidence

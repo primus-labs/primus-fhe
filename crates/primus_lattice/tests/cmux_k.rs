@@ -3,10 +3,11 @@
 
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
+use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
 use primus_lattice::{
-    ngsw::{Ngsw, NttNgsw},
+    ngsw::{FourierNgsw, FourierNgswOwned, Ngsw, NttNgsw},
     ntru::Ntru,
-    workspace::NttNtruExternalProductWorkspace,
+    workspace::{FourierNtruExternalProductWorkspace, NttNtruExternalProductWorkspace},
 };
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttTable, U32NttTable};
@@ -142,3 +143,31 @@ fn ntt_cmux_checks_shapes_before_each_pair_and_recovers() {
 }
 
 // Bind one FFT instance to the native-torus control and all recovery calls.
+fn fourier<Table: FftTable>() {
+    let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(8), None);
+    let table = Table::new(PolyLength::new(N));
+    let mut fft = FftEngine::new(&table);
+    let mut control = FourierNgswOwned::zero(basis.level_count().get() * N / 2);
+    control_one(&basis).write_fourier_form(&mut control, &mut fft);
+    let control_len = control.as_ref().len();
+    let mut storage = control.as_ref().to_vec();
+    storage.push(Complex64::default());
+    let mut workspace = FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    check_shapes(control_len, |lengths, default, candidates, output| {
+        FourierNgsw::cmux_k_to(
+            lengths.iter().map(|&len| FourierNgsw::new(&storage[..len])),
+            default,
+            candidates,
+            output,
+            &basis,
+            &mut fft,
+            &mut workspace,
+        );
+    });
+}
+
+#[test]
+fn fourier_cmux_checks_shapes_before_each_pair_and_recovers() {
+    fourier::<RustFftTable>();
+    fourier::<TfheFftTable>();
+}

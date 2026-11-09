@@ -13,9 +13,14 @@ pub use dcrt_glev_mul::DcrtGlevMulWorkspace;
 pub(crate) use dcrt_glev_mul::DcrtGlevMulWorkspaceRefMut;
 
 #[cfg(feature = "fourier")]
-pub(crate) use fourier::FourierGlweExternalProductWorkspaceRefMut;
+pub use fourier::{
+    FourierGlweExternalProductWorkspace, FourierGlweTernaryCmuxWorkspace, FourierNtruCmuxWorkspace,
+    FourierNtruExternalProductWorkspace, FourierNtruSplitWorkspace,
+};
 #[cfg(feature = "fourier")]
-pub use fourier::{FourierGlweExternalProductWorkspace, FourierGlweTernaryCmuxWorkspace};
+pub(crate) use fourier::{
+    FourierGlweExternalProductWorkspaceRefMut, FourierNtruExternalProductWorkspaceRefMut,
+};
 #[cfg(feature = "ntt")]
 pub use ntt::{
     NttGlweExternalProductWorkspace, NttGlweTernaryCmuxWorkspace, NttNtruCmuxWorkspace,

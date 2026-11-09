@@ -6,6 +6,9 @@ use primus_ntru::NlevParameterError;
 /// An invalid combination of NTRU-based TFHE parameters.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum TfheParameterError {
+    /// Unsupported limb representation or backend capability.
+    #[error("unsupported Fourier precision: split requires native u64 and valid limb widths")]
+    UnsupportedFourierPrecision,
     /// Preparing a CBS trace, scheme-switch or output gadget failed.
     #[error("invalid circuit-bootstrap gadget parameters")]
     CircuitBootstrap(#[source] CircuitBootstrapParameterError),
@@ -187,6 +190,13 @@ pub enum SparseBootstrappingKeyError {
 /// Failure to bind or generate direct block-binary NTRU controls.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BlockBootstrappingKeyError {
+    /// The Fourier block mode requires u64.
+    #[error("Fourier block bootstrapping requires u64, got {bits}-bit coefficients")]
+    UnsupportedFourierWordSize {
+        /// Supplied coefficient word width.
+        bits: u32,
+    },
+
     /// Direct block controls require a block-binary secret.
     #[error("block bootstrapping requires a block-binary external secret")]
     UnsupportedSecretDistribution,

@@ -3,9 +3,13 @@
 
 use primus_distr::sample_gaussian_values_to;
 use primus_encoding::{PlaintextEmbedding, phase_error_magnitude_slice_to};
+use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable, TorusFftValue};
 use primus_integer::FheUint;
 use primus_modulus::{BarrettModulus, NativeModulus};
-use primus_ntru::{NtruError, NtruParameters, NtruSecretKey, NttNtruSecretKey, SecretKeyDistr};
+use primus_ntru::{
+    FourierNtruDecryptWorkspace, FourierNtruEncryptWorkspace, FourierNtruSecretKey, NtruError,
+    NtruParameters, NtruSecretKey, NttNtruSecretKey, SecretKeyDistr,
+};
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
@@ -106,8 +110,97 @@ fn ntt_secret_key_encodings_reuse_ciphertext_storage() {
     assert_ntt_roundtrip(1_125_899_906_826_241u64);
 }
 
+// Native torus encryption reuses both ciphertext and FFT workspaces.
+fn assert_fourier_roundtrip<T, Table>(table: &Table)
+where
+    T: FheUint + TorusFftValue,
+    Table: FftTable,
+{
+    let mut fft = FftEngine::new(table);
+    let params = NtruParameters::new(
+        PolyLength::new(POLY_LENGTH),
+        T::try_from(PLAIN_MODULUS).unwrap(),
+        NativeModulus::new(),
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let mut rng = StdRng::seed_from_u64(42);
+    let secret_key =
+        FourierNtruSecretKey::generate(params.encryption_parameters(), &mut fft, &mut rng).unwrap();
+    let mut encrypt_workspace = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut decrypt_workspace = FourierNtruDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let messages = messages::<T>();
+    let message = Polynomial::new(messages.as_slice());
+
+    let mut cipher = primus_ntru::FourierNtruCiphertext::<Vec<_>>::zero(table.fourier_length());
+    let mut raw = cipher.clone();
+    let mut encoded = Polynomial::new(vec![T::ZERO; POLY_LENGTH]);
+    for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
+        let mut message_rng = StdRng::seed_from_u64(43);
+        let mut raw_rng = StdRng::seed_from_u64(43);
+        params
+            .plaintext_codec()
+            .encode_slice_to(&messages, encoded.as_mut(), embedding);
+        // Reuse dirty output and scratch for the second embedding. Both entry
+        // points must produce identical Fourier values and consume the same RNG.
+        secret_key.encrypt_message_to(
+            &message,
+            &mut cipher,
+            &params,
+            embedding,
+            &mut fft,
+            &mut message_rng,
+            &mut encrypt_workspace,
+        );
+        secret_key.encrypt_encoded_to(
+            &encoded,
+            &mut raw,
+            params.encryption_parameters(),
+            &mut fft,
+            &mut raw_rng,
+            &mut encrypt_workspace,
+        );
+        assert_eq!(cipher.as_ref(), raw.as_ref());
+        assert_eq!(message_rng.next_u64(), raw_rng.next_u64());
+        assert_eq!(
+            secret_key
+                .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace)
+                .as_ref(),
+            messages
+        );
+    }
+
+    secret_key.encrypt_zeros_to(
+        &mut cipher,
+        params.encryption_parameters(),
+        &mut fft,
+        &mut rng,
+        &mut encrypt_workspace,
+    );
+    assert_eq!(
+        secret_key
+            .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace,)
+            .as_ref(),
+        vec![T::ZERO; POLY_LENGTH]
+    );
+}
+
 #[test]
-fn ntt_rejects_the_zero_key() {
+fn fourier_secret_key_encodings_reuse_ciphertext_storage() {
+    let poly_length = PolyLength::new(POLY_LENGTH);
+    let table = RustFftTable::new(poly_length);
+    assert_fourier_roundtrip::<u32, _>(&table);
+    assert_fourier_roundtrip::<u64, _>(&table);
+    #[cfg(feature = "tfhe-fft")]
+    {
+        let table = primus_fft::TfheFftTable::new(poly_length);
+        assert_fourier_roundtrip::<u32, _>(&table);
+        assert_fourier_roundtrip::<u64, _>(&table);
+    }
+}
+
+#[test]
+fn transform_backends_reject_the_zero_key() {
     let zero_key = NtruSecretKey::<u32>::new(
         vec![i32::default(); POLY_LENGTH],
         SecretKeyDistr::SparseTernary,
@@ -119,6 +212,134 @@ fn ntt_rejects_the_zero_key() {
         NttNtruSecretKey::try_from_coeff_secret_key(&zero_key, modulus, &ntt),
         Err(NtruError::NonInvertibleSecretKey)
     ));
+
+    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
+    let mut fft = FftEngine::new(&table);
+    assert!(matches!(
+        FourierNtruSecretKey::try_from_coeff_secret_key(&zero_key, &mut fft),
+        Err(NtruError::NonInvertibleSecretKey)
+    ));
+}
+
+fn assert_generated_fourier_pairs<Table: FftTable>(table: &Table) {
+    let mut fft = FftEngine::new(table);
+    let mut rng = StdRng::seed_from_u64(0xB701);
+    let message = Polynomial::new((0..POLY_LENGTH as u64).map(|i| i % 16).collect::<Vec<_>>());
+    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut decrypt = FourierNtruDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    for distribution in [
+        SecretKeyDistr::UniformBinary,
+        SecretKeyDistr::UniformTernary,
+        SecretKeyDistr::SparseTernary,
+        SecretKeyDistr::gaussian(3.2),
+        SecretKeyDistr::Ternary {
+            negative_one_probability: 0.125,
+            one_probability: 0.375,
+        },
+        SecretKeyDistr::FixedHammingWeightTernary { hamming_weight: 7 },
+        SecretKeyDistr::FixedCompositionTernary {
+            negative_one_weight: 3,
+            one_weight: 4,
+        },
+    ] {
+        let params = NtruParameters::new(
+            PolyLength::new(POLY_LENGTH),
+            16,
+            NativeModulus::new(),
+            distribution,
+            0.7,
+        );
+        let (coeff, key) =
+            FourierNtruSecretKey::generate_pair(params.encryption_parameters(), &mut fft, &mut rng)
+                .unwrap();
+        assert_eq!(coeff.distr(), distribution);
+        assert_eq!(coeff.as_slice().iter().sum::<i64>().rem_euclid(2), 1);
+        // Reimport the returned signed key to check the pair's identity, rather
+        // than decrypting with the same opaque key that encrypted the message.
+        let check_key = FourierNtruSecretKey::try_from_coeff_secret_key(&coeff, &mut fft).unwrap();
+        let cipher = key.encrypt_message(
+            &message,
+            &params,
+            PlaintextEmbedding::Unsigned,
+            &mut fft,
+            &mut rng,
+            &mut encrypt,
+        );
+        assert_eq!(
+            check_key
+                .decrypt_message(&cipher, &params, &mut fft, &mut decrypt)
+                .as_ref(),
+            message.as_ref(),
+        );
+    }
+}
+
+#[test]
+fn generated_fourier_pairs_preserve_key_identity() {
+    assert_generated_fourier_pairs(&RustFftTable::new(PolyLength::new(POLY_LENGTH)));
+    assert_generated_fourier_pairs(&TfheFftTable::new(PolyLength::new(POLY_LENGTH)));
+}
+
+#[test]
+fn native_fixed_even_weights_fail_without_sampling() {
+    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
+    let mut fft = FftEngine::new(&table);
+    for distribution in [
+        SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 2 },
+        SecretKeyDistr::FixedHammingWeightTernary { hamming_weight: 2 },
+        SecretKeyDistr::FixedCompositionTernary {
+            negative_one_weight: 1,
+            one_weight: 1,
+        },
+        SecretKeyDistr::FixedCompositionTernary {
+            negative_one_weight: 0,
+            one_weight: 0,
+        },
+    ] {
+        let params = NtruParameters::new(
+            PolyLength::new(POLY_LENGTH),
+            16u64,
+            NativeModulus::new(),
+            distribution,
+            0.7,
+        );
+        let mut rng = StdRng::seed_from_u64(0xB701);
+        let mut untouched = StdRng::seed_from_u64(0xB701);
+        let result =
+            FourierNtruSecretKey::generate_pair(params.encryption_parameters(), &mut fft, &mut rng);
+        assert!(matches!(result, Err(NtruError::NonInvertibleSecretKey)));
+        assert_eq!(rng.next_u64(), untouched.next_u64());
+    }
+}
+
+fn assert_unstable_inverse<Table: FftTable>(table: &Table, coeff: &NtruSecretKey<u64>) {
+    assert!(matches!(
+        FourierNtruSecretKey::try_from_coeff_secret_key(coeff, &mut FftEngine::new(table)),
+        Err(NtruError::UnstableFourierInverse),
+    ));
+}
+
+#[test]
+fn native_invertibility_does_not_imply_fourier_stability() {
+    const N: usize = 32;
+    // f = (1-X+X^2)^8 has f(1)=1, hence is a native-ring unit. At the
+    // negacyclic root exp(11*pi*i/32), |f| is about 1e-10. This imported
+    // integer key isolates the numerical gate; it is not a ternary sample.
+    let mut coefficients = vec![0i64; N];
+    coefficients[0] = 1;
+    for _ in 0..8 {
+        let mut product = vec![0; N];
+        for i in 0..N - 2 {
+            product[i] += coefficients[i];
+            product[i + 1] -= coefficients[i];
+            product[i + 2] += coefficients[i];
+        }
+        coefficients = product;
+    }
+    assert_eq!(coefficients.iter().sum::<i64>(), 1);
+    let coeff = NtruSecretKey::<u64>::new(coefficients, SecretKeyDistr::gaussian(3.2));
+    assert_unstable_inverse(&RustFftTable::new(PolyLength::new(N)), &coeff);
+    assert_unstable_inverse(&TfheFftTable::new(PolyLength::new(N)), &coeff);
 }
 
 #[test]
@@ -384,4 +605,58 @@ fn ordinary_operations_validate_before_sampling_or_writing() {
         .is_err()
     );
     assert!(output.iter().all(|&value| value == 7));
+
+    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
+    let mut fft = FftEngine::new(&table);
+    let params = NtruParameters::new(
+        PolyLength::new(POLY_LENGTH),
+        16u32,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    let short_params = NtruParameters::new(
+        PolyLength::new(POLY_LENGTH / 2),
+        16u32,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    let key =
+        FourierNtruSecretKey::generate(params.encryption_parameters(), &mut fft, &mut rng).unwrap();
+    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut decrypt = FourierNtruDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut input = key.encrypt_zeros(
+        params.encryption_parameters(),
+        &mut fft,
+        &mut rng,
+        &mut encrypt,
+    );
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| key.decrypt_message_to(
+            &input,
+            &mut output,
+            &short_params,
+            &mut fft,
+            &mut decrypt
+        )))
+        .is_err()
+    );
+    assert!(output.iter().all(|&value| value == 7));
+    let before = input.as_ref().to_vec();
+    let mut short_encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH / 2));
+    let mut rng = StdRng::seed_from_u64(91);
+    let mut expected_rng = StdRng::seed_from_u64(91);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| key.encrypt_zeros_to(
+            &mut input,
+            params.encryption_parameters(),
+            &mut fft,
+            &mut rng,
+            &mut short_encrypt
+        )))
+        .is_err()
+    );
+    assert_eq!(rng.next_u64(), expected_rng.next_u64());
+    assert_eq!(input.as_ref(), before);
 }

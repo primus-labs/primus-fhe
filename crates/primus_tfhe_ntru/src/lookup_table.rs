@@ -76,7 +76,7 @@ where
     /// `output_count` is positive and unpadded. The callback must return values
     /// in `0..t_out`. Input q and LUT-output Q must match these parameters.
     /// The returned program owns its coefficients, without borrowing codecs or
-    /// parameters. Backend context methods also prepare its NTT factors.
+    /// parameters. Backend context methods also prepare its NTT/Fourier factors.
     /// Callback order, scale conditions and noise requirements follow
     /// [`FactorizedLookupTable::try_new`]. Returned LWE messages use
     /// `codecs.output_codec()` at external q, including any Q→q return error.

@@ -18,7 +18,7 @@ use crate::{NtruBlindRotationControls, SparseBootstrappingKeyError};
 /// Sparse evaluation needs no separate NLEV initializer.
 ///
 /// The external secret is sampled without NTRU rejection; only the accumulator
-/// secret undergoes invertibility screening. The public
+/// secret undergoes invertibility (and Fourier stability) screening. The public
 /// map is conditioned on successful matching to the fixed external secret.
 /// These conditions need independent security analysis; no failure rate is certified.
 pub struct SparseNtruBootstrappingKey<T: FheUint> {
@@ -37,7 +37,8 @@ impl<T: FheUint> SparseNtruBootstrappingKey<T> {
     /// Controls must use these parameters' modulus, gadget scales and accumulator
     /// secret: NLEV bits in bucket zero, NGSW bits thereafter, with a dummy last.
     /// Their private assignment must cover each nonzero input exactly once.
-    /// The backend BR owner must retain the same basis and modulus.
+    /// The backend BR owner must retain the same basis and modulus. Fourier keys
+    /// recovered to coefficients retain their conversion and rounding error.
     ///
     /// # Errors
     /// Rejects a weight outside 0<h<n, too few buckets, an overflowing storage

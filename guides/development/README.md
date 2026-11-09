@@ -19,7 +19,7 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 | RNS conversion, raw GLWE and gadget evaluation | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
 | BFV coefficient/slot encryption, exact multiplication, relin, rotation and levels | [primus_bfv](../../crates/primus_bfv/README.md) |
 | BGV coefficient/slot encryption, multiplication, relin, rotation and levels | [primus_bgv](../../crates/primus_bgv/README.md) |
-| PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) |
+| PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) or [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md) |
 | One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
 | Functions on encrypted multi-chunk integers | External `primus_high_prec_lut` repository |
 | OMR detection, digest and recovery | External `primus_omr` repository |

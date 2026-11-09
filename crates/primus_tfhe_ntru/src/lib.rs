@@ -9,7 +9,7 @@
 //! Both share [`PbsParameters`] for numerical domains and sampling state.
 //! It also provides a [`LookupTableCompiler`] for Rounded LUTs. [`ClientKey`] owns the
 //! complete setup secrets; [`Encryptor`] and [`Decryptor`] borrow only the external
-//! message secret and bind its codec. Choose the NTT
+//! message secret and bind its codec. Choose the NTT/Fourier
 //! backend for transform tables, key generation and evaluators. Shared grouped
 //! coefficient storage is provided by [`NtruBlindRotationControls`];
 //! [`SparseNtruBootstrappingKey`] adds the sparse bucket map and public weight.
@@ -98,3 +98,6 @@ pub use primus_tfhe::{
 
 /// LWE public key used by the public-key client encryptor.
 pub use primus_lwe::LwePublicKey;
+
+pub use config::FourierCbsPrecision;
+pub use primus_ntru::FourierPrecision;
