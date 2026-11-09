@@ -7,7 +7,8 @@ use primus_modulus::UintModulus;
 use primus_reduce::EncodeSigned;
 
 pub use dcrt::{
-    DcrtGlevEncryptor, DcrtGlweDecryptWorkspace, DcrtGlweSecretKey, DcrtGlweSecretKeyContext,
+    DcrtGlevEncryptor, DcrtGlweDecryptWorkspace, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey,
+    DcrtGlweSecretKeyContext,
 };
 
 /// Encodes one signed secret polynomial without scaling or general reduction.

@@ -22,6 +22,10 @@ where
     /// The plaintext has one complete RNS polynomial; the output has the bound
     /// GLev layout. Both use the bound ordered basis and NTT representation.
     /// Gadget weights are applied without BFV plaintext scaling.
+    ///
+    /// # Panics
+    ///
+    /// Panics before sampling or writing if either allocation has an incorrect length.
     pub fn encrypt_dcrt_to<R, A, B>(
         &self,
         input: &DcrtPolynomial<A>,
@@ -34,7 +38,16 @@ where
     {
         let domain = self.domain;
         let parameters = domain.parameters();
-        debug_assert_eq!(output.as_ref().len(), parameters.rns_glev_len());
+        assert_eq!(
+            input.as_ref().len(),
+            parameters.rns_poly_len(),
+            "GLev plaintext length must match the bound RNS polynomial layout"
+        );
+        assert_eq!(
+            output.as_ref().len(),
+            parameters.rns_glev_len(),
+            "GLev output length must match the bound gadget layout"
+        );
         self.encrypt_dcrt_glev_kernel_to(input.as_view(), output.as_mut_view(), rng);
     }
 
@@ -43,6 +56,10 @@ where
     /// The message has one complete coefficient-domain RNS polynomial; the
     /// output is overwritten using the bound GLev layout.
     /// Gadget weights are applied without BFV plaintext scaling.
+    ///
+    /// # Panics
+    ///
+    /// Panics before sampling or writing if either allocation has an incorrect length.
     pub fn encrypt_crt_to<R, A, B>(
         &self,
         input: &CrtPolynomial<A>,
@@ -55,7 +72,16 @@ where
     {
         let domain = self.domain;
         let parameters = domain.parameters();
-        debug_assert_eq!(output.as_ref().len(), parameters.rns_glev_len());
+        assert_eq!(
+            input.as_ref().len(),
+            parameters.rns_poly_len(),
+            "GLev plaintext length must match the bound RNS polynomial layout"
+        );
+        assert_eq!(
+            output.as_ref().len(),
+            parameters.rns_glev_len(),
+            "GLev output length must match the bound gadget layout"
+        );
         self.encrypt_crt_glev_kernel_to(input.as_view(), output.as_mut_view(), rng);
     }
 
@@ -79,11 +105,9 @@ where
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        primus_distr::sample_crt_gaussian_values_to(
+        parameters.encryption_parameters().sample_noise_to(
             b.as_mut(),
-            poly_length,
             parameters.cipher_moduli_value(),
-            parameters.noise_distribution(),
             &mut *rng,
         );
 
@@ -146,11 +170,9 @@ where
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        primus_distr::sample_crt_gaussian_values_to(
+        parameters.encryption_parameters().sample_noise_to(
             b.as_mut(),
-            poly_length,
             parameters.cipher_moduli_value(),
-            parameters.noise_distribution(),
             &mut *rng,
         );
 

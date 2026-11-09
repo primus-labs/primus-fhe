@@ -166,14 +166,17 @@ where
     /// # Correctness
     /// Both ciphertexts must match the domain's complete RNS GLWE layout,
     /// NTT representation and the key's secret.
+    ///
+    /// # Panics
+    /// Panics before writes if either ciphertext has an incorrect complete length.
     pub fn trace_to<A: Data<Elem = T>, B: DataMut<Elem = T>>(
         &mut self,
         input: &DcrtGlweCiphertext<A>,
         output: &mut DcrtGlweCiphertext<B>,
     ) {
         let len = self.domain.parameters().rns_glwe_len();
-        debug_assert_eq!(input.as_ref().len(), len);
-        debug_assert_eq!(output.as_ref().len(), len);
+        assert_eq!(input.as_ref().len(), len);
+        assert_eq!(output.as_ref().len(), len);
         self.key.trace_kernel_to(
             input.as_view(),
             output.as_mut_view(),

@@ -60,24 +60,16 @@ where
     }
 
     /// Computes the DCRT phase with complete, matching layouts in parameter basis order.
-    fn phase_kernel_to(
-        &self,
-        input: DcrtGlweCiphertext<&[T]>,
-        mut phase: DcrtPolynomial<&mut [T]>,
-    ) {
+    fn phase_kernel_to(&self, input: DcrtGlweCiphertext<&[T]>, phase: DcrtPolynomial<&mut [T]>) {
         let parameters = self.parameters;
-        let poly_length = parameters.poly_length().get();
-        let moduli = parameters.cipher_moduli();
-
-        let (a, b) = input.a_b(parameters.rns_poly_len());
-
-        phase.set_zero();
-
-        self.key.iter_dcrt_poly().zip(a).for_each(|(si, ai)| {
-            phase.add_mul_assign(&ai, &si, poly_length, moduli);
-        });
-
-        b.sub_rev_assign(&mut phase, poly_length, moduli);
+        super::raw::phase_kernel_to(
+            self.key,
+            parameters.size(),
+            parameters.cipher_moduli(),
+            input,
+            phase,
+            true,
+        );
     }
 
     /// Uses an erasing workspace whose shape matches the bound parameters.

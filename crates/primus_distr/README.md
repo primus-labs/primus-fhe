@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh_CN.md)
 
-`primus_distr` provides the discrete probability distributions and batch sampling helpers used by [Primus FHE](../../README.md). It covers binary and ternary secrets, centered discrete Gaussian noise, modular and signed output representations, CRT batch layouts, and statistical diagnostics.
+`primus_distr` provides the discrete probability distributions and batch sampling helpers used by [Primus FHE](../../README.md). It covers binary and ternary secrets, exact centered-binomial and discrete Gaussian errors, modular and signed output representations, CRT batch layouts, and statistical diagnostics.
 
 > [!WARNING]
 > This crate is part of the experimental Primus FHE workspace. Its API, sampling algorithms, and numerical contracts are unstable and may change incompatibly at any time.
@@ -15,10 +15,30 @@ English | [简体中文](README.zh_CN.md)
 | `SparseTernaryDistr<T>` | Samples from `{0, 1, -1}` with probabilities `1/2`, `1/4`, and `1/4`; the caller supplies the representation of `-1` |
 | `DiscreteGaussian<T>` | Centered Gaussian samples encoded as canonical unsigned residues modulo a caller-supplied modulus |
 | `SignedDiscreteGaussian<T>` | Centered Gaussian samples represented directly by a signed integer type |
+| `CenteredBinomial<T>` | Exact difference of two independent Binomial(eta, 1/2) variables, in a signed type |
 | `CDTSampler<T>` / `SignedCDTSampler<T>` | Explicit portable 64-bit cumulative-distribution-table backends |
 | `DiscreteZiggurat<T>` / `SignedDiscreteZiggurat<T>` | Explicit discrete Ziggurat backends for larger supports |
 
 The scalar sampler types above implement `rand::distr::Distribution`. Batch helpers require an RNG implementing both `rand::Rng` and `rand::CryptoRng`.
+
+## Error distributions
+
+`ErrorDistribution` explicitly chooses `Gaussian { standard_deviation }` or `CenteredBinomial { eta }`; `ErrorSampler<T>::try_new` prepares signed output in `T::SignedInteger` and canonical CRT output in `T`. Secret and ephemeral-key distributions remain separate roles.
+
+CBD eta is in `1..=32`, including exact CBD1 and CBD21. Each coefficient is the difference of the Hamming weights of two independent eta-bit strings, with support `[-eta, eta]` and variance `eta/2`. One u64 is consumed per coefficient; unused high bits are discarded. Equal variance does not make CBD and Gaussian interchangeable. Gaussian preparation retains the existing truncated sampler and scale.
+
+`sample_signed_to` and `sample_crt_to` overwrite caller storage without allocating. CRT batches sample one integer per coefficient and encode that same sample under every modulus. The public CRT entry checks complete output lengths and each modulus's support before writing or consuming randomness; empty output consumes no randomness. `maximum_magnitude`, `distribution` and `validate_modulus` expose the prepared mathematical contract. `standard_deviation` reports the Gaussian scale or the exact CBD value `sqrt(eta/2)`.
+
+```rust
+use primus_distr::{ErrorDistribution, ErrorSampler};
+use rand::{SeedableRng, rngs::StdRng};
+
+let error = ErrorSampler::<u64>::try_new(
+    ErrorDistribution::CenteredBinomial { eta: 21 },
+).unwrap();
+let mut coefficients = [0; 16]; // N=8, two modulus-major limbs
+error.sample_crt_to(&mut coefficients, 8, &[97, 193], &mut StdRng::seed_from_u64(7));
+```
 
 ## Secret-key distribution parameters
 

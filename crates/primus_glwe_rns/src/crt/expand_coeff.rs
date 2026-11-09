@@ -1,4 +1,4 @@
-use primus_data::DataMut;
+use primus_data::{Data, DataMut};
 use primus_factor::ShoupFactor;
 use primus_integer::{AsInto, BigUint, FheUint};
 use primus_ntt::NttTable;
@@ -77,9 +77,9 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         }
     }
 
-    /// Expands a validated power-of-two prefix with the bound serial scratch.
-    /// Full and partial evaluators each check their output count before entering.
-    /// Ciphertext layouts remain caller preconditions, diagnosed here in debug builds.
+    /// Expands a validated count with the bound serial scratch.
+    /// Non-power-of-two counts require the supported-prefix plaintext condition.
+    /// Public evaluators validate counts and complete ciphertext layouts once.
     /// Converts each output to a view only when visiting its node; no view list is allocated.
     fn expand_kernel_to<M, Table, B>(
         &self,
@@ -93,18 +93,10 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         B: DataMut<Elem = T>,
     {
         let params = domain.parameters();
-        let len = params.rns_glwe_len();
-        debug_assert_eq!(ciphertext.as_ref().len(), len);
-        debug_assert!(
-            result
-                .iter()
-                .all(|ciphertext| ciphertext.as_ref().len() == len)
-        );
-
         let poly_length = params.poly_length().get();
         let count = result.len();
 
-        let log_d = count.trailing_zeros() as usize;
+        let log_d = count.next_power_of_two().trailing_zeros() as usize;
         let rns_poly_len = params.rns_poly_len();
 
         ciphertext.mul_factor_to(
@@ -118,10 +110,12 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         let (crt_glwe, auto_workspace) = workspace.as_mut();
         for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
             let level_len = 1 << i;
-            let (x, y) = result[..level_len * 2].split_at_mut(level_len);
+            let end = (level_len * 2).min(count);
+            let (lower, upper) = result[..end].split_at_mut(level_len);
+            let (paired, constant) = lower.split_at_mut(upper.len());
             let monomial_degree = poly_length * 2 - level_len;
 
-            x.iter_mut().zip(y).for_each(|(a_0, b_0)| {
+            paired.iter_mut().zip(upper).for_each(|(a_0, b_0)| {
                 Self::expand_pair_kernel(
                     a_0.as_mut_view(),
                     b_0.as_mut_view(),
@@ -132,6 +126,12 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
                     auto_workspace,
                 );
             });
+            // Only the final level can have unpaired leaves. Their plaintext
+            // support is already constant; double to finish B=next_pow2(k)
+            // normalization without introducing another key-switch error.
+            for leaf in constant {
+                Self::double_leaf_kernel(leaf, domain);
+            }
         }
     }
 
@@ -150,18 +150,10 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         Table: NttTable<ValueT = T>,
     {
         let params = domain.parameters();
-        let len = params.rns_glwe_len();
-        debug_assert_eq!(ciphertext.as_ref().len(), len);
-        debug_assert!(
-            result
-                .iter()
-                .all(|ciphertext| ciphertext.as_ref().len() == len)
-        );
-
         let poly_length = params.poly_length().get();
         let count = result.len();
 
-        let log_d = count.trailing_zeros() as usize;
+        let log_d = count.next_power_of_two().trailing_zeros() as usize;
         let rns_poly_len = params.rns_poly_len();
 
         ciphertext.mul_factor_to(
@@ -174,24 +166,36 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
 
         for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
             let level_len = 1 << i;
-            let (x, y) = result[..level_len * 2].split_at_mut(level_len);
+            let end = (level_len * 2).min(count);
+            let (lower, upper) = result[..end].split_at_mut(level_len);
+            let (paired, constant) = lower.split_at_mut(upper.len());
             let monomial_degree = poly_length * 2 - level_len;
 
-            x.par_iter_mut().zip(y.par_iter_mut()).for_each_init(
-                || workspace_pool.acquire(),
-                |guard, (a_0, b_0)| {
+            let chunk_size = paired.len().div_ceil(workspace_pool.capacity());
+            paired
+                .par_chunks_mut(chunk_size)
+                .zip(upper.par_chunks_mut(chunk_size))
+                .for_each(|(left, right)| {
+                    let mut guard = workspace_pool.acquire();
                     let (crt_glwe, auto_workspace) = guard.workspace_mut().as_mut();
-                    Self::expand_pair_kernel(
-                        a_0.as_mut_view(),
-                        b_0.as_mut_view(),
-                        auto_key,
-                        monomial_degree,
-                        domain,
-                        crt_glwe.as_mut_view(),
-                        auto_workspace,
-                    );
-                },
-            );
+                    for (a_0, b_0) in left.iter_mut().zip(right) {
+                        Self::expand_pair_kernel(
+                            a_0.as_mut_view(),
+                            b_0.as_mut_view(),
+                            auto_key,
+                            monomial_degree,
+                            domain,
+                            crt_glwe.as_mut_view(),
+                            auto_workspace,
+                        );
+                    }
+                });
+            // Only the final level can have unpaired leaves. Their plaintext
+            // support is already constant; double to finish B=next_pow2(k)
+            // normalization without introducing another key-switch error.
+            for leaf in constant {
+                Self::double_leaf_kernel(leaf, domain);
+            }
         }
     }
 
@@ -222,4 +226,41 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         rhs.mul_monomial_assign(monomial_degree, poly_length, rns_poly_len, moduli);
         lhs.add_assign(&scratch, poly_length, rns_poly_len, moduli);
     }
+
+    fn double_leaf_kernel<M, Table, B>(
+        leaf: &mut CrtGlweCiphertext<B>,
+        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+    ) where
+        M: FieldContext<T>,
+        Table: NttTable<ValueT = T>,
+        B: DataMut<Elem = T>,
+    {
+        let parameters = domain.parameters();
+        for mut polynomial in leaf.iter_crt_poly_mut(parameters.rns_poly_len()) {
+            for (limb, &modulus) in polynomial
+                .iter_each_modulus_mut(parameters.poly_length().get())
+                .zip(parameters.cipher_moduli())
+            {
+                modulus.reduce_double_slice_assign(limb);
+            }
+        }
+    }
+}
+
+/// Validate the entire batch before normalization can write its first output.
+fn assert_expansion_layout<T: FheUint, B: Data<Elem = T>>(
+    input_length: usize,
+    output: &[CrtGlweCiphertext<B>],
+    expected_length: usize,
+) {
+    assert_eq!(
+        input_length, expected_length,
+        "expansion input layout mismatch"
+    );
+    assert!(
+        output
+            .iter()
+            .all(|ciphertext| ciphertext.as_ref().len() == expected_length),
+        "expansion output layout mismatch",
+    );
 }
