@@ -2,9 +2,6 @@ use core::arch::x86_64::*;
 
 use super::arithmetic::{mul_mod_lazy_avx512, reduce_once_avx512};
 
-// Butterflies
-// ---------------------------------------------------------------------------
-
 /// Forward Harvey butterfly on 16 u32 lanes.
 #[target_feature(enable = "avx512f")]
 #[inline]
@@ -40,5 +37,3 @@ pub(super) fn inv_butterfly_avx512(
     let y_new = mul_mod_lazy_avx512(ty, w, wp, q);
     (x_new, y_new)
 }
-
-// ---------------------------------------------------------------------------

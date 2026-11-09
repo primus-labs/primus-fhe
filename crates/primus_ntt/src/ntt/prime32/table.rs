@@ -1,46 +1,44 @@
 use aligned_vec::{AVec, avec};
-use primus_data::{DataMut, RawData};
-use primus_factor::{FactorBase, FactorMul, ShoupFactor};
+use primus_factor::{FactorMul, ShoupFactor};
 use primus_gcd::Xgcd;
-use primus_poly::{NttPolynomial, Polynomial};
 use primus_reduce::FieldContext;
+use primus_shape::PolyLength;
 
-#[cfg(target_arch = "x86_64")]
-use crate::constants::{HAS_AVX2, HAS_AVX512F};
-use crate::{NttError, ntt::NttTable, reverse::ReverseLsbs, root::PrimitiveRoot};
+use crate::{
+    NttError,
+    ntt::{MonomialNttTable, NttTable, assert_ntt_length},
+    reverse::reverse_lsbs,
+    root::try_minimal_primitive_root,
+};
 
 use super::scalar;
 #[cfg(target_arch = "x86_64")]
 use super::{avx2::precompute::build_avx2_roots_u32, avx512::precompute::build_avx512_roots_u32};
 
 /// Backend selector for `U32NttTable`.
+#[cfg(target_arch = "x86_64")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum U32Backend {
     Scalar,
     /// AVX2 backend — available on x86_64 with `avx2` target feature.
-    #[cfg(target_arch = "x86_64")]
     Avx2,
     /// AVX-512 backend — available on x86_64 with `avx512f` target feature.
-    #[cfg(target_arch = "x86_64")]
     Avx512,
 }
 
 /// Specialized NTT table for `u32` coefficients.
 ///
-/// Stores roots and Barrett-32 preconditioners in structure-of-arrays layout
-/// for fast scalar (and future SIMD) access.
+/// Stores canonical roots and Barrett-32 preconditioners plus the packed root
+/// layout required by the backend selected at construction.
 ///
 /// # Constraints
 ///
 /// - `q < 2^30` — ensures lazy ranges `[0, 4q)` fit in `u32`.
 #[derive(Clone)]
 pub struct U32NttTable {
-    pub(super) n: usize,
-    pub(super) log_n: u32,
+    pub(super) poly_length: PolyLength,
     pub(super) q: u32,
     pub(super) two_q: u32,
-    pub(super) root: u32,
-    pub(super) inv_root: u32,
     pub(super) inv_n: u32,
     pub(super) inv_n_precon: u32,
     /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
@@ -56,11 +54,6 @@ pub struct U32NttTable {
     pub(super) inv_roots: AVec<u32>,
     /// Barrett-32 preconditioners for `inv_roots` (size `n`).
     pub(super) inv_roots_precon: AVec<u32>,
-
-    /// Ordinal powers: `[1, w, w^2, ..., w^(2n-1)]` (size `2n`).
-    ordinal_roots: Vec<u32>,
-    /// Bit-reversed index mapping (size `n`).
-    reverse_lsbs: Vec<usize>,
 
     /// AVX2 forward roots pre-expanded for T4/T2 vector loads (size ≈ n).
     #[cfg(target_arch = "x86_64")]
@@ -87,150 +80,106 @@ pub struct U32NttTable {
     #[cfg(target_arch = "x86_64")]
     pub(super) avx512_inv_roots_precon: AVec<u32>,
 
+    #[cfg(target_arch = "x86_64")]
     backend: U32Backend,
 }
 
 /// Compute the modular inverse of `a` modulo `q`.
 ///
-/// Uses `primus_gcd::Xgcd::gcdinv` — an optimized binary GCD
-/// that avoids division instructions.
+/// Uses `primus_gcd::Xgcd::gcdinv`, which specializes quotients `1`, `2`, and
+/// `3` before falling back to integer division.
 fn mod_inv(a: u32, q: u32) -> u32 {
-    debug_assert!(a < q);
     let (inv, gcd) = u32::gcdinv(a, q);
     assert_eq!(gcd, 1, "a={a} is not invertible modulo q={q}");
     inv
 }
 
 impl U32NttTable {
-    /// Returns the modulus `q`.
-    #[inline]
-    pub fn modulus(&self) -> u32 {
-        self.q
-    }
-
-    /// Returns `log2(N)`.
-    #[inline]
-    pub fn log_n(&self) -> u32 {
-        self.log_n
-    }
-
-    /// Returns the polynomial length `N`.
-    #[inline]
-    pub fn n(&self) -> usize {
-        self.n
-    }
-
-    /// Returns the primitive `2N`-th root of unity.
-    #[inline]
-    pub fn root(&self) -> u32 {
-        self.root
-    }
-
-    /// Returns the inverse of the primitive root.
-    #[inline]
-    pub fn inv_root(&self) -> u32 {
-        self.inv_root
-    }
-
-    /// Returns the inverse of `N` modulo `q`.
-    #[inline]
-    pub fn inv_n(&self) -> u32 {
-        self.inv_n
-    }
-
     /// Dispatch forward transform to the selected backend.
     ///
-    /// SIMD paths require `n ≥ 32`; smaller transforms go directly to scalar.
+    /// `PolyLength` guarantees a complete SIMD block for every supported size.
     #[inline]
     fn dispatch_forward(&self, values: &mut [u32], output_mod_factor: u32) {
-        if self.n >= 32 {
-            match self.backend {
-                #[cfg(target_arch = "x86_64")]
-                U32Backend::Avx2 => unsafe {
-                    return self.avx2_forward_transform(values, output_mod_factor);
-                },
-                #[cfg(target_arch = "x86_64")]
-                U32Backend::Avx512 => unsafe {
-                    return self.avx512_forward_transform(values, output_mod_factor);
-                },
-                U32Backend::Scalar => {}
-            }
+        assert_ntt_length(values.len(), self.poly_length.get());
+
+        #[cfg(target_arch = "x86_64")]
+        match self.backend {
+            U32Backend::Avx2 => unsafe {
+                return self.avx2_forward_transform(values, output_mod_factor);
+            },
+            U32Backend::Avx512 => unsafe {
+                return self.avx512_forward_transform(values, output_mod_factor);
+            },
+            U32Backend::Scalar => {}
         }
-        self.scalar_forward_transform(values, output_mod_factor);
+        unsafe {
+            self.scalar_forward_transform_unchecked(values, output_mod_factor);
+        }
     }
 
     /// Dispatch inverse transform to the selected backend.
     #[inline]
     fn dispatch_inverse(&self, values: &mut [u32], output_mod_factor: u32) {
-        if self.n >= 32 {
-            match self.backend {
-                #[cfg(target_arch = "x86_64")]
-                U32Backend::Avx2 => unsafe {
-                    return self.avx2_inverse_transform(values, output_mod_factor);
-                },
-                #[cfg(target_arch = "x86_64")]
-                U32Backend::Avx512 => unsafe {
-                    return self.avx512_inverse_transform(values, output_mod_factor);
-                },
-                U32Backend::Scalar => {}
-            }
+        assert_ntt_length(values.len(), self.poly_length.get());
+
+        #[cfg(target_arch = "x86_64")]
+        match self.backend {
+            U32Backend::Avx2 => unsafe {
+                return self.avx2_inverse_transform(values, output_mod_factor);
+            },
+            U32Backend::Avx512 => unsafe {
+                return self.avx512_inverse_transform(values, output_mod_factor);
+            },
+            U32Backend::Scalar => {}
         }
-        self.scalar_inverse_transform(values, output_mod_factor);
+        unsafe {
+            self.scalar_inverse_transform_unchecked(values, output_mod_factor);
+        }
     }
 }
 
 impl NttTable for U32NttTable {
     type ValueT = u32;
 
-    fn new<M>(log_n: u32, modulus: M) -> Result<Self, NttError<Self::ValueT>>
+    fn new<M>(poly_length: PolyLength, modulus: M) -> Result<Self, NttError<Self::ValueT>>
     where
         M: FieldContext<Self::ValueT>,
     {
-        let root = <u32 as PrimitiveRoot>::try_minimal_primitive_root(log_n + 1, modulus)?;
-        let Some(q) = modulus.value() else {
-            return Err(NttError::NttTableErr);
-        };
+        let q = modulus.value();
 
         // Reject unsupported moduli: q < 2^30 required for lazy [0, 4q) range.
-        if q >= 1 << 30 {
+        if q >= 1 << crate::U32_NTT_MAX_MODULUS_BITS {
             return Err(NttError::ModulusTooLarge {
                 modulus: q,
-                max_bits: 30,
+                max_bits: crate::U32_NTT_MAX_MODULUS_BITS,
             });
         }
 
-        let n = 1usize << log_n;
+        let log_n = poly_length.log_n();
+        let root = try_minimal_primitive_root(log_n + 1, modulus)?;
+        let n = poly_length.get();
         let two_q = q << 1;
 
-        // --- ordinal roots: [1, w, w^2, ..., w^(2n-1)] ---
-        let root_sf = ShoupFactor::<u32>::new(root, q);
-        let mut ordinal_roots = vec![0u32; n * 2];
-        ordinal_roots[0] = 1;
-        ordinal_roots[1] = root;
-        let mut power = root;
-        for dst in &mut ordinal_roots[2..] {
-            power = root_sf.factor_mul_modulo(power, q);
-            *dst = power;
-        }
-
-        let inv_root = *ordinal_roots.last().unwrap();
+        let inv_root = mod_inv(root, q);
         debug_assert_eq!(modulus.reduce_mul(root, inv_root), 1);
 
-        // --- bit-reversed index mapping ---
-        let reverse_lsbs: Vec<usize> = (0..n).map(|i| i.reverse_lsbs(log_n)).collect();
-
         // --- forward roots (bit-reversed) ---
+        let root_sf = ShoupFactor::<u32>::new(root, q);
         let mut roots = avec![0u32; n];
-        roots[0] = 1;
-        for (&rp, &i) in ordinal_roots[0..n].iter().zip(reverse_lsbs.iter()) {
-            roots[i] = rp;
+        let mut power = 1;
+        for i in 0..n {
+            roots[reverse_lsbs(i, log_n)] = power;
+            power = root_sf.factor_mul_modulo(power, q);
         }
 
         // --- inverse roots (bit-reversed, scrambled order) ---
+        let inv_root_sf = ShoupFactor::<u32>::new(inv_root, q);
         let mut inv_roots = avec![0u32; n];
         inv_roots[0] = 1;
-        for (&irp, &i) in ordinal_roots[n + 1..].iter().rev().zip(reverse_lsbs.iter()) {
-            inv_roots[i + 1] = irp;
+        let mut inv_power = inv_root;
+        for i in 0..n - 1 {
+            inv_roots[reverse_lsbs(i, log_n) + 1] = inv_power;
+            inv_power = inv_root_sf.factor_mul_modulo(inv_power, q);
         }
 
         // --- Shoup preconditioners ---
@@ -257,20 +206,17 @@ impl NttTable for U32NttTable {
         let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
 
         #[cfg(target_arch = "x86_64")]
-        let backend = if *HAS_AVX512F {
+        let backend = if is_x86_feature_detected!("avx512f") {
             U32Backend::Avx512
-        } else if *HAS_AVX2 {
+        } else if is_x86_feature_detected!("avx2") {
             U32Backend::Avx2
         } else {
             U32Backend::Scalar
         };
-        #[cfg(not(target_arch = "x86_64"))]
-        let backend = U32Backend::Scalar;
-
         // --- backend-specific pre-expanded root tables ---
         // Only build for the selected backend to save memory and init time.
         #[cfg(target_arch = "x86_64")]
-        let use_avx2 = matches!(backend, U32Backend::Avx2 | U32Backend::Avx512);
+        let use_avx2 = matches!(backend, U32Backend::Avx2);
         #[cfg(target_arch = "x86_64")]
         let use_avx512 = matches!(backend, U32Backend::Avx512);
 
@@ -307,12 +253,9 @@ impl NttTable for U32NttTable {
             };
 
         Ok(Self {
-            n,
-            log_n,
+            poly_length,
             q,
             two_q,
-            root,
-            inv_root,
             inv_n,
             inv_n_precon,
             inv_n_w,
@@ -321,8 +264,6 @@ impl NttTable for U32NttTable {
             roots_precon,
             inv_roots,
             inv_roots_precon,
-            ordinal_roots,
-            reverse_lsbs,
             #[cfg(target_arch = "x86_64")]
             avx2_roots,
             #[cfg(target_arch = "x86_64")]
@@ -339,142 +280,91 @@ impl NttTable for U32NttTable {
             avx512_inv_roots,
             #[cfg(target_arch = "x86_64")]
             avx512_inv_roots_precon,
+            #[cfg(target_arch = "x86_64")]
             backend,
         })
     }
 
     #[inline]
-    fn poly_length(&self) -> usize {
-        self.n
+    fn poly_length(&self) -> PolyLength {
+        self.poly_length
     }
 
     #[inline]
-    fn transform_inplace<S: RawData<Elem = Self::ValueT> + DataMut>(
-        &self,
-        mut poly: Polynomial<S>,
-    ) -> NttPolynomial<S> {
-        self.transform_slice(poly.as_mut_slice());
-        NttPolynomial::new(poly.0)
-    }
-
-    #[inline]
-    fn inverse_transform_inplace<S: RawData<Elem = Self::ValueT> + DataMut>(
-        &self,
-        mut values: NttPolynomial<S>,
-    ) -> Polynomial<S> {
-        self.inverse_transform_slice(values.as_mut_slice());
-        Polynomial::new(values.0)
+    fn modulus(&self) -> Self::ValueT {
+        self.q
     }
 
     fn lazy_transform_slice(&self, poly: &mut [u32]) {
-        debug_assert_eq!(poly.len(), self.n);
         self.dispatch_forward(poly, 4);
     }
 
     fn transform_slice(&self, poly: &mut [u32]) {
-        debug_assert_eq!(poly.len(), self.n);
         self.dispatch_forward(poly, 1);
     }
 
     fn lazy_inverse_transform_slice(&self, values: &mut [u32]) {
-        debug_assert_eq!(values.len(), self.n);
         self.dispatch_inverse(values, 2);
     }
 
     fn inverse_transform_slice(&self, values: &mut [u32]) {
-        debug_assert_eq!(values.len(), self.n);
         self.dispatch_inverse(values, 1);
     }
+}
 
-    fn transform_monomial(&self, coeff: u32, degree: usize, values: &mut [u32]) {
-        if coeff == 0 {
-            values.fill(0);
-            return;
-        }
-
-        if degree == 0 {
-            values.fill(coeff);
-            return;
-        }
-
-        let n = self.n;
-        let log_n = self.log_n;
-        debug_assert_eq!(values.len(), n);
-
-        let mask = usize::MAX >> (usize::BITS - log_n - 1);
-
-        if coeff == 1 {
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = unsafe { *self.ordinal_roots.get_unchecked(index) };
-                });
-        } else if coeff == self.q - 1 {
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = (((2 * i + 1) * degree) & mask) ^ n;
-                    *v = unsafe { *self.ordinal_roots.get_unchecked(index) };
-                });
-        } else {
-            let coeff_sf = ShoupFactor::<u32>::new(coeff, self.q);
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    let w = unsafe { *self.ordinal_roots.get_unchecked(index) };
-                    *v = coeff_sf.factor_mul_modulo(w, self.q);
-                });
-        }
+impl MonomialNttTable for U32NttTable {
+    #[inline]
+    fn root_powers(&self) -> &[Self::ValueT] {
+        &self.roots
     }
 
-    fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [u32]) {
-        if degree == 0 {
-            values.fill(1);
-            return;
-        }
-
-        let n = self.n;
-        let log_n = self.log_n;
-        debug_assert_eq!(values.len(), n);
-
-        let mask = usize::MAX >> (usize::BITS - log_n - 1);
-
-        values
-            .iter_mut()
-            .zip(&self.reverse_lsbs)
-            .for_each(|(v, &i)| {
-                let index = ((2 * i + 1) * degree) & mask;
-                *v = unsafe { *self.ordinal_roots.get_unchecked(index) };
-            });
-    }
-
-    fn transform_coeff_minus_one_monomial(&self, degree: usize, values: &mut [u32]) {
-        if degree == 0 {
-            values.fill(self.q - 1);
-            return;
-        }
-
-        let n = self.n;
-        let log_n = self.log_n;
-        debug_assert_eq!(values.len(), n);
-
-        let mask = usize::MAX >> (usize::BITS - log_n - 1);
-
-        values
-            .iter_mut()
-            .zip(&self.reverse_lsbs)
-            .for_each(|(v, &i)| {
-                let index = (((2 * i + 1) * degree) & mask) ^ n;
-                *v = unsafe { *self.ordinal_roots.get_unchecked(index) };
-            });
+    #[inline]
+    fn inv_root_powers(&self) -> &[Self::ValueT] {
+        &self.inv_roots
     }
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
-mod tests;
+mod tests {
+    use super::*;
+    use crate::UintNttTable;
+    use primus_modulus::BarrettModulus;
+
+    #[test]
+    fn scalar_kernel_matches_generic_at_the_supported_minimum() {
+        let modulus = BarrettModulus::new(1_073_692_673u32);
+        let length = PolyLength::new(32);
+        let table = U32NttTable::new(length, modulus).unwrap();
+        let reference = UintNttTable::<u32>::new(length, modulus).unwrap();
+        for (inverse, output_factor) in [(false, 1), (false, 4), (true, 1), (true, 2)] {
+            let bound = if inverse { 2 * table.q } else { 4 * table.q };
+            let mut actual: Vec<_> = (0..length.get())
+                .map(|i| [0, table.q - 1, table.q, bound - 1 - i as u32][i % 4])
+                .collect();
+            let mut expected: Vec<_> = actual.iter().map(|&value| value % table.q).collect();
+            // Call scalar directly: runtime dispatch may always select SIMD on
+            // the test host. The checked table owns all scalar preconditioners.
+            // SAFETY: the input has exactly N coefficients in the kernel's lazy range.
+            unsafe {
+                if inverse {
+                    table.scalar_inverse_transform_unchecked(&mut actual, output_factor);
+                } else {
+                    table.scalar_forward_transform_unchecked(&mut actual, output_factor);
+                }
+            }
+            if inverse {
+                reference.inverse_transform_slice(&mut expected);
+            } else {
+                reference.transform_slice(&mut expected);
+            }
+            assert!(actual.iter().all(|&value| value < output_factor * table.q));
+            assert_eq!(
+                actual
+                    .iter()
+                    .map(|value| value % table.q)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+}

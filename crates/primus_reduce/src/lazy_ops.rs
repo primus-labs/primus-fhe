@@ -1,16 +1,19 @@
-/// The lazy modulo operation.
+/// Lazy modular reduction.
 pub trait LazyReduce<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `value (mod 2*modulus)` where `self` is modulus.
+    /// Calculates a representative congruent to `value` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
-    /// Input range for `value` is **implementation-defined** (same as
-    /// [`Reduce`](crate::Reduce)). The result is only guaranteed to be in
-    /// `[0, 2*modulus)`, not the canonical `[0, modulus)`; callers must
-    /// perform a final reduction when a canonical result is required.
+    /// The supported input range is implementation-defined; see the concrete
+    /// modulus type.
+    ///
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`. It may be non-canonical and must be
+    /// reduced once when a value in `[0, modulus)` is required.
     ///
     /// If the modulus type does not natively support lazy reduction,
     /// implementations should fall back to [`Reduce`](crate::Reduce).
@@ -18,119 +21,142 @@ pub trait LazyReduce<T> {
     fn lazy_reduce(self, value: T) -> Self::Output;
 }
 
-/// The lazy modulo assignment operation.
+/// In-place lazy modular reduction.
 pub trait LazyReduceAssign<T> {
-    /// Calculates `value (mod 2*modulus)` where `self` is modulus.
+    /// Replaces `value` with a representative congruent to it modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
-    /// Input range is implementation-defined. Result is in `[0, 2*modulus)`.
+    /// The supported input range is implementation-defined; see the concrete
+    /// modulus type.
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceAssign] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceAssign`](crate::ReduceAssign).
     fn lazy_reduce_assign(self, value: &mut T);
 }
 
 /// The lazy modular multiplication.
-pub trait LazyReduceMul<T, B = T> {
+pub trait LazyReduceMul<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `a * b (mod 2*modulus)` where `self` is modulus.
+    /// Calculates a lazy representative of `a * b` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a * b < modulus²`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceMul] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceMul`](crate::ReduceMul).
     #[must_use]
-    fn lazy_reduce_mul(self, a: T, b: B) -> Self::Output;
+    fn lazy_reduce_mul(self, a: T, b: T) -> Self::Output;
 }
 
 /// The lazy modular multiplication assignment.
-pub trait LazyReduceMulAssign<T, B = T> {
-    /// Calculates `a *= b (mod 2*modulus)` where `self` is modulus.
+pub trait LazyReduceMulAssign<T> {
+    /// Replaces `a` with a lazy representative of `a * b` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a * b < modulus²`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceMulAssign] trait.
-    fn lazy_reduce_mul_assign(self, a: &mut T, b: B);
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceMulAssign`](crate::ReduceMulAssign).
+    fn lazy_reduce_mul_assign(self, a: &mut T, b: T);
 }
 
 /// The lazy modular multiply-add.
-pub trait LazyReduceMulAdd<T, B = T, C = T> {
+pub trait LazyReduceMulAdd<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `a * b + c (mod 2*modulus)` where `self` is modulus.
+    /// Calculates a lazy representative of `a * b + c` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a < modulus`
     /// - `b < modulus`
     /// - `c < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceMulAdd] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceMulAdd`](crate::ReduceMulAdd).
     #[must_use]
-    fn lazy_reduce_mul_add(self, a: T, b: B, c: C) -> Self::Output;
+    fn lazy_reduce_mul_add(self, a: T, b: T, c: T) -> Self::Output;
 }
 
 /// The lazy modular multiply-add assignment.
-pub trait LazyReduceMulAddAssign<T, B = T, C = T> {
-    /// Calculates `a * b + c (mod 2*modulus)` where `self` is modulus.
+pub trait LazyReduceMulAddAssign<T> {
+    /// Replaces `a` with a lazy representative of `a * b + c` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a < modulus`
     /// - `b < modulus`
     /// - `c < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceMulAddAssign] trait.
-    fn lazy_reduce_mul_add_assign(self, a: &mut T, b: B, c: C);
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceMulAddAssign`](crate::ReduceMulAddAssign).
+    fn lazy_reduce_mul_add_assign(self, a: &mut T, b: T, c: T);
 }
 
 /// The lazy modular subtraction.
-pub trait LazyReduceSub<T, B = T> {
+pub trait LazyReduceSub<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `a - b (mod 2*modulus)` where `self` is modulus.
+    /// Calculates a lazy representative of `a - b` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a < modulus`
     /// - `b < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceSub] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceSub`](crate::ReduceSub).
     #[must_use]
-    fn lazy_reduce_sub(self, a: T, b: B) -> Self::Output;
+    fn lazy_reduce_sub(self, a: T, b: T) -> Self::Output;
 }
 
 /// The lazy modular subtraction assignment.
-pub trait LazyReduceSubAssign<T, B = T> {
-    /// Calculates `a -= b (mod 2*modulus)` where `self` is modulus.
+pub trait LazyReduceSubAssign<T> {
+    /// Replaces `a` with a lazy representative of `a - b` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `a < modulus`
     /// - `b < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceSubAssign] trait.
-    fn lazy_reduce_sub_assign(self, a: &mut T, b: B);
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceSubAssign`](crate::ReduceSubAssign).
+    fn lazy_reduce_sub_assign(self, a: &mut T, b: T);
 }
 
 /// The lazy modular negation.
@@ -138,29 +164,35 @@ pub trait LazyReduceNeg<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `-value (mod 2*modulus)` where `self` is modulus.
+    /// Calculates a lazy representative of `-value` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `value < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceNeg] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceNeg`](crate::ReduceNeg).
     #[must_use]
     fn lazy_reduce_neg(self, value: T) -> Self::Output;
 }
 
 /// The lazy modular negation assignment.
 pub trait LazyReduceNegAssign<T> {
-    /// Calculates `value = -value (mod 2*modulus)` where `self` is modulus.
+    /// Replaces `value` with a lazy representative of `-value` modulo `self`.
     ///
-    /// # Correctness
+    /// # Preconditions
     ///
     /// - `value < modulus`
-    /// - Result is in `[0, 2*modulus)`
     ///
-    /// If modulus doesn't support this special case,
-    /// just fall back to [crate::ReduceNegAssign] trait.
+    /// # Guarantees
+    ///
+    /// The result is in `[0, 2 * modulus)`.
+    ///
+    /// Implementations without a specialized lazy kernel may fall back to
+    /// [`ReduceNegAssign`](crate::ReduceNegAssign).
     fn lazy_reduce_neg_assign(self, value: &mut T);
 }

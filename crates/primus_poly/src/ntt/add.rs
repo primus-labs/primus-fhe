@@ -1,4 +1,4 @@
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
 use primus_reduce::ReduceAddSlice;
 
@@ -6,15 +6,16 @@ use super::NttPolynomial;
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Performs `self + rhs` according to `modulus`.
+    #[must_use]
     #[inline]
     pub fn add<M, A>(mut self, rhs: &NttPolynomial<A>, modulus: M) -> Self
     where
         M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         self.add_assign(rhs, modulus);
         self
@@ -25,7 +26,7 @@ where
     pub fn add_assign<M, A>(&mut self, rhs: &NttPolynomial<A>, modulus: M)
     where
         M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         modulus.reduce_add_slice_assign(self.as_mut_slice(), rhs.as_slice());
     }
@@ -33,7 +34,7 @@ where
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs `result = self + rhs` according to `modulus`.
@@ -41,8 +42,8 @@ where
     pub fn add_to<M, A, B>(&self, rhs: &NttPolynomial<A>, output: &mut NttPolynomial<B>, modulus: M)
     where
         M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataMut,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
     {
         modulus.reduce_add_slice_to(self.as_slice(), rhs.as_slice(), output.as_mut_slice());
     }

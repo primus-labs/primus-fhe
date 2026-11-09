@@ -2,61 +2,51 @@ mod primitive;
 #[cfg(feature = "simd")]
 mod simd;
 
-/// Carrying mul operation trait.
+/// Carrying multiplication for unsigned words.
+///
+/// Unlike [`CarryingAdd`](super::CarryingAdd), these operations accept a full
+/// word as `carry`, not a one-bit carry flag. SIMD values are processed
+/// lane-wise.
 pub trait CarryingMul: Sized {
-    /// Calculates the "full multiplication" `self * rhs + carry`
-    /// without the possibility to overflow.
+    /// Calculates the full multiplication `self * rhs + carry` without the
+    /// possibility of overflow.
     ///
-    /// This returns the low-order (wrapping) bits and the high-order (overflow) bits
-    /// of the result as two separate values, in that order.
+    /// This returns the low-order (wrapping) word and high-order (overflow)
+    /// word of the exact result as `(low, high)`. For word radix `B = 2^w`,
+    /// `self * rhs + carry = low + high * B`.
     ///
-    /// Performs "long multiplication" which takes in an extra amount to add, and may return an
-    /// additional amount of overflow. This allows for chaining together multiple
-    /// multiplications to create "big integers" which represent larger values.
+    /// The extra full-word addend and high-order result allow these operations
+    /// to be chained for multi-word long multiplication. Use
+    /// [`Self::carrying_mul_add`] when a second full-word addend is required.
     ///
-    /// If you also need to add a value, then use [`Self::carrying_mul_add`].
+    /// With a zero carry-in, this is equivalent to
+    /// [`WideningMul::widening_mul`](super::WideningMul::widening_mul).
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn carrying_mul(self, rhs: Self, carry: Self) -> (Self, Self);
 
-    /// Calculates the "full multiplication" `self * rhs + carry + add`.
+    /// Calculates the full multiplication `self * rhs + carry + add` without
+    /// the possibility of overflow.
     ///
-    /// This returns the low-order (wrapping) bits and the high-order (overflow) bits
-    /// of the result as two separate values, in that order.
+    /// Both `carry` and `add` are full words. This returns the low-order
+    /// (wrapping) word and high-order (overflow) word of the exact result as
+    /// `(low, high)`. For word radix `B = 2^w`,
+    /// `self * rhs + carry + add = low + high * B`.
     ///
-    /// This cannot overflow, as the double-width result has exactly enough
-    /// space for the largest possible result. This is equivalent to how, in
-    /// decimal, 9 × 9 + 9 + 9 = 81 + 18 = 99 = 9×10⁰ + 9×10¹ = 10² - 1.
-    ///
-    /// Performs "long multiplication" which takes in an extra amount to add, and may return an
-    /// additional amount of overflow. This allows for chaining together multiple
-    /// multiplications to create "big integers" which represent larger values.
-    ///
-    /// If you don't need the `add` part, then you can use [`Self::carrying_mul`] instead.
+    /// Even when every input is `B - 1`, the result is `B^2 - 1` and therefore
+    /// fits exactly in two words. Use [`Self::carrying_mul`] when only one
+    /// full-word addend is required.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn carrying_mul_add(self, rhs: Self, carry: Self, add: Self) -> (Self, Self);
 
-    /// Calculates the "full multiplication" `self * rhs + carry`
-    /// without the possibility to overflow.
+    /// Returns the high word of `self * rhs + carry`.
     ///
-    /// This returns the high-order (overflow) bits of the result.
-    ///
-    /// Performs "long multiplication" which takes in an extra amount to add, and may return an
-    /// additional amount of overflow. This allows for chaining together multiple
-    /// multiplications to create "big integers" which represent larger values.
-    ///
-    /// If you also need to add a value, then use [`Self::carrying_mul_add_hw`].
+    /// This is the `high` component returned by [`Self::carrying_mul`].
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn carrying_mul_hw(self, rhs: Self, carry: Self) -> Self;
 
-    /// Calculates the "full multiplication" `self * rhs + carry + add`.
+    /// Returns the high word of `self * rhs + carry + add`.
     ///
-    /// This returns the high-order (overflow) bits of the result.
-    ///
-    /// This cannot overflow, as the double-width result has exactly enough
-    /// space for the largest possible result. This is equivalent to how, in
-    /// decimal, 9 × 9 + 9 + 9 = 81 + 18 = 99 = 9×10⁰ + 9×10¹ = 10² - 1.
-    ///
-    /// Performs "long multiplication" which takes in an extra amount to add, and may return an
-    /// additional amount of overflow. This allows for chaining together multiple
-    /// multiplications to create "big integers" which represent larger values.
-    ///
-    /// If you don't need the `add` part, then you can use [`Self::carrying_mul_hw`] instead.
+    /// This is the `high` component returned by [`Self::carrying_mul_add`].
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn carrying_mul_add_hw(self, rhs: Self, carry: Self, add: Self) -> Self;
 }

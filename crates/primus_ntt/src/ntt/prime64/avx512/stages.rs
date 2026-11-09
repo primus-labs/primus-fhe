@@ -1,12 +1,18 @@
+//! Packed stage kernels corresponding to HEXL's `FwdT*` and `InvT*` helpers.
+//!
+//! `T` is the distance between the two operands of a radix-2 butterfly. T1,
+//! T2, and T4 need lane permutations; T8 and larger distances use contiguous
+//! eight-lane loads. The root slices are already arranged for the lane order
+//! expected by each helper.
+
 use core::arch::x86_64::*;
 
 use super::butterfly::{fwd_butterfly, inv_butterfly};
 use super::utils::*;
 
-// ── Forward T1 ────────────────────────────────────────────────────────────
-
-pub fn fwd_t1<const BIT_SHIFT: u32>(
+pub fn fwd_t1<const BIT_SHIFT: u32, const REDUCE_OUTPUT: bool>(
     operand: &mut [u64],
+    v_modulus: __m512i,
     v_neg_modulus: __m512i,
     v_twice_mod: __m512i,
     w: &[u64],
@@ -33,12 +39,17 @@ pub fn fwd_t1<const BIT_SHIFT: u32>(
                 v_twice_mod,
             );
 
+            if REDUCE_OUTPUT {
+                v_x = _mm512_hexl_small_mod_epu64_2(v_x, v_twice_mod);
+                v_x = _mm512_hexl_small_mod_epu64_2(v_x, v_modulus);
+                v_y = _mm512_hexl_small_mod_epu64_2(v_y, v_twice_mod);
+                v_y = _mm512_hexl_small_mod_epu64_2(v_y, v_modulus);
+            }
+
             write_fwd_interleaved_t1(v_x, v_y, x);
         }
     }
 }
-
-// ── Forward T2 ────────────────────────────────────────────────────────────
 
 pub fn fwd_t2<const BIT_SHIFT: u32>(
     operand: &mut [u64],
@@ -76,8 +87,6 @@ pub fn fwd_t2<const BIT_SHIFT: u32>(
     }
 }
 
-// ── Forward T4 ────────────────────────────────────────────────────────────
-
 pub fn fwd_t4<const BIT_SHIFT: u32>(
     operand: &mut [u64],
     v_neg_modulus: __m512i,
@@ -114,8 +123,6 @@ pub fn fwd_t4<const BIT_SHIFT: u32>(
     }
 }
 
-// ── Forward T8 ────────────────────────────────────────────────────────────
-
 pub fn fwd_t8_inplace<const BIT_SHIFT: u32, const INPUT_LESS_THAN_MOD: bool>(
     operand: &mut [u64],
     v_neg_modulus: __m512i,
@@ -124,16 +131,11 @@ pub fn fwd_t8_inplace<const BIT_SHIFT: u32, const INPUT_LESS_THAN_MOD: bool>(
     w: &[u64],
     w_precon: &[u64],
 ) {
-    let mut w_iter = w.iter().copied();
-    let mut w_precon_iter = w_precon.iter().copied();
-
-    for chunk in operand.chunks_exact_mut(t << 1) {
+    for ((chunk, &w), &w_precon) in operand.chunks_exact_mut(t << 1).zip(w).zip(w_precon) {
         unsafe {
             let (x, y) = chunk.split_at_mut_unchecked(t);
-
-            // Weights and weights' preconditions
-            let v_w: __m512i = _mm512_set1_epi64(w_iter.next().unwrap() as i64);
-            let v_w_precon: __m512i = _mm512_set1_epi64(w_precon_iter.next().unwrap() as i64);
+            let v_w = _mm512_set1_epi64(w as i64);
+            let v_w_precon = _mm512_set1_epi64(w_precon as i64);
 
             for (x_chunk, y_chunk) in x
                 .as_chunks_unchecked_mut::<8>()
@@ -158,8 +160,6 @@ pub fn fwd_t8_inplace<const BIT_SHIFT: u32, const INPUT_LESS_THAN_MOD: bool>(
         }
     }
 }
-
-// ── Inverse T1 ────────────────────────────────────────────────────────────
 
 pub fn inv_t1<const BIT_SHIFT: u32, const INPUT_LESS_THAN_MOD: bool>(
     x: &mut [u64],
@@ -198,8 +198,6 @@ pub fn inv_t1<const BIT_SHIFT: u32, const INPUT_LESS_THAN_MOD: bool>(
     }
 }
 
-// ── Inverse T2 ────────────────────────────────────────────────────────────
-
 pub fn inv_t2<const BIT_SHIFT: u32>(
     x: &mut [u64],
     v_neg_modulus: __m512i,
@@ -237,8 +235,6 @@ pub fn inv_t2<const BIT_SHIFT: u32>(
     }
 }
 
-// ── Inverse T4 ────────────────────────────────────────────────────────────
-
 pub fn inv_t4<const BIT_SHIFT: u32>(
     x: &mut [u64],
     v_neg_modulus: __m512i,
@@ -273,8 +269,6 @@ pub fn inv_t4<const BIT_SHIFT: u32>(
     }
 }
 
-// ── Inverse T8 ────────────────────────────────────────────────────────────
-
 pub fn inv_t8<const BIT_SHIFT: u32>(
     operand: &mut [u64],
     v_neg_modulus: __m512i,
@@ -283,16 +277,13 @@ pub fn inv_t8<const BIT_SHIFT: u32>(
     w: &[u64],
     w_precon: &[u64],
 ) {
-    let mut w_iter = w.iter().copied();
-    let mut w_precon_iter = w_precon.iter().copied();
-
-    // assume 8 | t
-    for chunk in operand.chunks_exact_mut(t << 1) {
+    // `t` is at least eight here, so both halves contain complete vectors.
+    for ((chunk, &w), &w_precon) in operand.chunks_exact_mut(t << 1).zip(w).zip(w_precon) {
         let (x, y) = unsafe { chunk.split_at_mut_unchecked(t) };
 
         unsafe {
-            let v_w = _mm512_set1_epi64(w_iter.next().unwrap() as i64);
-            let v_w_precon = _mm512_set1_epi64(w_precon_iter.next().unwrap() as i64);
+            let v_w = _mm512_set1_epi64(w as i64);
+            let v_w_precon = _mm512_set1_epi64(w_precon as i64);
 
             for (x_chunk, y_chunk) in x
                 .as_chunks_unchecked_mut::<8>()

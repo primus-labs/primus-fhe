@@ -28,6 +28,7 @@ use primus_integer::FheUint;
 /// operands modulo the same `modulus`.
 pub trait FactorBase<T> {
     /// Creates a factor for multiplying by `value` modulo `modulus`.
+    #[must_use]
     fn new(value: T, modulus: T) -> Self;
 }
 

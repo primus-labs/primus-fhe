@@ -1,71 +1,53 @@
 use num_complex::Complex64;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 
-use super::FourierPolynomial;
+use super::{FourierPolynomial, FourierPolynomialMut, FourierPolynomialRef};
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + DataMut,
+    S: DataMut<Elem = Complex64>,
 {
-    /// Performs the unary `-` operation (pointwise complex negation).
+    /// Negates every value in this Fourier polynomial.
+    #[inline]
+    pub fn neg_assign(&mut self) {
+        neg_assign_kernel(self.as_mut_view());
+    }
+
+    /// Negates every value and returns this Fourier polynomial.
+    #[must_use]
     #[inline]
     #[allow(clippy::should_implement_trait)]
     pub fn neg(mut self) -> Self {
         self.neg_assign();
         self
     }
-
-    /// Performs the unary `-` operation in place.
-    #[inline]
-    pub fn neg_assign(&mut self) {
-        for a in self.iter_mut() {
-            *a = -*a;
-        }
-    }
 }
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + Data,
+    S: Data<Elem = Complex64>,
 {
-    /// Performs `output = -self` (pointwise complex negation).
+    /// Writes the pointwise negation of `self` to `output`.
     #[inline]
     pub fn neg_to<A>(&self, output: &mut FourierPolynomial<A>)
     where
-        A: RawData<Elem = Complex64> + DataMut,
+        A: DataMut<Elem = Complex64>,
     {
-        debug_assert_eq!(self.fourier_length(), output.fourier_length());
-        for (&a, out) in self.iter().zip(output.iter_mut()) {
-            *out = -a;
-        }
+        neg_to_kernel(self.as_view(), output.as_mut_view());
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::fourier::FourierPolynomialOwned;
-
-    #[test]
-    fn test_neg_assign() {
-        let mut a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(1.0, 2.0),
-            Complex64::new(-3.0, 0.0),
-        ]);
-        a.neg_assign();
-        assert_eq!(a.as_slice()[0], Complex64::new(-1.0, -2.0));
-        assert_eq!(a.as_slice()[1], Complex64::new(3.0, 0.0));
+#[inline]
+fn neg_assign_kernel(mut acc: FourierPolynomialMut<'_>) {
+    for value in acc.iter_mut() {
+        *value = -*value;
     }
+}
 
-    #[test]
-    fn test_neg_to() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(1.0, -1.0),
-            Complex64::new(0.0, 2.0),
-        ]);
-        let mut output = FourierPolynomialOwned::zero(2);
-        a.neg_to(&mut output);
-        assert_eq!(output.as_slice()[0], Complex64::new(-1.0, 1.0));
-        assert_eq!(output.as_slice()[1], Complex64::new(0.0, -2.0));
+#[inline]
+fn neg_to_kernel(input: FourierPolynomialRef<'_>, mut output: FourierPolynomialMut<'_>) {
+    debug_assert_eq!(input.len(), output.len());
+    for (output, value) in output.iter_mut().zip(input.iter()) {
+        *output = -*value;
     }
 }

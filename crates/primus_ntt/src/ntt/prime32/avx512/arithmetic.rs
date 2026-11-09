@@ -1,8 +1,5 @@
 use core::arch::x86_64::*;
 
-// Reduction helpers
-// ---------------------------------------------------------------------------
-
 /// `x mod q` for `x < 2*q` on 16 u32 lanes.
 ///
 /// Uses `_mm512_min_epu32` — native in AVX-512F, unlike AVX2 where
@@ -23,11 +20,6 @@ pub(super) fn reduce_twice_avx512(x: __m512i, q: __m512i, two_q: __m512i) -> __m
     reduce_once_avx512(x, q)
 }
 
-// ---------------------------------------------------------------------------
-
-// Barrett-32 lazy multiply for 16 u32 lanes
-// ---------------------------------------------------------------------------
-
 /// Barrett-32 lazy multiply for 16 u32 lanes.
 ///
 /// Same even/odd split as the AVX2 version, widened to 512 bits.
@@ -38,7 +30,7 @@ pub(super) fn reduce_twice_avx512(x: __m512i, q: __m512i, two_q: __m512i) -> __m
 #[target_feature(enable = "avx512f")]
 #[inline]
 pub(super) fn mul_mod_lazy_avx512(y: __m512i, w: __m512i, wp: __m512i, q: __m512i) -> __m512i {
-    // ---- Step 1: qhat = hi32(y * wp) ----
+    // Barrett quotient: qhat = hi32(y * wp).
     //
     // Even lanes (0,2,4,…,14)
     let prod_wp_even = _mm512_mul_epu32(y, wp);
@@ -54,10 +46,8 @@ pub(super) fn mul_mod_lazy_avx512(y: __m512i, w: __m512i, wp: __m512i, q: __m512
     // Interleave even/odd into 16 × u32.
     let qhat = _mm512_or_si512(qhat_even, qhat_odd);
 
-    // ---- Step 2: t = low32(w*y) - low32(q*qhat) ----
+    // Low-half correction: t = low32(w*y) - low32(q*qhat).
     let wy = _mm512_mullo_epi32(w, y);
     let q_qhat = _mm512_mullo_epi32(q, qhat);
     _mm512_sub_epi32(wy, q_qhat)
 }
-
-// ---------------------------------------------------------------------------

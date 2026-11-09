@@ -1,4 +1,4 @@
-use super::super::U64NttTable;
+use super::super::{U64NttTable, precompute::ScalarPrecomputation};
 use super::arithmetic::{
     fwd_butterfly, inv_butterfly, mul_mod_lazy, mul_mod_lazy32, reduce_once, reduce_twice,
 };
@@ -10,26 +10,30 @@ impl U64NttTable {
     /// Output: bit-reversed order.
     ///
     /// `BIT_SHIFT` selects the Barrett width: 32 for `q < 2^30`, 64 otherwise.
-    pub fn scalar_forward_transform<const BIT_SHIFT: u32>(
+    /// # Safety
+    ///
+    /// `values` must contain exactly `self.poly_length.get()` coefficients.
+    /// `precomputation` must belong to this table and use `BIT_SHIFT` (32 or 64),
+    /// with a width compatible with `self.q`.
+    pub(in crate::ntt::prime64) unsafe fn scalar_forward_transform_unchecked<
+        const BIT_SHIFT: u32,
+    >(
         &self,
         values: &mut [u64],
         output_mod_factor: u32,
+        precomputation: &ScalarPrecomputation,
     ) {
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
         );
 
-        let n = self.n;
+        let n = self.poly_length.get();
         let q = self.q;
         let two_q = self.two_q;
 
         let roots = self.roots.as_slice();
-        let roots_precon = if BIT_SHIFT == 32 {
-            self.roots_precon32.as_slice()
-        } else {
-            self.roots_precon64.as_slice()
-        };
+        let roots_precon = precomputation.roots_precon.as_slice();
 
         let mut ri = 1usize; // skip roots[0]
 
@@ -148,40 +152,35 @@ impl U64NttTable {
     /// The final stage fuses multiplication by `inv_n` for both halves.
     ///
     /// `BIT_SHIFT` selects Barrett-32 (32) or Barrett-64 (64) throughout.
-    pub fn scalar_inverse_transform<const BIT_SHIFT: u32>(
+    /// # Safety
+    ///
+    /// `values` must contain exactly `self.poly_length.get()` coefficients.
+    /// `precomputation` and `self.inverse_final_scale` must belong to this table
+    /// and use `BIT_SHIFT` (32 or 64), with a width compatible with `self.q`.
+    pub(in crate::ntt::prime64) unsafe fn scalar_inverse_transform_unchecked<
+        const BIT_SHIFT: u32,
+    >(
         &self,
         values: &mut [u64],
         output_mod_factor: u32,
+        precomputation: &ScalarPrecomputation,
     ) {
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"
         );
 
-        let n = self.n;
+        let n = self.poly_length.get();
         let q = self.q;
         let two_q = self.two_q;
 
-        let inv_n = self.inv_n;
-        let inv_n_w = self.inv_n_w;
-
-        let inv_n_precon = if BIT_SHIFT == 32 {
-            self.inv_n_precon32
-        } else {
-            self.inv_n_precon64
-        };
-        let inv_n_w_precon = if BIT_SHIFT == 32 {
-            self.inv_n_w_precon32
-        } else {
-            self.inv_n_w_precon64
-        };
+        let inv_n = self.inverse_final_scale.inv_n;
+        let inv_n_precon = self.inverse_final_scale.inv_n_precon;
+        let inv_n_w = self.inverse_final_scale.inv_n_w;
+        let inv_n_w_precon = self.inverse_final_scale.inv_n_w_precon;
 
         let inv_roots = self.inv_roots.as_slice();
-        let inv_roots_precon = if BIT_SHIFT == 32 {
-            self.inv_roots_precon32.as_slice()
-        } else {
-            self.inv_roots_precon64.as_slice()
-        };
+        let inv_roots_precon = precomputation.inv_roots_precon.as_slice();
 
         let mut ri = 1usize; // skip inv_roots[0]
         let mut t = 1usize;

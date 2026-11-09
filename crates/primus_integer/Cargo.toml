@@ -11,18 +11,31 @@ primus_gcd = { path = "../primus_gcd" }
 
 num-traits = { workspace = true }
 rand = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 zeroize = { workspace = true }
 bytemuck = { workspace = true }
-paste = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []
-simd = ["rand/simd_support"]
+serde = ["dep:serde"]
+simd = []
+
+[[test]]
+name = "serde"
+required-features = ["serde"]
 
 [[bench]]
-name = "ops"
+name = "word_ops"
+harness = false
+
+[[bench]]
+name = "big_uint"
+harness = false
+
+[[bench]]
+name = "div_rem_scalar"
 harness = false

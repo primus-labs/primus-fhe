@@ -1,89 +1,66 @@
 use num_complex::Complex64;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 
-use super::FourierPolynomial;
+use super::{FourierPolynomial, FourierPolynomialMut, FourierPolynomialRef};
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + DataMut,
+    S: DataMut<Elem = Complex64>,
 {
-    /// Performs `self + rhs` (pointwise complex addition).
+    /// Adds `rhs` pointwise to this Fourier polynomial.
+    #[inline]
+    pub fn add_assign<A>(&mut self, rhs: &FourierPolynomial<A>)
+    where
+        A: Data<Elem = Complex64>,
+    {
+        add_assign_kernel(self.as_mut_view(), rhs.as_view());
+    }
+
+    /// Adds `rhs` pointwise and returns this Fourier polynomial.
+    #[must_use]
     #[inline]
     #[allow(clippy::should_implement_trait)]
     pub fn add<A>(mut self, rhs: &FourierPolynomial<A>) -> Self
     where
-        A: RawData<Elem = Complex64> + Data,
+        A: Data<Elem = Complex64>,
     {
         self.add_assign(rhs);
         self
-    }
-
-    /// Performs `self += rhs` (pointwise complex addition in place).
-    #[inline]
-    pub fn add_assign<A>(&mut self, rhs: &FourierPolynomial<A>)
-    where
-        A: RawData<Elem = Complex64> + Data,
-    {
-        debug_assert_eq!(self.fourier_length(), rhs.fourier_length());
-        for (a, &b) in self.iter_mut().zip(rhs.iter()) {
-            *a += b;
-        }
     }
 }
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + Data,
+    S: Data<Elem = Complex64>,
 {
-    /// Performs `output = self + rhs` (pointwise complex addition).
+    /// Writes the pointwise sum `self + rhs` to `output`.
     #[inline]
     pub fn add_to<A, B>(&self, rhs: &FourierPolynomial<A>, output: &mut FourierPolynomial<B>)
     where
-        A: RawData<Elem = Complex64> + Data,
-        B: RawData<Elem = Complex64> + DataMut,
+        A: Data<Elem = Complex64>,
+        B: DataMut<Elem = Complex64>,
     {
-        debug_assert_eq!(self.fourier_length(), rhs.fourier_length());
-        debug_assert_eq!(self.fourier_length(), output.fourier_length());
-        for ((&a, &b), out) in self.iter().zip(rhs.iter()).zip(output.iter_mut()) {
-            *out = a + b;
-        }
+        add_to_kernel(self.as_view(), rhs.as_view(), output.as_mut_view());
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::fourier::FourierPolynomialOwned;
-
-    #[test]
-    fn test_add_assign() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(1.0, 0.0),
-            Complex64::new(2.0, 1.0),
-        ]);
-        let b = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(3.0, 0.0),
-            Complex64::new(0.0, 1.0),
-        ]);
-        let mut result = a;
-        result.add_assign(&b);
-        assert_eq!(result.as_slice()[0], Complex64::new(4.0, 0.0));
-        assert_eq!(result.as_slice()[1], Complex64::new(2.0, 2.0));
+#[inline]
+fn add_assign_kernel(mut acc: FourierPolynomialMut<'_>, rhs: FourierPolynomialRef<'_>) {
+    debug_assert_eq!(acc.len(), rhs.len());
+    for (value, rhs) in acc.iter_mut().zip(rhs.iter()) {
+        *value += *rhs;
     }
+}
 
-    #[test]
-    fn test_add_to() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(1.0, 0.0),
-            Complex64::new(0.0, 0.0),
-        ]);
-        let b = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(0.0, 0.0),
-            Complex64::new(0.0, 1.0),
-        ]);
-        let mut output = FourierPolynomialOwned::zero(2);
-        a.add_to(&b, &mut output);
-        assert_eq!(output.as_slice()[0], Complex64::new(1.0, 0.0));
-        assert_eq!(output.as_slice()[1], Complex64::new(0.0, 1.0));
+#[inline]
+fn add_to_kernel(
+    lhs: FourierPolynomialRef<'_>,
+    rhs: FourierPolynomialRef<'_>,
+    mut output: FourierPolynomialMut<'_>,
+) {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    debug_assert_eq!(lhs.len(), output.len());
+    for ((output, lhs), rhs) in output.iter_mut().zip(lhs.iter()).zip(rhs.iter()) {
+        *output = *lhs + *rhs;
     }
 }

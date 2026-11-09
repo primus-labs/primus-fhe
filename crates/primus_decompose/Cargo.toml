@@ -4,21 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-primus_data = { path = "../primus_data" }
 primus_integer = { path = "../primus_integer" }
-primus_reduce = { path = "../primus_reduce" }
-primus_rns = { path = "../primus_rns" }
 
-num-traits = { workspace = true }
-serde = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
-primus_modulus = { path = "../primus_modulus" }
-
+criterion = { workspace = true }
 rand = { workspace = true }
-itertools = { workspace = true }
-rayon = { workspace = true }
+
+[[bench]]
+name = "decompose"
+harness = false
 
 [features]
 default = []
-simd = ["primus_integer/simd", "primus_rns/simd"]
+simd = ["primus_integer/simd"]

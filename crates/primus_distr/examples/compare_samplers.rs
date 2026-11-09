@@ -1,19 +1,22 @@
-// cargo r -r -p primus_distr --example compare_samplers
+// cargo r -r -p primus_distr --example compare_samplers -- 3.19
 //
-// Compares the accuracy and performance of available discrete Gaussian
-// samplers side by side across multiple sigma values:
-//   - CDTSampler (f64 precision, portable, default for σ ≤ 20)
+// Compares the accuracy of available discrete Gaussian samplers at one or more
+// requested sigma values. Results are descriptive and non-gating; use the
+// Criterion benchmarks for construction and throughput measurements.
+//   - CDTSampler (f64 precision, portable, default while its support fits)
 //   - DiscreteZiggurat (large σ)
-//   - UnixCDTSampler (256-bit precision, Unix + high_precision feature only)
+//   - PreciseCDTSampler (256-bit precision, high_precision feature only)
 
 use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets::UTF8_FULL};
-use rand::distr::Distribution;
-use std::time::Instant;
+use rand::{SeedableRng, distr::Distribution, rngs::StdRng};
+use std::{env, process};
 
-use primus_distr::{CDTSampler, DiscreteZiggurat, stats::gaussian_stats};
+use primus_distr::{
+    CDTSampler, DiscreteGaussian, DiscreteZiggurat, MIN_STANDARD_DEVIATION, stats::gaussian_stats,
+};
 
-#[cfg(all(target_os = "linux", feature = "high_precision"))]
-use primus_distr::UnixCDTSampler;
+#[cfg(feature = "high_precision")]
+use primus_distr::PreciseCDTSampler;
 
 type ValueT = u64;
 
@@ -22,6 +25,7 @@ const Q: ValueT = 1125899906826241;
 
 // Number of samples for statistical analysis (2^20 = 1,048,576)
 const N: usize = 1 << 20;
+const SEED: u64 = 0x434f_4d50_4152_452d;
 
 // Tail cut for discrete Gaussian
 const TAIL_CUT: f64 = 12.0;
@@ -30,7 +34,7 @@ const TAIL_CUT: f64 = 12.0;
 const SIGMA_RANGES: [f64; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
 
 // ---------------------------------------------------------------------------
-// Display helpers (matching check_gaussian.rs)
+// Display helpers
 // ---------------------------------------------------------------------------
 
 fn coloured_pct_cell(diff_pct: f64) -> Cell {
@@ -53,7 +57,6 @@ struct SamplerStats {
     actual_std: f64,
     std_error_pct: f64,
     cumulative_probs: Vec<f64>,
-    sample_time_ms: f64,
 }
 
 // ---------------------------------------------------------------------------
@@ -62,12 +65,12 @@ struct SamplerStats {
 
 fn display_accuracy_table(sigma: f64, theoretical_probs: &[f64], all_stats: &[SamplerStats]) {
     println!("\n{}", "━".repeat(100));
-    println!("Accuracy & Performance (σ = {:.2})", sigma);
+    println!("Accuracy (σ = {:.4})", sigma);
     println!("{}", "━".repeat(100));
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
+        .load_style(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic);
 
     table.set_header(vec![
@@ -77,7 +80,6 @@ fn display_accuracy_table(sigma: f64, theoretical_probs: &[f64], all_stats: &[Sa
         Cell::new("σ Error %").add_attribute(Attribute::Bold),
         Cell::new("Avg Prob Err %").add_attribute(Attribute::Bold),
         Cell::new("Max Prob Err %").add_attribute(Attribute::Bold),
-        Cell::new("Time (ms)").add_attribute(Attribute::Bold),
         Cell::new("Quality").add_attribute(Attribute::Bold),
     ]);
 
@@ -126,7 +128,6 @@ fn display_accuracy_table(sigma: f64, theoretical_probs: &[f64], all_stats: &[Sa
             Cell::new(format!("{:+.4}%", stats.std_error_pct)).fg(error_colour),
             Cell::new(format!("{:.4}%", avg_prob_error)),
             Cell::new(format!("{:.4}%", max_prob_error)),
-            Cell::new(format!("{:.2}", stats.sample_time_ms)),
             quality,
         ]);
     }
@@ -150,7 +151,7 @@ fn display_probability_table(sigma: f64, theoretical_probs: &[f64], all_stats: &
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
+        .load_style(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(header);
 
@@ -183,12 +184,27 @@ fn display_probability_table(sigma: f64, theoretical_probs: &[f64], all_stats: &
 // Compare all samplers at a single sigma value
 // ---------------------------------------------------------------------------
 
+fn analyze_sampler<D>(name: &str, sigma: f64, sampler: &D) -> SamplerStats
+where
+    D: Distribution<ValueT>,
+{
+    let mut rng = StdRng::seed_from_u64(SEED);
+    let data: Vec<ValueT> = sampler.sample_iter(&mut rng).take(N).collect();
+    let mut counts = [0usize; SIGMA_RANGES.len()];
+    let (_, actual_std) = gaussian_stats(&data, Q, sigma, &SIGMA_RANGES, &mut counts);
+
+    SamplerStats {
+        name: name.into(),
+        actual_std,
+        std_error_pct: ((actual_std - sigma) / sigma) * 100.0,
+        cumulative_probs: counts.iter().map(|&c| c as f64 / N as f64).collect(),
+    }
+}
+
 fn compare_samplers_at_sigma(sigma: f64) {
     println!("\n{}", "═".repeat(100));
     println!("Comparing Samplers at σ = {:.2}", sigma);
     println!("{}", "═".repeat(100));
-
-    let mut rng = rand::rng();
 
     let mut theoretical_probs = [0f64; SIGMA_RANGES.len()];
     primus_distr::stats::theoretical_cumulative_probs(
@@ -200,74 +216,40 @@ fn compare_samplers_at_sigma(sigma: f64) {
 
     let mut all_stats: Vec<SamplerStats> = Vec::new();
 
-    // CDTSampler
-    {
-        println!("  Testing CDTSampler (f64 precision)...");
-        let sampler = CDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
-        let start = Instant::now();
-        let data: Vec<ValueT> = sampler.sample_iter(&mut rng).take(N).collect();
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-
-        let mut counts = [0usize; SIGMA_RANGES.len()];
-        let (_, actual_std) = gaussian_stats(&data, Q, sigma, &SIGMA_RANGES, &mut counts);
-        let std_error_pct = ((actual_std - sigma) / sigma) * 100.0;
-        let cumulative_probs: Vec<f64> = counts.iter().map(|&c| c as f64 / N as f64).collect();
-
-        all_stats.push(SamplerStats {
-            name: "CDTSampler (f64)".into(),
-            actual_std,
-            std_error_pct,
-            cumulative_probs,
-            sample_time_ms: elapsed,
-        });
+    match CDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1) {
+        Ok(sampler) => {
+            println!("  Analyzing CDTSampler (f64 precision)...");
+            all_stats.push(analyze_sampler("CDTSampler (f64)", sigma, &sampler));
+        }
+        Err(error) => println!("  CDTSampler unavailable: {error}"),
     }
 
-    // Discrete Ziggurat
-    {
-        println!("  Testing Discrete Ziggurat...");
-        let sampler = DiscreteZiggurat::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
-        let start = Instant::now();
-        let data: Vec<ValueT> = sampler.sample_iter(&mut rng).take(N).collect();
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-
-        let mut counts = [0usize; SIGMA_RANGES.len()];
-        let (_, actual_std) = gaussian_stats(&data, Q, sigma, &SIGMA_RANGES, &mut counts);
-        let std_error_pct = ((actual_std - sigma) / sigma) * 100.0;
-        let cumulative_probs: Vec<f64> = counts.iter().map(|&c| c as f64 / N as f64).collect();
-
-        all_stats.push(SamplerStats {
-            name: "Discrete Ziggurat".into(),
-            actual_std,
-            std_error_pct,
-            cumulative_probs,
-            sample_time_ms: elapsed,
-        });
+    match DiscreteZiggurat::<ValueT>::new(sigma, TAIL_CUT, Q - 1) {
+        Ok(sampler) => {
+            println!("  Analyzing Discrete Ziggurat...");
+            all_stats.push(analyze_sampler("Discrete Ziggurat", sigma, &sampler));
+        }
+        Err(error) => println!("  Discrete Ziggurat unavailable: {error}"),
     }
 
-    // UnixCDTSampler (Linux + high_precision only)
-    #[cfg(all(target_os = "linux", feature = "high_precision"))]
-    {
-        println!("  Testing UnixCDTSampler (256-bit precision)...");
-        let sampler = UnixCDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
-        let start = Instant::now();
-        let data: Vec<ValueT> = sampler.sample_iter(&mut rng).take(N).collect();
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-
-        let mut counts = [0usize; SIGMA_RANGES.len()];
-        let (_, actual_std) = gaussian_stats(&data, Q, sigma, &SIGMA_RANGES, &mut counts);
-        let std_error_pct = ((actual_std - sigma) / sigma) * 100.0;
-        let cumulative_probs: Vec<f64> = counts.iter().map(|&c| c as f64 / N as f64).collect();
-
-        all_stats.push(SamplerStats {
-            name: "UnixCDTSampler".into(),
-            actual_std,
-            std_error_pct,
-            cumulative_probs,
-            sample_time_ms: elapsed,
-        });
+    #[cfg(feature = "high_precision")]
+    match PreciseCDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1) {
+        Ok(sampler) => {
+            println!("  Analyzing PreciseCDTSampler (256-bit precision)...");
+            all_stats.push(analyze_sampler("PreciseCDTSampler", sigma, &sampler));
+        }
+        Err(error) => println!("  PreciseCDTSampler unavailable: {error}"),
     }
 
-    // Display the two comparison tables
+    match DiscreteGaussian::<ValueT>::new(sigma, Q - 1) {
+        Ok(DiscreteGaussian::Cdt(_)) => {
+            println!("  DiscreteGaussian facade selection: CDTSampler")
+        }
+        Ok(DiscreteGaussian::Ziggurat(_)) => {
+            println!("  DiscreteGaussian facade selection: Discrete Ziggurat")
+        }
+        Err(error) => println!("  DiscreteGaussian facade unavailable: {error}"),
+    }
     display_accuracy_table(sigma, &theoretical_probs, &all_stats);
     display_probability_table(sigma, &theoretical_probs, &all_stats);
 }
@@ -277,10 +259,33 @@ fn compare_samplers_at_sigma(sigma: f64) {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let sigmas: Vec<f64> = vec![0.8, 1.5, 3.19, 9.0, 15.0, 20.0];
+    let arguments: Vec<String> = env::args().skip(1).collect();
+    let sigmas = if arguments.is_empty() {
+        vec![0.8, 1.5, 3.19, 9.0, 15.0, 20.0]
+    } else {
+        arguments
+            .iter()
+            .map(|argument| {
+                let sigma = argument.parse::<f64>().unwrap_or_else(|_| {
+                    eprintln!("invalid sigma: {argument}");
+                    eprintln!(
+                        "usage: cargo run --release -p primus_distr --example compare_samplers -- [SIGMA ...]"
+                    );
+                    process::exit(2);
+                });
+                if !sigma.is_finite() || sigma < MIN_STANDARD_DEVIATION {
+                    eprintln!(
+                        "sigma must be finite and at least {MIN_STANDARD_DEVIATION}: {argument}"
+                    );
+                    process::exit(2);
+                }
+                sigma
+            })
+            .collect()
+    };
 
     println!("\n{}", "═".repeat(100));
-    println!("Discrete Gaussian Sampler Comparison");
+    println!("Discrete Gaussian Sampler Accuracy Comparison (non-gating)");
     println!("Samples per test: {}", N);
     println!("Testing {} sigma values: {:?}", sigmas.len(), sigmas);
     println!("{}\n", "═".repeat(100));
@@ -290,6 +295,6 @@ fn main() {
     }
 
     println!("\n{}", "═".repeat(100));
-    println!("All comparisons completed!");
+    println!("Exploratory comparison completed (non-gating).");
     println!("{}", "═".repeat(100));
 }

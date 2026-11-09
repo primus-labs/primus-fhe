@@ -1,3 +1,9 @@
+//! Lane permutations used by the HEXL-derived packed stages.
+//!
+//! The `_mm512_set_epi64` examples below retain HEXL's high-to-low argument
+//! notation so they can be compared directly with
+//! `hexl/ntt/ntt-avx512-util.hpp`.
+
 use core::arch::x86_64::*;
 
 /// Given input lanes: `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`,

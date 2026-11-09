@@ -1,9 +1,26 @@
-use primus_integer::UnsignedInteger;
+use num_traits::Signed;
+use primus_integer::{FheUint, SignedInteger, UnsignedInteger};
 use primus_reduce::{ReduceError, prelude::*};
 
 use crate::common::uint;
 
 use super::UintModulus;
+
+impl<T: FheUint> EncodeSigned<T> for UintModulus<T> {
+    #[inline(always)]
+    fn encode_signed(self, value: T::SignedInteger) -> T {
+        debug_assert!(
+            value.unsigned_abs() < self.0,
+            "signed coefficient magnitude must be less than the modulus"
+        );
+        // Wrapping addition also handles signed MIN when its magnitude is below q.
+        if value.is_negative() {
+            self.0.wrapping_add_signed(value)
+        } else {
+            value.cast_to_unsigned()
+        }
+    }
+}
 
 impl<T: UnsignedInteger> ReduceOnce<T> for UintModulus<T> {
     type Output = T;

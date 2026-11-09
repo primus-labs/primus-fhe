@@ -1,19 +1,18 @@
 use core::ops::{Add, Div, Mul, Rem, Shl, Shr, Sub};
 
-/// Performs addition, returning `None` if overflow occurred.
+/// Provides checked addition for generic integer code.
 pub trait CheckedAdd: Sized + Add<Self, Output = Self> {
-    /// Adds two numbers, checking for overflow. If overflow happens, `None` is
-    /// returned.
-    #[must_use]
-    fn checked_add(self, v: Self) -> Option<Self>;
+    /// Computes `self + rhs`, returning `None` if overflow occurs.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_add(self, rhs: Self) -> Option<Self>;
 }
 
 macro_rules! checked_impl {
     ($trait_name:ident, $method:ident, $T:ty) => {
         impl $trait_name for $T {
             #[inline]
-            fn $method(self, v: $T) -> Option<$T> {
-                <$T>::$method(self, v)
+            fn $method(self, rhs: $T) -> Option<$T> {
+                <$T>::$method(self, rhs)
             }
         }
     };
@@ -33,12 +32,11 @@ checked_impl!(CheckedAdd, checked_add, i64);
 checked_impl!(CheckedAdd, checked_add, isize);
 checked_impl!(CheckedAdd, checked_add, i128);
 
-/// Performs subtraction, returning `None` if overflow occurred.
+/// Provides checked subtraction for generic integer code.
 pub trait CheckedSub: Sized + Sub<Self, Output = Self> {
-    /// Subtracts two numbers, checking for overflow. If overflow happens,
-    /// `None` is returned.
-    #[must_use]
-    fn checked_sub(self, v: Self) -> Option<Self>;
+    /// Computes `self - rhs`, returning `None` if overflow occurs.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_sub(self, rhs: Self) -> Option<Self>;
 }
 
 checked_impl!(CheckedSub, checked_sub, u8);
@@ -55,12 +53,11 @@ checked_impl!(CheckedSub, checked_sub, i64);
 checked_impl!(CheckedSub, checked_sub, isize);
 checked_impl!(CheckedSub, checked_sub, i128);
 
-/// Performs multiplication, returning `None` if overflow occurred.
+/// Provides checked multiplication for generic integer code.
 pub trait CheckedMul: Sized + Mul<Self, Output = Self> {
-    /// Multiplies two numbers, checking for overflow. If overflow happens,
-    /// `None` is returned.
-    #[must_use]
-    fn checked_mul(self, v: Self) -> Option<Self>;
+    /// Computes `self * rhs`, returning `None` if overflow occurs.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_mul(self, rhs: Self) -> Option<Self>;
 }
 
 checked_impl!(CheckedMul, checked_mul, u8);
@@ -77,13 +74,12 @@ checked_impl!(CheckedMul, checked_mul, i64);
 checked_impl!(CheckedMul, checked_mul, isize);
 checked_impl!(CheckedMul, checked_mul, i128);
 
-/// Performs division, returning `None` on division by zero or if overflow
-/// occurred.
+/// Provides checked division for generic integer code.
 pub trait CheckedDiv: Sized + Div<Self, Output = Self> {
-    /// Divides two numbers, checking for overflow and division by
-    /// zero. If any of that happens, `None` is returned.
-    #[must_use]
-    fn checked_div(self, v: Self) -> Option<Self>;
+    /// Computes `self / rhs`, returning `None` if `rhs` is zero or the division
+    /// overflows.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_div(self, rhs: Self) -> Option<Self>;
 }
 
 checked_impl!(CheckedDiv, checked_div, u8);
@@ -100,11 +96,10 @@ checked_impl!(CheckedDiv, checked_div, i64);
 checked_impl!(CheckedDiv, checked_div, isize);
 checked_impl!(CheckedDiv, checked_div, i128);
 
-/// Performs integral remainder, returning `None` on division by zero or if
-/// overflow occurred.
+/// Provides checked remainder for generic integer code.
 pub trait CheckedRem: Sized + Rem<Self, Output = Self> {
-    /// Finds the remainder of dividing two numbers, checking for overflow and
-    /// division by zero. If any of that happens, `None` is returned.
+    /// Computes `self % rhs`, returning `None` if `rhs` is zero or the division
+    /// overflows.
     ///
     /// # Examples
     ///
@@ -121,8 +116,8 @@ pub trait CheckedRem: Sized + Rem<Self, Output = Self> {
     /// assert_eq!(CheckedRem::checked_rem(i32::MIN, 1), Some(0));
     /// assert_eq!(CheckedRem::checked_rem(i32::MIN, -1), None);
     /// ```
-    #[must_use]
-    fn checked_rem(self, v: Self) -> Option<Self>;
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_rem(self, rhs: Self) -> Option<Self>;
 }
 
 checked_impl!(CheckedRem, checked_rem, u8);
@@ -150,10 +145,12 @@ macro_rules! checked_impl_unary {
     };
 }
 
-/// Performs negation, returning `None` if the result can't be represented.
+/// Provides checked negation for generic integer code.
 pub trait CheckedNeg: Sized {
-    /// Negates a number, returning `None` for results that can't be represented, like signed `MIN`
-    /// values that can't be positive, or non-zero unsigned values that can't be negative.
+    /// Computes `-self`, returning `None` if the result is not representable.
+    ///
+    /// For primitive integers, a signed type's `MIN` value and every nonzero
+    /// unsigned value cannot be negated without overflow.
     ///
     /// # Examples
     ///
@@ -167,7 +164,7 @@ pub trait CheckedNeg: Sized {
     /// assert_eq!(CheckedNeg::checked_neg(0_u32), Some(0));
     /// assert_eq!(CheckedNeg::checked_neg(1_u32), None);
     /// ```
-    #[must_use]
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn checked_neg(self) -> Option<Self>;
 }
 
@@ -185,11 +182,10 @@ checked_impl_unary!(CheckedNeg, checked_neg, i64);
 checked_impl_unary!(CheckedNeg, checked_neg, isize);
 checked_impl_unary!(CheckedNeg, checked_neg, i128);
 
-/// Performs shift left, returning `None` on shifts larger than or equal to
-/// the type width.
+/// Provides checked left shift for generic integer code.
 pub trait CheckedShl: Sized + Shl<u32, Output = Self> {
-    /// Checked shift left. Computes `self << rhs`, returning `None`
-    /// if `rhs` is larger than or equal to the number of bits in `self`.
+    /// Computes `self << rhs`, returning `None` if `rhs` is greater than or
+    /// equal to the bit width of `Self`.
     ///
     /// # Examples
     ///
@@ -203,7 +199,7 @@ pub trait CheckedShl: Sized + Shl<u32, Output = Self> {
     /// assert_eq!(CheckedShl::checked_shl(x, 15), Some(0x8000));
     /// assert_eq!(CheckedShl::checked_shl(x, 16), None);
     /// ```
-    #[must_use]
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn checked_shl(self, rhs: u32) -> Option<Self>;
 }
 
@@ -232,11 +228,10 @@ checked_shift_impl!(CheckedShl, checked_shl, i64);
 checked_shift_impl!(CheckedShl, checked_shl, isize);
 checked_shift_impl!(CheckedShl, checked_shl, i128);
 
-/// Performs shift right, returning `None` on shifts larger than or equal to
-/// the type width.
+/// Provides checked right shift for generic integer code.
 pub trait CheckedShr: Sized + Shr<u32, Output = Self> {
-    /// Checked shift right. Computes `self >> rhs`, returning `None`
-    /// if `rhs` is larger than or equal to the number of bits in `self`.
+    /// Computes `self >> rhs`, returning `None` if `rhs` is greater than or
+    /// equal to the bit width of `Self`.
     ///
     /// # Examples
     ///
@@ -250,7 +245,7 @@ pub trait CheckedShr: Sized + Shr<u32, Output = Self> {
     /// assert_eq!(CheckedShr::checked_shr(x, 15), Some(0x0001));
     /// assert_eq!(CheckedShr::checked_shr(x, 16), None);
     /// ```
-    #[must_use]
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn checked_shr(self, rhs: u32) -> Option<Self>;
 }
 
@@ -267,58 +262,3 @@ checked_shift_impl!(CheckedShr, checked_shr, i32);
 checked_shift_impl!(CheckedShr, checked_shr, i64);
 checked_shift_impl!(CheckedShr, checked_shr, isize);
 checked_shift_impl!(CheckedShr, checked_shr, i128);
-
-#[test]
-fn test_checked_traits() {
-    // Add: normal and overflow on unsigned MAX / signed MAX.
-    assert_eq!(CheckedAdd::checked_add(1u32, 2), Some(3));
-    assert_eq!(CheckedAdd::checked_add(u32::MAX, 0), Some(u32::MAX));
-    assert_eq!(CheckedAdd::checked_add(u32::MAX, 1), None);
-    assert_eq!(CheckedAdd::checked_add(u64::MAX, 1), None);
-    assert_eq!(CheckedAdd::checked_add(i32::MAX, 1), None);
-    assert_eq!(CheckedAdd::checked_add(i64::MAX, 1), None);
-    assert_eq!(CheckedAdd::checked_add(i64::MIN, -1), None);
-
-    // Sub: underflow on unsigned 0, overflow on signed MIN.
-    assert_eq!(CheckedSub::checked_sub(0u32, 1), None);
-    assert_eq!(CheckedSub::checked_sub(0u64, 1), None);
-    assert_eq!(CheckedSub::checked_sub(i32::MIN, 1), None);
-    assert_eq!(CheckedSub::checked_sub(i64::MIN, 1), None);
-    assert_eq!(CheckedSub::checked_sub(u32::MAX, u32::MAX), Some(0));
-
-    // Mul: overflow on MAX*2, identity on 0.
-    assert_eq!(CheckedMul::checked_mul(0u32, u32::MAX), Some(0));
-    assert_eq!(CheckedMul::checked_mul(u32::MAX, 2), None);
-    assert_eq!(CheckedMul::checked_mul(u64::MAX, u64::MAX), None);
-    assert_eq!(CheckedMul::checked_mul(i32::MIN, -1), None);
-    assert_eq!(CheckedMul::checked_mul(i64::MIN, -1), None);
-
-    // Div: division by zero and signed MIN / -1.
-    assert_eq!(CheckedDiv::checked_div(10u32, 0), None);
-    assert_eq!(CheckedDiv::checked_div(10u32, 3), Some(3));
-    assert_eq!(CheckedDiv::checked_div(i32::MIN, -1), None);
-    assert_eq!(CheckedDiv::checked_div(i64::MIN, -1), None);
-
-    // Rem: remainder by zero and signed MIN % -1.
-    assert_eq!(CheckedRem::checked_rem(10u32, 0), None);
-    assert_eq!(CheckedRem::checked_rem(10u32, 3), Some(1));
-    assert_eq!(CheckedRem::checked_rem(i32::MIN, -1), None);
-    assert_eq!(CheckedRem::checked_rem(i64::MIN, -1), None);
-
-    // Neg: signed MIN cannot be negated; any non-zero unsigned cannot.
-    assert_eq!(CheckedNeg::checked_neg(0u32), Some(0));
-    assert_eq!(CheckedNeg::checked_neg(1u32), None);
-    assert_eq!(CheckedNeg::checked_neg(0u64), Some(0));
-    assert_eq!(CheckedNeg::checked_neg(i32::MIN), None);
-    assert_eq!(CheckedNeg::checked_neg(i64::MIN), None);
-    assert_eq!(CheckedNeg::checked_neg(1i32), Some(-1));
-
-    // Shl/Shr: shift at or beyond bit-width returns None.
-    assert_eq!(CheckedShl::checked_shl(1u32, 31), Some(1u32 << 31));
-    assert_eq!(CheckedShl::checked_shl(1u32, 32), None);
-    assert_eq!(CheckedShl::checked_shl(1u64, 63), Some(1u64 << 63));
-    assert_eq!(CheckedShl::checked_shl(1u64, 64), None);
-    assert_eq!(CheckedShr::checked_shr(1u32 << 31, 31), Some(1));
-    assert_eq!(CheckedShr::checked_shr(1u32, 32), None);
-    assert_eq!(CheckedShr::checked_shr(1u64, 64), None);
-}

@@ -54,6 +54,7 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
     ///
     /// * Every lane of `value` must be less than `modulus`.
     /// * `modulus` must be less than `2^(T::BITS - 1)`.
+    #[must_use]
     #[inline]
     pub fn new(value: T::SimdT, modulus: T) -> Self {
         debug_assert!(value.simd_lt(T::SimdT::splat(modulus)).all());
@@ -68,8 +69,9 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
     ///
     /// The caller must ensure each quotient lane was precomputed from the
     /// corresponding value lane and the modulus used by later operations.
+    #[must_use]
     #[inline]
-    pub fn with_quotient(value: T::SimdT, quotient: T::SimdT) -> Self {
+    pub fn from_raw(value: T::SimdT, quotient: T::SimdT) -> Self {
         Self { value, quotient }
     }
 
@@ -78,6 +80,7 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
     /// # Panics
     ///
     /// Panics if `factors.len()` is not equal to `T::LANE_COUNT`.
+    #[must_use]
     #[inline]
     pub fn from_slice(factors: &[ShoupFactor<T>]) -> Self {
         assert_eq!(factors.len(), T::LANE_COUNT);
@@ -122,12 +125,14 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
     }
 
     /// Returns the value of this [`SimdShoupFactor<T>`].
+    #[must_use]
     #[inline]
     pub fn value(self) -> T::SimdT {
         self.value
     }
 
     /// Returns the quotient of this [`SimdShoupFactor<T>`].
+    #[must_use]
     #[inline]
     pub fn quotient(self) -> T::SimdT {
         self.quotient

@@ -1,7 +1,10 @@
-use core::arch::x86_64::*;
+//! AVX2 reductions and the Barrett-64 product used by the u64 butterflies.
+//!
+//! AVX2 has no packed u64 widening multiply. The two product helpers therefore
+//! split each lane into 32-bit limbs and compute only the half needed by the
+//! Barrett quotient or remainder.
 
-// Reduction helpers
-// ---------------------------------------------------------------------------
+use core::arch::x86_64::*;
 
 /// `x mod bound` for `x < 2*bound` on 4 u64 lanes.
 ///
@@ -32,61 +35,10 @@ pub(super) fn reduce_twice_u64x4(x: __m256i, q: __m256i, two_q: __m256i) -> __m2
     reduce_once_u64x4(x, q) // -> [0, q)
 }
 
-// ---------------------------------------------------------------------------
-// 64 × 64 → 128 widening multiply (4 lanes)
-// ---------------------------------------------------------------------------
-
-/// Returns `(lo, hi)` where `lo` and `hi` are the low and high 64 bits of
-/// the 128-bit products `a * b` for each of the 4 u64 lanes.
-///
-/// This full reference implementation is not directly called — the callers use
-/// `widening_mul_hi_u64x4` and `widening_mul_lo_u64x4` instead, which each
-/// save 2–3 instructions by computing only the needed half.
-///
-/// Algorithm from <https://stackoverflow.com/a/28827013>: each 64-bit
-/// operand is split into two 32-bit halves, then 4 cross-products are
-/// computed via `_mm256_mul_epu32`.
-#[allow(dead_code)]
-#[target_feature(enable = "avx2")]
-#[inline]
-fn widening_mul_u64x4(a: __m256i, b: __m256i) -> (__m256i, __m256i) {
-    let lo_mask = _mm256_set1_epi64x(0x0000_0000_FFFF_FFFFu64 as i64);
-    // Swap 32-bit halves within each 64-bit lane: [a1, a0] → [a0, a1]
-    let a_hi = _mm256_shuffle_epi32::<0b10_11_00_01>(a);
-    let b_hi = _mm256_shuffle_epi32::<0b10_11_00_01>(b);
-
-    // 32 × 32 → 64 cross-products
-    let z_lo_lo = _mm256_mul_epu32(a, b); // a_lo * b_lo
-    let z_lo_hi = _mm256_mul_epu32(a, b_hi); // a_lo * b_hi
-    let z_hi_lo = _mm256_mul_epu32(a_hi, b); // a_hi * b_lo
-    let z_hi_hi = _mm256_mul_epu32(a_hi, b_hi); // a_hi * b_hi — only needed for full / hi
-
-    // --- low 64 bits ---
-    // prod_lo = (z_lo_hi + z_hi_lo) << 32  +  z_lo_lo
-    let prod_lo = _mm256_add_epi64(
-        _mm256_slli_epi64::<32>(_mm256_add_epi64(z_lo_hi, z_hi_lo)),
-        z_lo_lo,
-    );
-
-    // --- high 64 bits ---
-    let z_lo_lo_shift = _mm256_srli_epi64::<32>(z_lo_lo); // carry from lo
-    let sum_tmp = _mm256_add_epi64(z_lo_hi, z_lo_lo_shift);
-    let sum_lo = _mm256_and_si256(sum_tmp, lo_mask); // low 32 bits of sum
-    let sum_mid = _mm256_srli_epi64::<32>(sum_tmp); // carry to high
-
-    let sum_mid2 = _mm256_add_epi64(z_hi_lo, sum_lo);
-    let sum_mid2_hi = _mm256_srli_epi64::<32>(sum_mid2); // carry to highest
-    let sum_hi = _mm256_add_epi64(z_hi_hi, sum_mid);
-
-    let prod_hi = _mm256_add_epi64(sum_hi, sum_mid2_hi);
-
-    (prod_lo, prod_hi)
-}
-
 /// Returns only the **high** 64 bits of `a * b` (4 lanes).
 ///
-/// Saves ~3 instructions vs `widening_mul_u64x4` by skipping the low
-/// recombination.  Used by `mul_mod_lazy_u64x4` for the qhat computation.
+/// The four 32-bit limb products are recombined with the carries entering the
+/// high half. Used for the Barrett quotient estimate.
 #[target_feature(enable = "avx2")]
 #[inline]
 fn widening_mul_hi_u64x4(a: __m256i, b: __m256i) -> __m256i {
@@ -110,9 +62,8 @@ fn widening_mul_hi_u64x4(a: __m256i, b: __m256i) -> __m256i {
 
 /// Returns only the **low** 64 bits of `a * b` (4 lanes).
 ///
-/// Saves 1 `vpmuludq` + ~3 shift/add ops vs `widening_mul_u64x4` by
-/// skipping `z_hi_hi` and the full high recombination.
-/// Used by `mul_mod_lazy_u64x4` for the two low-half products.
+/// The high-high limb product cannot affect this half, so only three
+/// `_mm256_mul_epu32` operations are needed.
 #[target_feature(enable = "avx2")]
 #[inline]
 fn widening_mul_lo_u64x4(a: __m256i, b: __m256i) -> __m256i {
@@ -121,23 +72,15 @@ fn widening_mul_lo_u64x4(a: __m256i, b: __m256i) -> __m256i {
     let z_lo_lo = _mm256_mul_epu32(a, b);
     let z_lo_hi = _mm256_mul_epu32(a, b_hi);
     let z_hi_lo = _mm256_mul_epu32(a_hi, b);
-    // z_hi_hi is NOT computed — not needed for the low 64 bits.
     _mm256_add_epi64(
         _mm256_slli_epi64::<32>(_mm256_add_epi64(z_lo_hi, z_hi_lo)),
         z_lo_lo,
     )
 }
 
-// ---------------------------------------------------------------------------
-// Barrett lazy multiply for 64-bit
-// ---------------------------------------------------------------------------
-
 /// Barrett-64 lazy multiply for 4 u64 lanes.
 ///
 /// Computes `qhat = hi64(y * wp)` then `t = lo64(y * w) - lo64(q * qhat)`.
-/// Uses `widening_mul_hi_u64x4` for the high half and
-/// `widening_mul_lo_u64x4` for the two low halves, saving 2 `vpmuludq`
-/// per butterfly vs calling the full `widening_mul_u64x4` each time.
 #[target_feature(enable = "avx2")]
 #[inline]
 pub(super) fn mul_mod_lazy_u64x4(y: __m256i, w: __m256i, wp: __m256i, q: __m256i) -> __m256i {
@@ -146,5 +89,3 @@ pub(super) fn mul_mod_lazy_u64x4(y: __m256i, w: __m256i, wp: __m256i, q: __m256i
     let qq = widening_mul_lo_u64x4(q, qhat);
     _mm256_sub_epi64(wy, qq)
 }
-
-// ---------------------------------------------------------------------------

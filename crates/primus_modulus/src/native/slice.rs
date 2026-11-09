@@ -29,7 +29,8 @@ impl<T: FheUint> ReduceNegSlice<T> for NativeModulus<T> {
     }
 }
 
-#[cfg(not(feature = "simd"))]
+// Keep native add/sub as wrapping loops in both feature configurations. LLVM
+// can inline and vectorize rotated slices without fixed-lane chunk/tail handling.
 impl<T: FheUint> ReduceAddSlice<T> for NativeModulus<T> {
     #[inline]
     fn reduce_add_slice_assign(self, a: &mut [T], b: &[T]) {
@@ -50,7 +51,6 @@ impl<T: FheUint> ReduceAddSlice<T> for NativeModulus<T> {
     }
 }
 
-#[cfg(not(feature = "simd"))]
 impl<T: FheUint> ReduceSubSlice<T> for NativeModulus<T> {
     #[inline]
     fn reduce_sub_slice_assign(self, a: &mut [T], b: &[T]) {
@@ -177,11 +177,8 @@ impl<T: FheUint> ReduceMulAddSlice<T> for NativeModulus<T> {
 
 #[cfg(not(feature = "simd"))]
 impl<T: FheUint> ReduceDotProduct<T> for NativeModulus<T> {
-    type Output = T;
     #[inline]
-    fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> T {
-        let a = a.as_ref();
-        let b = b.as_ref();
+    fn reduce_dot_product(self, a: &[T], b: &[T]) -> T {
         assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
         a.iter()
             .zip(b)
@@ -194,6 +191,21 @@ impl<T: FheUint> ReduceDotProduct<T> for NativeModulus<T> {
         b: impl IntoIterator<Item = T>,
     ) -> T {
         std::iter::zip(a, b).fold(T::ZERO, |acc, (x, y)| x.wrapping_mul(y).wrapping_add(acc))
+    }
+}
+
+impl<T: FheUint> ReduceDotProductSigned<T> for NativeModulus<T> {
+    #[inline(always)]
+    fn reduce_dot_product_signed(self, lhs: &[T], rhs: &[T::SignedInteger]) -> T {
+        assert_eq!(
+            lhs.len(),
+            rhs.len(),
+            "reduce_dot_product_signed: length mismatch"
+        );
+        self.reduce_dot_product_iter(
+            lhs.iter().copied(),
+            rhs.iter().copied().map(|s| self.encode_signed(s)),
+        )
     }
 }
 

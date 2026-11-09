@@ -18,7 +18,19 @@ pub type PolynomialRef<'a, T> = Polynomial<&'a [T]>;
 /// Mutably borrowed [`Polynomial`] backed by a mutable slice.
 pub type PolynomialMut<'a, T> = Polynomial<&'a mut [T]>;
 
-/// Represents a polynomial where coefficients are elements of a specified unsigned integer `T`.
+/// Raw coefficient storage in ascending-power order under one modulus.
+///
+/// This wrapper stores no ring length or modulus. Empty, arbitrary-length and
+/// packed storage are allowed; [`Self::len`] counts all stored coefficients.
+/// Callers establish the single-polynomial or batch layout before arithmetic.
+///
+/// # Correctness
+///
+/// Arithmetic requires equal input and output lengths and a common coefficient
+/// modulus. Values must satisfy the selected reduction or factor operation's
+/// range contract. Method-specific ring lengths and exponent bounds also apply.
+/// The wrapper does not validate these conditions; zipped operations can leave
+/// unmatched tails untouched when lengths differ.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Polynomial<S>(pub S)
 where
@@ -27,12 +39,15 @@ where
 
 impl_iters!(Polynomial, poly);
 
+impl_views!(Polynomial);
+
 impl<S, T> Polynomial<S>
 where
     S: RawData<Elem = T>,
     T: FheUint,
 {
-    /// Creates a new [`Polynomial<T>`].
+    /// Creates a new [`Polynomial<S>`] from coefficient storage.
+    #[must_use]
     #[inline]
     pub fn new(poly: S) -> Self {
         Self(poly)
@@ -41,22 +56,18 @@ where
 
 impl<S, T> Polynomial<S>
 where
-    S: RawData<Elem = T> + DataOwned,
+    S: DataOwned<Elem = T>,
     T: FheUint,
 {
-    /// Creates a [`Polynomial<T>`] with all coefficients equal to zero.
+    /// Creates a [`Polynomial<S>`] with `len` zero coefficients.
+    #[must_use]
     #[inline]
-    pub fn zero(poly_length: usize) -> Self {
-        Self(S::from_vec(vec![T::ZERO; poly_length]))
-    }
-
-    /// Drop self, and return the vector.
-    #[inline]
-    pub fn into_owned(self) -> S {
-        self.0
+    pub fn zero(len: usize) -> Self {
+        Self(S::from_vec(vec![T::ZERO; len]))
     }
 
     /// Constructs a new polynomial from a slice.
+    #[must_use]
     #[inline]
     pub fn from_slice(polynomial: &[T]) -> Self {
         Self::new(S::from_slice(polynomial))
@@ -65,7 +76,7 @@ where
 
 impl<S, T> Polynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Extracts a mutable slice of the entire vector.
@@ -97,13 +108,21 @@ where
 
 impl<S, T> Polynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
-    /// Get the coefficient counts of polynomial.
+    /// Returns the total number of stored coefficients, without validating a ring length.
+    #[must_use]
     #[inline]
-    pub fn poly_length(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Returns whether the backing storage contains no coefficients.
+    #[must_use]
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Extracts a slice containing the entire vector.
@@ -120,19 +139,15 @@ where
         self.0.iter()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
-    #[inline]
-    pub fn copied_iter(&self) -> core::iter::Copied<core::slice::Iter<'_, T>> {
-        self.0.iter().copied()
-    }
-
     /// Returns `true` if `self` is equal to `0`.
+    #[must_use]
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.0.iter().all(Zero::is_zero)
     }
 
     /// Evaluate the polynomial with the value `x`.
+    #[must_use]
     #[inline]
     pub fn evaluate<M>(&self, x: T, modulus: M) -> T
     where
@@ -146,7 +161,7 @@ where
 
 impl<S, T> Size for Polynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     #[inline]

@@ -2,9 +2,6 @@ use core::arch::x86_64::*;
 
 use super::arithmetic::{mul_mod_lazy_avx2, reduce_once_avx2};
 
-// Butterflies
-// ---------------------------------------------------------------------------
-
 /// Forward Harvey butterfly on 8 u32 lanes.
 ///
 /// Input:  `x`, `y` each in `[0, 4q)`.
