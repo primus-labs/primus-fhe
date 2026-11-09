@@ -18,7 +18,7 @@
 | `just parallel` | stable 的可选 limb 并行：NTT、lattice、BFV/BGV 的 all-targets lint 和普通测试，选择 `rns,batching,parallel`，每个测试进程的Rayon pool为4线程 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | Stable 工作区主套件统一启用 batching，并运行 doctest、方案示例和独立消费者、定向并行测试、无 batching 的分配测试、依赖隔离编译和 Barrett derive 回归 |
+| `just ci` | Stable 工作区主套件统一启用 batching，覆盖 doctest、定向并行测试、无 batching 的分配测试、独立消费者的编译和依赖检查以及 Barrett derive 回归 |
 | `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -31,7 +31,7 @@ just tfhe
 
 all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执行 doctest；`test-doc` recipe 使用默认 features，需选其他 features 时直接调用 `cargo test -p <package> --doc --features <features>`。普通测试保持 `--lib --tests`，避免混入 Criterion target。
 
-[开发 profile](../../Cargo.toml) 设置 `opt-level=1`，test profile 继承它；release/bench 使用默认配置。需要验证 release 下的检查或数值行为时，对相关普通测试另加 `--release`。[GitHub CI](../../.github/workflows/ci.yml) 分 stable/nightly 两个 job；示例执行和性能采样按需进行，不加入普通 CI 的大参数运行。
+[开发 profile](../../Cargo.toml) 设置 `opt-level=1`，test profile 继承它；release/bench 使用默认配置。需要验证 release 下的检查或数值行为时，对相关普通测试另加 `--release`。[GitHub CI](../../.github/workflows/ci.yml) 分 Stable 和 Nightly 两个作业。示例和基准由 CI 做编译与 lint 检查，实际执行按需手动触发。
 
 ## Features 与独立消费者
 
@@ -142,10 +142,11 @@ schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配�
 `ciphertext_multiplication` 单独引入 relin 与 Radix/Hybrid；高级例和 allocation 测试
 验证 `_to` 的复用契约。
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
-`just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
-只用 examples 实际所需的普通依赖执行四个基础流程、两方案的密文乘法双后端和 BFV
-working-basis 双后端，另用一个BGV三层预算系数流程覆盖两后端的drop、自同构与换钥，共8个独立包、12次执行。
-这避免 dev-dependencies 或 workspace feature 合并掩盖接口问题，不展开完整参数矩阵。
+`just ci` 用 `scripts/check_scheme_consumers.py --check-only` 编译检查 8 个独立包，
+并核对普通依赖与 feature 边界。`just schemes` 还执行这些示例，覆盖四个基础流程、
+两方案的密文乘法双后端、BFV working-basis 双后端，以及 BGV 三层预算系数流程的
+两种后端，共 12 次执行。独立 workspace 可以暴露被 dev-dependencies 或 workspace
+feature 合并掩盖的问题。
 系数消费者不启用 batching；槽消费者只需
 启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 

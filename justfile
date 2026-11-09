@@ -6,7 +6,7 @@ stable_ci_features := "ntt,fourier,rustfft,tfhe-fft,rns,batching"
 default: fmt-check (lint "*" "ntt,fourier,rustfft,tfhe-fft") (test "*" "ntt,fourier,rustfft,tfhe-fft")
 
 # CI selects stable; local commands use the active toolchain.
-ci: fmt-check (lint "*" stable_ci_features) (test "*" stable_ci_features) test-doc scheme-smoke (parallel "--test dcrt_prefix --test leveled_parameters")
+ci: fmt-check (lint "*" stable_ci_features) (test "*" stable_ci_features) test-doc (parallel "--test dcrt_prefix --test leveled_parameters")
   cargo check -p primus_data --lib --no-default-features
   cargo check -p primus_fft -p primus_lwe -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
@@ -19,6 +19,7 @@ ci: fmt-check (lint "*" stable_ci_features) (test "*" stable_ci_features) test-d
   cargo check -p primus_modulus --all-targets --features derive
   cargo nextest run -p primus_modulus --test derives --features derive
   cargo check -p primus_distr --lib --features high_precision
+  python3 scripts/check_scheme_consumers.py --check-only
 
 # Separate toolchain/job. Build strict rustdoc only once, with all features.
 ci-nightly: simd
