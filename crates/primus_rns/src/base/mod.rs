@@ -25,6 +25,16 @@ use crate::RnsError;
 /// Clones share immutable moduli and CRT precomputations through an internal Arc;
 /// they neither allocate tables nor recompute them. Extending a base creates new
 /// precomputations and leaves every clone of the original base unchanged.
+///
+/// # Correctness
+///
+/// Each modulus must satisfy `1 < q_i < 2^(T::BITS - 1)` for the internal
+/// [`ShoupFactor`] precomputations. [`FieldContext`] does not establish these
+/// bounds, and the constructors check coprimality rather than this range.
+/// Conversion operations can impose stronger arithmetic requirements; see
+/// [`crate::BaseConverter::fast_convert`]. Valid Barrett contexts already meet
+/// both requirements. Residues supplied to an operation must be canonical for
+/// the corresponding modulus in this base's order.
 #[derive(Clone)]
 pub struct RNSBase<T, M>
 where
@@ -80,6 +90,11 @@ where
 {
     /// Creates an RNS basis from pairwise-coprime moduli.
     ///
+    /// # Correctness
+    ///
+    /// The moduli must satisfy [`RNSBase`]'s Shoup range contract; these bounds
+    /// are not reported as construction errors.
+    ///
     /// # Panics
     ///
     /// Panics if modular inverse computation panics unexpectedly.
@@ -95,7 +110,7 @@ where
 
     /// Creates an RNS basis from an owned `Vec<M>`, avoiding a clone.
     ///
-    /// See [`new`](Self::new) for error conditions.
+    /// Inherits [`Self::new`]'s mathematical, error and panic contracts.
     #[inline]
     pub fn from_owned_moduli(moduli: Vec<M>) -> Result<Self, RnsError> {
         if moduli.is_empty() {

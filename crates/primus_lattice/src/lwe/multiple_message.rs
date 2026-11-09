@@ -110,6 +110,8 @@ where
     ///
     /// The stored values must be canonical under `modulus`; the extracted
     /// key is the coefficient vector of the original RLWE secret.
+    /// The strict `index < dimension` requirement is not validated in release;
+    /// `index == dimension` can produce an incorrect sample without panicking.
     ///
     /// # Panics
     ///

@@ -11,7 +11,7 @@ use primus_shape::PolyLength;
 ///
 /// The single-polynomial layout fixes the complete secret length N, so weight
 /// and modulus support are checked here. This does not establish invertibility:
-/// NTT key generation checks sampled keys before acceptance.
+/// NTT key generation retains its rejection checks.
 /// Ordinary and gadget parameters share this immutable state through `Arc`;
 /// cloning this value directly still copies its sampler tables.
 #[derive(Clone)]

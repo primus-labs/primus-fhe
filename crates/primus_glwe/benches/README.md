@@ -25,4 +25,4 @@ cargo bench -p primus_glwe --bench primitives --features ntt,rustfft,tfhe-fft
 cargo bench -p primus_glwe --bench key_conversion --features ntt,rustfft
 ```
 
-Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples. These feature lists include each target's required FFT engines.
+Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples. These feature lists include each target's required FFT engines. Validation commands are in the workspace [testing guide](../../../guides/development/testing.md).

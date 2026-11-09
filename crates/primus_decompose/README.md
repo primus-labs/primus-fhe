@@ -121,7 +121,7 @@ RNS/CRT residues use modulus-major storage, not this value-major limb layout. Co
 
 The default feature set is empty. The optional `simd` feature forwards to `primus_integer/simd` and requires nightly Rust. It does not select a separate decomposition backend; the loops can also benefit from compiler auto-vectorization.
 
-Public contracts are documented in the [API sources](src). See the [benchmark guide](benches/README.md) for workloads and commands.
+Public contracts are documented in the [API sources](src). See the [benchmark guide](benches/README.md) for workloads and commands, and the workspace [testing guide](../../guides/development/testing.md) for validation entry points.
 
 ## License
 

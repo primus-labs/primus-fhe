@@ -35,6 +35,15 @@ where
     /// elements, and the gadget has `size.rns_ggsw_len()` evaluations in
     /// row/level/component/modulus order under a compatible key. Output is
     /// cleared before accumulation; scratch needs no manual reset.
+    /// These complete lengths are caller obligations: the component/level
+    /// iterators do not validate them and can omit unmatched storage.
+    ///
+    /// # Panics
+    ///
+    /// Processed CRT polynomial blocks pass through the RNS recomposition
+    /// checks described by [`crate::glev::DcrtGlev::mul_crt_polynomial_to`].
+    /// A failure can occur after `output` has been cleared or partially updated;
+    /// other layout requirements are not systematically checked.
     pub fn external_product_to<M, Table, A, B>(
         &self,
         input: &CrtGlwe<A>,

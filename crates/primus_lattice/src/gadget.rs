@@ -3,8 +3,8 @@
 /// Visits the diagonal polynomial of one decomposition level in every row.
 ///
 /// The caller maintains matching storage and layout lengths from a checked gadget
-/// size. `level` must be within that size's decomposition length; the public
-/// operation only diagnoses this condition with a debug assertion.
+/// size. `level` must be within that size's decomposition length. Public callers
+/// debug-assert the level; a visited diagonal range can also panic in release.
 /// `poly_len`, `glwe_len` and `glev_len` count stored elements in the current
 /// representation: one polynomial, one GLWE ciphertext and one complete GLev row,
 /// respectively.

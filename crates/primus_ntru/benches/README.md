@@ -29,4 +29,4 @@ cargo bench -p primus_ntru --bench lwe_return
 cargo bench -p primus_ntru --bench ternary_cmux --features ntt
 ```
 
-Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples.
+Append `-- '<regex>'` to select cases, or `-- --test` to run a smoke check without timing samples. Validation commands are in the workspace [testing guide](../../../guides/development/testing.md).

@@ -1,0 +1,30 @@
+[package]
+name = "primus_tfhe_ntru"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_lattice = { path = "../primus_lattice" }
+primus_poly = { path = "../primus_poly" }
+primus_decompose = { path = "../primus_decompose" }
+primus_encoding = { path = "../primus_encoding" }
+primus_integer = { path = "../primus_integer" }
+primus_modulus = { path = "../primus_modulus" }
+primus_lwe = { path = "../primus_lwe" }
+primus_ntru = { path = "../primus_ntru" }
+primus_reduce = { path = "../primus_reduce" }
+primus_tfhe = { path = "../primus_tfhe" }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
+simd = [
+    "primus_lattice/simd",
+    "primus_integer/simd",
+    "primus_lwe/simd",
+    "primus_ntru/simd",
+]

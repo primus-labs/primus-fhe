@@ -52,7 +52,8 @@ enum BaseConversionKernel<T> {
 /// methods omit the quotient correction needed to select the canonical lift of
 /// `x`, so `y_j` is not generally equal to `x mod p_j`. This SEAL-style
 /// approximate conversion is intended for algorithms such as Hybrid ModDown
-/// that cancel the multiple-of-`Q` term. For a one-modulus input base, the
+/// that account for the omitted quotient correction in their error budget.
+/// For a one-modulus input base, the
 /// specialized kernel directly reduces the input residue and is exact.
 ///
 /// Batched conversion APIs take input and output residue arrays in modulus-major

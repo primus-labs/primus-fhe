@@ -77,6 +77,10 @@ name = "packing_key_switch"
 required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
+name = "ntt_square_scheme_switch"
+required-features = ["ntt"]
+
+[[test]]
 name = "scheme_switch"
 required-features = ["ntt", "rustfft", "tfhe-fft"]
 

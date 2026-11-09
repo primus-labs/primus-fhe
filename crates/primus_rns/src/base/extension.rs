@@ -21,6 +21,11 @@ where
     /// multiplied by `p`, and its inverse modulo `q_i` is updated with
     /// `p^-1 mod q_i`, avoiding an O(N²) recomputation.
     ///
+    /// # Correctness
+    ///
+    /// The appended modulus must satisfy [`RNSBase`]'s Shoup range contract.
+    /// Coprimality checks do not validate this bound.
+    ///
     /// # Errors
     ///
     /// Returns [`RnsError::NonCoprimeModuli`] when the new modulus is not coprime

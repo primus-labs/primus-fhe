@@ -140,4 +140,4 @@ assert_eq!(sample.b(), 76);
 
 ## 测试与基准
 
-[基准指南](benches/README.md) 列出可独立运行的 target 和测量端点；完整 PBS 与连续读取计算密钥的成本须在上层测量。
+验证命令见 workspace [测试指南](../../guides/development/testing.md)。[基准指南](benches/README.md) 列出可独立运行的 target 和测量端点；完整 PBS 与连续读取计算密钥的成本须在上层测量。

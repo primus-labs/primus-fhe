@@ -117,7 +117,7 @@ Packed 加密用一个长度为 `n` 的共享 mask 和 `count <= n` 个 body，�
 
 ## Feature 与基准
 
-默认 features 为空；`simd` 启用底层库的 nightly SIMD 算术。公开契约见 [API 源码](src/lib.rs)，
+默认 features 为空；`simd` 启用底层库的 nightly SIMD 算术。公开契约见 [API 源码](src/lib.rs)，验证命令见 workspace [测试指南](../../guides/development/testing.md)。
 
 三个基准分别测量私钥加密/相位提取（含复用与 packed）、公钥生成/加密，以及密钥切换生成/求值。在 workspace 根目录运行：
 

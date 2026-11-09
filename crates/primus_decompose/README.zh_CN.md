@@ -121,7 +121,7 @@ RNS/CRT residue 使用 modulus-major 存储，不是这里的 value-major limb �
 
 默认 feature 集为空。可选的 `simd` feature 转发到 `primus_integer/simd`，需要 nightly Rust；它不选择独立的分解 backend。普通循环也可以受益于编译器自动向量化。
 
-公开契约见 [rustdoc 对应源码](src)；工作负载和运行命令见[基准指南](benches/README.zh_CN.md)。
+公开契约见 [rustdoc 对应源码](src)；工作负载和运行命令见[基准指南](benches/README.zh_CN.md)，workspace 验证入口见[测试指南](../../guides/development/testing.md)。
 
 ## 许可证
 

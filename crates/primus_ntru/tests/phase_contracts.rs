@@ -21,7 +21,7 @@ const N: usize = 32;
 type Poly = [i128; N];
 
 // Embed the eight-coefficient oracle fixtures via X -> X^(N/8).
-// This preserves their algebraic identities, including the rational inverse denominator.
+// This preserves their algebraic identities in the larger negacyclic ring.
 const fn embedded_fixture(coefficients: &[i128; 8]) -> Poly {
     let mut result = [0; N];
     let mut i = 0;

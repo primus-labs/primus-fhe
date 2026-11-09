@@ -45,14 +45,17 @@ pub trait FftTable: Send + Sync {
     fn new(poly_length: PolyLength) -> Self
     where
         Self: Sized;
+
     /// Returns the coefficient polynomial length `N`.
     #[must_use]
     fn poly_length(&self) -> PolyLength;
+
     /// Returns the number of complex Fourier values, `N / 2`.
     #[must_use]
     fn fourier_length(&self) -> usize {
         self.poly_length().fourier_poly_len()
     }
+
     /// Builds the frequency permutation for the negacyclic automorphism `X -> X^degree`.
     /// Entry j is `(source, conjugate)`: `output[j]` is `input[source]`, conjugated
     /// when requested. The map contains exactly N/2 entries and is bound to this
@@ -69,6 +72,7 @@ pub trait FftTable: Send + Sync {
     /// Allocates a workspace compatible with this table instance.
     #[must_use]
     fn new_workspace(&self) -> Self::Workspace;
+
     /// Transforms torus coefficients, scaled by `2^-BITS`, to this table's
     /// Fourier form and completely overwrites `output`.
     ///
@@ -86,6 +90,7 @@ pub trait FftTable: Send + Sync {
         output: &mut [Complex64],
         workspace: &mut Self::Workspace,
     );
+
     /// Transforms signed integer bit patterns without torus scaling to this
     /// table's Fourier form and completely overwrites `output`.
     ///
@@ -103,6 +108,7 @@ pub trait FftTable: Send + Sync {
         output: &mut [Complex64],
         workspace: &mut Self::Workspace,
     );
+
     /// Converts this table's Fourier form back to torus coefficients and
     /// completely overwrites `output`.
     ///

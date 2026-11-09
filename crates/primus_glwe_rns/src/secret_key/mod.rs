@@ -11,7 +11,8 @@ pub use dcrt::{
 };
 
 /// Encodes one signed secret polynomial without scaling or general reduction.
-/// Its supported magnitudes are established by parameter/key construction.
+/// The caller establishes EncodeSigned's magnitude bound for this modulus;
+/// imported distribution metadata alone does not establish coefficient support.
 fn encode_secret_polynomial_to<T: FheUint>(
     coefficients: &[T::SignedInteger],
     output: &mut [T],

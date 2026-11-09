@@ -1,0 +1,98 @@
+[package]
+name = "primus_tfhe_glwe_fourier"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_encoding = { path = "../primus_encoding" }
+primus_data = { path = "../primus_data" }
+primus_decompose = { path = "../primus_decompose" }
+primus_fft = { path = "../primus_fft" }
+primus_glwe = { path = "../primus_glwe", features = ["fourier"] }
+primus_lattice = { path = "../primus_lattice", features = ["fourier"] }
+primus_lwe = { path = "../primus_lwe" }
+primus_modulus = { path = "../primus_modulus" }
+primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
+primus_tfhe = { path = "../primus_tfhe" }
+primus_tfhe_glwe = { path = "../primus_tfhe_glwe" }
+
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+# Examples select their concrete FFT engine.
+[[example]]
+name = "fourier_basic"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_boolean"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_circuit_bootstrap"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_mvb_thresholds"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_many_lut"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_sparse"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_sparse_circuit_bootstrap"
+required-features = ["rustfft"]
+
+[[example]]
+name = "fourier_msb_cbs"
+required-features = ["rustfft"]
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "pbs"
+harness = false
+
+[[bench]]
+name = "many_lut"
+harness = false
+
+[[bench]]
+name = "mvb"
+harness = false
+
+[[bench]]
+name = "cbs"
+harness = false
+
+[[bench]]
+name = "cbs_identity"
+harness = false
+
+[features]
+default = ["rustfft", "split-trace"]
+rustfft = ["primus_fft/rustfft"]
+tfhe-fft = ["primus_fft/tfhe-fft"]
+split-trace = ["primus_glwe/split-trace"]
+simd = [
+    "primus_glwe/simd",
+    "primus_lattice/simd",
+    "primus_lwe/simd",
+    "primus_modulus/simd",
+    "primus_tfhe/simd",
+    "primus_tfhe_glwe/simd",
+]
+
+[[bench]]
+name = "modulus_domains"
+harness = false
+required-features = ["tfhe-fft"]

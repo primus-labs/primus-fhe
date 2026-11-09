@@ -92,7 +92,11 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
     /// # Correctness
     ///
     /// A multi-modulus input requires the cross-modulus dot-product range
-    /// described by [`Self::fast_convert`].
+    /// described by [`Self::fast_convert`]. The rounded quotient correction
+    /// must fit in `T`. The destination's multiplication must accept this
+    /// correction times `Q mod p`, even when the correction is not canonical
+    /// modulo `p`. Barrett's full two-limb reduction supports that product;
+    /// custom contexts must establish their own supported input range.
     pub fn corrected_convert_array(
         &self,
         input: &[T],

@@ -130,4 +130,4 @@ Parallel calls use Rayon. Initialize its pool before evaluation and choose a pos
 
 Default features are empty. `simd` forwards nightly SIMD support to arithmetic dependencies. This crate enables the RNS features it needs without a separate `rns` switch.
 
-[Public API sources](src/lib.rs) · [RNS bases and conversion](../primus_rns/README.md)
+[Public API sources](src/lib.rs) · [RNS bases and conversion](../primus_rns/README.md) · [Library usage guide](../../guides/development/README.md) · [Testing guide](../../guides/development/testing.md)

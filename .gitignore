@@ -33,8 +33,10 @@ Thumbs.db
 
 # Common LLM agent files
 CLAUDE.md
-AGENTS.md
 AGENT.md
 .claude
 .codex
 .github/copilot-instructions.md
+
+temp
+docs

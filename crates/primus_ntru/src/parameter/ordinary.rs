@@ -12,8 +12,8 @@ use std::sync::Arc;
 /// Parameters for scalar secret-key NTRU encryption.
 ///
 /// The ciphertext modulus may be an explicit NTT-friendly field or the native
-/// wrapping modulus. Plaintexts use the codec scale `Delta = round(q / t)`.
-/// NTT encryption requires an explicit NTT-friendly modulus.
+/// wrapping modulus. In either case plaintexts
+/// use the codec scale `Delta = round(q / t)`.
 /// The shared encryption state owns the checked ring length and sampler tables;
 /// cloning ordinary or derived gadget parameters retains that state through `Arc`.
 #[derive(Clone)]

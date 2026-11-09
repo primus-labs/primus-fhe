@@ -18,8 +18,8 @@ pub use projection::NttNtruProjectionKey;
 /// [`Self::Separate`] is the enum default; NTT performance presets explicitly
 /// select [`Self::PairedTrace`]. Choose before generating keys and workspaces.
 ///
-/// Fused strategies change decomposition residuals and correlated key errors.
-/// Changing strategy requires a new noise budget.
+/// These choices describe arithmetic schedules. Fused strategies change decomposition
+/// residuals and correlated key errors; changing strategy requires a new noise budget.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum NtruProjectionMethod {
     /// Complete normalized reverse trace, followed by separate scheme switching.
