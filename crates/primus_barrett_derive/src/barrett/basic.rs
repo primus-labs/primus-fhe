@@ -13,11 +13,13 @@ pub(crate) fn basic(
     quote! {
         impl #name {
             /// Returns the modulus value.
+            #[must_use]
             #vis const fn value() -> #ty {
                 #modulus
             }
 
-            /// Returns the ratio of this modulus.
+            /// Returns the little-endian limbs of `floor(B² / modulus)`, where `B = 2^BITS`.
+            #[must_use]
             #[inline]
             #vis const fn ratio() -> [#ty; 2] {
                 [#r0, #r1]
@@ -28,13 +30,8 @@ pub(crate) fn basic(
             type ValueT = #ty;
 
             #[inline(always)]
-            fn value(self) -> Option<Self::ValueT> {
+            fn explicit_value(self) -> Option<Self::ValueT> {
                 Some(#modulus)
-            }
-
-            #[inline(always)]
-            unsafe fn value_unchecked(self) -> Self::ValueT {
-                #modulus
             }
 
             #[inline(always)]
@@ -43,6 +40,23 @@ pub(crate) fn basic(
             }
         }
 
+        impl ::primus_modulus::reduce::ExplicitModulus for #name {
+            #[inline(always)]
+            fn value(self) -> Self::ValueT {
+                #modulus
+            }
+        }
+
+        impl ::primus_modulus::reduce::PrepareModulusSwitch for #name {
+            #[inline]
+            fn prepare_switch_to<M: ::primus_modulus::reduce::Modulus<ValueT = #ty>>(self, target: M) -> ::primus_modulus::reduce::ModulusSwitch<#ty> {
+                ::primus_modulus::reduce::ModulusSwitch::with_source_reciprocal(
+                    #modulus,
+                    target,
+                    [#r0, #r1],
+                )
+            }
+        }
         impl ::std::marker::Copy for #name {}
 
         impl ::std::clone::Clone for #name {
@@ -51,6 +65,15 @@ pub(crate) fn basic(
                 *self
             }
         }
+
+        impl ::std::cmp::PartialEq for #name {
+            #[inline]
+            fn eq(&self, _other: &Self) -> bool {
+                true
+            }
+        }
+
+        impl ::std::cmp::Eq for #name {}
 
         impl ::std::fmt::Debug for #name {
             #[inline]
@@ -80,7 +103,7 @@ pub(crate) fn into_simd_modulus(
         impl ::std::convert::Into<::primus_modulus::SimdBarrettModulus<#ty>> for #name {
             #[inline]
             fn into(self) -> ::primus_modulus::SimdBarrettModulus<#ty> {
-                ::primus_modulus::SimdBarrettModulus::new(#modulus, [#r0, #r1])
+                ::primus_modulus::SimdBarrettModulus::from_parts(#modulus, [#r0, #r1])
             }
         }
     }

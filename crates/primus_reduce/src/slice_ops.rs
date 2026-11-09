@@ -1,21 +1,21 @@
 //! Slice-level (bulk) modular operations.
 //!
-//! These traits mirror the scalar `Reduce*` traits in [`crate::ops`] but
-//! operate on whole slices, so that implementations can dispatch to a
-//! SIMD kernel internally and amortize the per-call overhead.
+//! These traits mirror the scalar operation traits but work on whole slices,
+//! allowing implementations to dispatch to a SIMD kernel and amortize
+//! per-call overhead.
 //!
-//! Each trait bundles an in-place (`*_assign`) form and an out-of-place
-//! (`*_to`) form. There are no default impls: every modulus type provides
-//! its own body, which is typically a thin wrapper around a hand-written
-//! scalar / SIMD kernel.
+//! Element-wise traits generally provide in-place (`*_assign`) and
+//! out-of-place (`*_to`) forms. There are no default implementations: each
+//! modulus type selects its scalar or SIMD kernel.
 //!
 //! # Length and value-range invariants
 //!
-//! Most slice traits use `debug_assert*!` to check length agreement and
-//! value-range pre-conditions. In release builds those checks are stripped;
-//! callers (typically the polynomial / NTT layer) are expected to uphold
-//! them at higher-level boundaries. APIs that document panics, such as
-//! [`ReduceDotProduct::reduce_dot_product`], perform unconditional checks.
+//! Implementations may use `debug_assert*!` to diagnose shape mismatches.
+//! Release callers, typically the polynomial or NTT layer, must validate
+//! lengths at a higher-level boundary and must always uphold the documented
+//! value ranges. APIs that document panics, such as
+//! [`ReduceDotProduct::reduce_dot_product`], check their stated conditions in
+//! every build profile.
 
 /// Slice form of [`crate::ReduceOnce`].
 pub trait ReduceOnceSlice<T> {
@@ -60,7 +60,7 @@ pub trait ReduceNegSlice<T> {
 }
 
 /// Slice form of [`crate::ReduceAdd`].
-pub trait ReduceAddSlice<T, B = T> {
+pub trait ReduceAddSlice<T> {
     /// Calculates `a[i] = (a[i] + b[i]) (mod modulus)` element-wise,
     /// where `self` is the modulus.
     ///
@@ -68,7 +68,7 @@ pub trait ReduceAddSlice<T, B = T> {
     ///
     /// - `a.len() == b.len()`
     /// - Each `a[i] < modulus` and `b[i] < modulus`
-    fn reduce_add_slice_assign(self, a: &mut [T], b: &[B]);
+    fn reduce_add_slice_assign(self, a: &mut [T], b: &[T]);
 
     /// Writes `a[i] + b[i] (mod modulus)` into `output[i]` element-wise,
     /// where `self` is the modulus.
@@ -77,7 +77,7 @@ pub trait ReduceAddSlice<T, B = T> {
     ///
     /// - `a.len() == b.len() == output.len()`
     /// - Each `a[i] < modulus` and `b[i] < modulus`
-    fn reduce_add_slice_to(self, a: &[T], b: &[B], output: &mut [T]);
+    fn reduce_add_slice_to(self, a: &[T], b: &[T], output: &mut [T]);
 }
 
 /// Slice form of [`crate::ReduceDouble`].
@@ -101,7 +101,7 @@ pub trait ReduceDoubleSlice<T> {
 }
 
 /// Slice form of [`crate::ReduceSub`].
-pub trait ReduceSubSlice<T, B = T> {
+pub trait ReduceSubSlice<T> {
     /// Calculates `a[i] = (a[i] - b[i]) (mod modulus)` element-wise,
     /// where `self` is the modulus.
     ///
@@ -109,7 +109,7 @@ pub trait ReduceSubSlice<T, B = T> {
     ///
     /// - `a.len() == b.len()`
     /// - Each `a[i] < modulus` and `b[i] < modulus`
-    fn reduce_sub_slice_assign(self, a: &mut [T], b: &[B]);
+    fn reduce_sub_slice_assign(self, a: &mut [T], b: &[T]);
 
     /// Writes `a[i] - b[i] (mod modulus)` into `output[i]` element-wise,
     /// where `self` is the modulus.
@@ -118,7 +118,7 @@ pub trait ReduceSubSlice<T, B = T> {
     ///
     /// - `a.len() == b.len() == output.len()`
     /// - Each `a[i] < modulus` and `b[i] < modulus`
-    fn reduce_sub_slice_to(self, a: &[T], b: &[B], output: &mut [T]);
+    fn reduce_sub_slice_to(self, a: &[T], b: &[T], output: &mut [T]);
 
     /// Calculates `b[i] = (a[i] - b[i]) (mod modulus)` element-wise,
     /// where `self` is the modulus.
@@ -230,30 +230,7 @@ pub trait ReduceMulAddSlice<T> {
 }
 
 /// Slice form of [`crate::ReduceInv`].
-///
-/// # Scratch buffer
-///
-/// `reduce_inv_slice_assign` requires a scratch buffer of length >=
-/// `values.len()`. The scratch buffer is used for prefix-product
-/// computation in batch-inversion algorithms (e.g. Montgomery batch
-/// inversion). It is not needed by `reduce_inv_slice_to`, which can
-/// reuse `output` as working space.
 pub trait ReduceInvSlice<T> {
-    /// Calculates `values[i] = values[i]^(-1) (mod modulus)` in-place,
-    /// where `self` is the modulus.
-    ///
-    /// # Correctness
-    ///
-    /// - `scratch.len() >= values.len()`
-    /// - Each `values[i] < modulus`
-    /// - Each `values[i]` and `modulus` must be coprime
-    ///
-    /// # Panics
-    ///
-    /// Panics if any element has no inverse modulo `modulus`. Use
-    /// [`TryReduceInvSlice`] for a non-panicking variant.
-    fn reduce_inv_slice_assign(self, values: &mut [T], scratch: &mut [T]);
-
     /// Writes `input[i]^(-1) (mod modulus)` into `output[i]` for each element,
     /// where `self` is the modulus.
     ///
@@ -266,32 +243,25 @@ pub trait ReduceInvSlice<T> {
     /// # Panics
     ///
     /// Panics if any element has no inverse modulo `modulus`. Use
-    /// [`TryReduceInvSlice`] for a non-panicking variant.
+    /// [`TryReduceInvSlice`] for a non-panicking inverse.
     fn reduce_inv_slice_to(self, input: &[T], output: &mut [T]);
 }
 
 /// Fallible slice form of [`crate::TryReduceInv`].
 pub trait TryReduceInvSlice<T> {
-    /// Try to calculate `values[i] = values[i]^(-1) (mod modulus)` in-place,
+    /// Attempts to write each input's multiplicative inverse to `output`,
     /// where `self` is the modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `input.len() == output.len()`
+    /// - Each `input[i] < modulus`
     ///
     /// # Errors
     ///
-    /// Returns [`ReduceError::NoInverseAtIndex`](crate::ReduceError::NoInverseAtIndex)
-    /// for the first element that has no inverse.
-    fn try_reduce_inv_slice_assign(
-        self,
-        values: &mut [T],
-        scratch: &mut [T],
-    ) -> Result<(), crate::ReduceError<T>>;
-
-    /// Try to calculate `output[i] = input[i]^(-1) (mod modulus)`,
-    /// where `self` is the modulus.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ReduceError::NoInverseAtIndex`](crate::ReduceError::NoInverseAtIndex)
-    /// for the first element that has no inverse.
+    /// Returns an inverse-related [`ReduceError`](crate::ReduceError) if one or
+    /// more input values have no inverse. `output` may be modified when an
+    /// error is returned.
     fn try_reduce_inv_slice_to(
         self,
         input: &[T],
@@ -299,41 +269,41 @@ pub trait TryReduceInvSlice<T> {
     ) -> Result<(), crate::ReduceError<T>>;
 }
 
-/// The modular dot product.
+/// Modular dot products of slices or iterators.
 ///
-/// This is always used for slice. For example, `u64` slice `[u64]`.
-///
-/// For two same length slice `a = (a₀, a₁, ..., an)` and `b = (b₀, b₁, ..., bn)`.
-///
-/// This trait will calculate `a₀×b₀ + a₁×b₁ + ... + an×bn mod modulus`.
+/// Canonical operands are supported by every implementation. An implementation
+/// may document a wider input range; callers using it must establish that
+/// implementation's bounds, rather than assume them from this trait alone.
 pub trait ReduceDotProduct<T> {
-    /// Output type.
-    type Output;
-
-    /// Calculate `∑a_i×b_i (mod modulus)` where `self` is modulus.
+    /// Calculates `∑ a[i] * b[i] (mod modulus)`.
     ///
     /// # Correctness
     ///
-    /// - Each `a_i < modulus` and `b_i < modulus`
+    /// Each operand is below `modulus`, or satisfies a wider range explicitly
+    /// documented by the implementation.
     ///
     /// # Panics
     ///
-    /// Panics if `a.as_ref().len() != b.as_ref().len()`.
+    /// Panics if `a.len() != b.len()`.
     #[must_use]
-    fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> Self::Output;
+    fn reduce_dot_product(self, a: &[T], b: &[T]) -> T;
 
-    /// Calculate `∑a_i×b_i (mod modulus)` where `self` is modulus.
+    /// Calculates `∑ a_i * b_i (mod modulus)` using standard `zip` semantics.
     ///
     /// # Correctness
     ///
-    /// - Each `a_i < modulus` and `b_i < modulus`
-    /// - If the iterators yield different numbers of elements, iteration
-    ///   stops at the shorter (standard `zip` semantics); callers that
-    ///   require equal length should use [`reduce_dot_product`](Self::reduce_dot_product).
+    /// Each operand is below `modulus`, or satisfies a wider range explicitly
+    /// documented by the implementation.
+    ///
+    /// # Behavior
+    ///
+    /// If the iterators have different lengths, iteration stops at the shorter
+    /// one. Use [`reduce_dot_product`](Self::reduce_dot_product) when equal
+    /// lengths must be enforced.
     #[must_use]
     fn reduce_dot_product_iter(
         self,
         a: impl IntoIterator<Item = T>,
         b: impl IntoIterator<Item = T>,
-    ) -> Self::Output;
+    ) -> T;
 }

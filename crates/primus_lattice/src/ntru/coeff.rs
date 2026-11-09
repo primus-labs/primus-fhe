@@ -1,11 +1,7 @@
 use primus_data::{Data, DataMut, DataOwned, RawData};
-use primus_factor::FactorSliceOps;
 use primus_integer::FheUint;
-use primus_ntt::NttTable;
-use primus_poly::{ArrayBase, NttPolynomial, Polynomial};
-use primus_reduce::FieldContext;
-
-use super::NttNtru;
+use primus_poly::Polynomial;
+use primus_reduce::RingContext;
 
 /// A cryptographic structure for NTRU.
 ///
@@ -13,103 +9,115 @@ use super::NttNtru;
 ///
 /// |------h------|
 ///
-/// where `h` is [`Polynomial`].
+/// where `h` is one coefficient-domain [`Polynomial`]. Its phase under
+/// secret polynomial `f` is `f * h` modulo `X^N + 1` and the ciphertext
+/// modulus. Encryption requires the appropriate invertible NTRU secret;
+/// this storage wrapper does not construct or validate it.
+///
+/// # Correctness
+///
+/// The layout above is a caller-maintained contract. Raw construction and
+/// mutable storage access do not validate it; parameter and key metadata
+/// are not stored in this wrapper. See the [crate contracts](crate#correctness).
 #[derive(Clone)]
 pub struct Ntru<S>(pub S)
 where
     S: RawData,
     <S as RawData>::Elem: FheUint;
 
-impl_common!(Ntru<S>);
-impl_bytes_conversion!(Ntru<S>);
-impl_zero!(Ntru<S>);
+impl_ciphertext_core!(Ntru);
+
 impl_iters!(Ntru);
-impl_basic_operation_single_modulus!(Ntru<S>);
+
+impl_basic_operation_single_modulus!(Ntru);
+impl_neg_single_modulus!(Ntru);
+impl_mul_scalar_single_modulus!(Ntru);
+impl_mul_factor_single_modulus!(Ntru);
 
 impl<S, T> Ntru<S>
 where
-    S: RawData<Elem = T> + DataOwned,
+    S: Data<Elem = T>,
     T: FheUint,
 {
-    /// Creates a new [`Ntru<S>`] with reference of [`Polynomial<A>`].
+    /// Multiplies this ciphertext by `X^exponent` and writes the output.
+    ///
+    /// # Correctness
+    ///
+    /// `exponent` must belong to `[0, 2N)`.
+    /// Input and output each contain one polynomial of the same supported
+    /// nonzero power-of-two length `N`. Values must be canonical under
+    /// `modulus`; output is overwritten with canonical residues.
     #[inline]
-    pub fn from_ref<A>(h: &Polynomial<A>) -> Self
+    pub fn mul_monomial_to<M, A>(&self, exponent: usize, output: &mut Ntru<A>, modulus: M)
     where
-        A: RawData<Elem = T> + Data,
+        M: RingContext<T>,
+        A: DataMut<Elem = T>,
     {
-        Self(S::from_vec(h.as_ref().to_vec()))
+        Polynomial(self.as_ref()).mul_monomial_to(
+            exponent,
+            &mut Polynomial(output.as_mut()),
+            modulus,
+        );
+    }
+
+    /// Computes `output = self * (X^exponent - 1)`.
+    ///
+    /// # Correctness
+    ///
+    /// `exponent` must belong to `[0, 2N)`.
+    /// Input and output each contain one polynomial of the same supported
+    /// nonzero power-of-two length `N`. Values must be canonical under
+    /// `modulus`; output is overwritten with canonical residues.
+    #[inline]
+    pub fn mul_monomial_sub_one_to<M, A>(&self, exponent: usize, output: &mut Ntru<A>, modulus: M)
+    where
+        M: RingContext<T>,
+        A: DataMut<Elem = T>,
+    {
+        Polynomial(self.as_ref()).mul_monomial_sub_one_to(
+            exponent,
+            &mut Polynomial(output.as_mut()),
+            modulus,
+        );
     }
 }
 
 impl<S, T> Ntru<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
-    /// Transforms `self` to ntt form and stores in `result`.
+    /// Multiplies this polynomial ciphertext by `X^exponent` without allocation.
+    ///
+    /// # Correctness
+    ///
+    /// The polynomial length `N` must be a supported power of two, and `exponent`
+    /// must be in `[0, 2N)`. Canonical input residues produce canonical output.
     #[inline]
-    pub fn write_ntt_form<Table, A>(&self, result: &mut NttNtru<A>, ntt_table: &Table)
+    pub fn mul_monomial_assign<M>(&mut self, exponent: usize, modulus: M)
     where
-        A: RawData<Elem = T> + DataMut,
-        Table: NttTable<ValueT = T>,
+        M: Copy + primus_reduce::ReduceNegSlice<T>,
     {
-        let p = result.as_mut();
-        p.copy_from_slice(self.as_ref());
-        ntt_table.transform_slice(p)
+        Polynomial(self.as_mut()).mul_monomial_assign(exponent, modulus);
     }
 
-    /// Performs a multiplication on the `self` [`Ntru<S>`] with another `ntt_polynomial` [`NttPolynomial<A>`],
-    /// store the result into `result` [`NttNtru<B>`].
+    /// Accumulates `self += rhs * X^exponent` in `Z_q[X]/(X^N + 1)`.
+    ///
+    /// # Correctness
+    ///
+    /// Both ciphertexts must contain a polynomial of the same nonzero power-of-two
+    /// length `N`, use compatible keys, and contain canonical residues. `exponent`
+    /// must be in `[0, 2N)`. Results are canonical; no temporary storage is allocated.
     #[inline]
-    pub fn mul_ntt_polynomial_to<M, Table, A, B>(
-        &self,
-        ntt_poly: &NttPolynomial<A>,
-        result: &mut NttNtru<B>,
-        modulus: M,
-        ntt_table: &Table,
-    ) where
-        M: FieldContext<T>,
-        Table: NttTable<ValueT = T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataMut,
-    {
-        let p = result.as_mut();
-        p.copy_from_slice(self.as_ref());
-        ntt_table.transform_slice(p);
-        NttPolynomial(p).mul_assign(ntt_poly, modulus);
-    }
-}
-
-impl<S, T> Ntru<S>
-where
-    S: RawData<Elem = T> + DataMut,
-    T: FheUint,
-{
-    /// Multiplies each coefficient by `scalar` modulo `modulus` in place.
-    #[inline]
-    pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
+    pub fn add_mul_monomial_assign<M, A>(&mut self, rhs: &Ntru<A>, exponent: usize, modulus: M)
     where
-        M: FieldContext<T>,
+        M: Copy + primus_reduce::ReduceAddSlice<T> + primus_reduce::ReduceSubSlice<T>,
+        A: Data<Elem = T>,
     {
-        ArrayBase(self.as_mut()).mul_scalar_assign(scalar, modulus);
-    }
-
-    /// Multiplies each coefficient by a Shoup `factor` modulo `modulus` in place.
-    #[inline]
-    pub fn mul_factor_assign<F>(&mut self, factor: F, modulus: T)
-    where
-        F: FactorSliceOps<T>,
-    {
-        ArrayBase(self.as_mut()).mul_factor_assign(factor, modulus);
-    }
-
-    /// Transforms `self` to ntt form.
-    #[inline]
-    pub fn into_ntt_form<Table>(mut self, ntt_table: &Table) -> NttNtru<S>
-    where
-        Table: NttTable<ValueT = T>,
-    {
-        ntt_table.transform_slice(self.as_mut());
-        NttNtru::new(self.0)
+        Polynomial(self.as_mut()).add_mul_monomial_assign(
+            &Polynomial(rhs.as_ref()),
+            exponent,
+            modulus,
+        );
     }
 }

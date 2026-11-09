@@ -5,7 +5,6 @@ macro_rules! uint_widening_mul_impl {
         impl WideningMul for $T {
             #[inline]
             fn widening_mul(self, rhs: Self) -> (Self, Self) {
-                // <$T>::widening_mul(self, rhs)
                 let wide = (self as $W) * (rhs as $W);
                 (wide as Self, (wide >> Self::BITS) as Self)
             }

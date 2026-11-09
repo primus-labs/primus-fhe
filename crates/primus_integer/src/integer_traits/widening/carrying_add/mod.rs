@@ -2,21 +2,22 @@ mod primitive;
 #[cfg(feature = "simd")]
 mod simd;
 
-/// Carrying add operation trait
+/// Carrying addition for unsigned words.
 pub trait CarryingAdd: Sized {
-    /// The type of `carry`.
+    /// A scalar carry bit or a SIMD mask encoding one carry bit per lane.
     type CarryT;
 
-    /// Calculates `self` + `rhs` + `carry` and returns a tuple containing
-    /// the sum and the output carry (in that order).
+    /// Calculates `self + rhs + carry`, returning `(sum, carry_out)`.
     ///
-    /// Performs "ternary addition" of two integer operands and a carry-in
-    /// bit, and returns an output integer and a carry-out bit. This allows
-    /// chaining together multiple additions to create a wider addition, and
-    /// can be useful for bignum addition.
+    /// This performs ternary addition of two unsigned words and a carry-in bit,
+    /// like a full adder. Chaining the carry-out into the next more-significant
+    /// word permits multi-word addition.
     ///
-    /// If the input carry is false, this method is equivalent to
-    /// `overflowing_add`, and the output carry is
-    /// equal to the overflow flag.
+    /// For word radix `B = 2^w`, each scalar value or SIMD lane satisfies
+    /// `self + rhs + carry = sum + carry_out * B`, with each carry interpreted
+    /// as either zero or one.
+    ///
+    /// With a zero carry-in, this is equivalent to `overflowing_add`.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn carrying_add(self, rhs: Self, carry: Self::CarryT) -> (Self, Self::CarryT);
 }

@@ -2,4 +2,4 @@ mod basis;
 mod common;
 
 pub use basis::BigUintApproxSignedBasis;
-pub use common::*;
+pub use common::{BigUintSignedDecomposerIter, OnceBigUintSignedDecomposer};

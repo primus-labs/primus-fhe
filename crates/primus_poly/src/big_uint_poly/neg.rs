@@ -1,18 +1,19 @@
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_integer::{BigUint, FheUint};
 
 use super::BigUintPolynomial;
 
 impl<S, T> BigUintPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Performs the unary `-` operation.
+    #[must_use]
     #[inline]
     pub fn neg<A>(mut self, modulus: &BigUint<A>) -> Self
     where
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         self.neg_assign(modulus);
         self
@@ -22,7 +23,7 @@ where
     #[inline]
     pub fn neg_assign<A>(&mut self, modulus: &BigUint<A>)
     where
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         let value_len = modulus.len();
         self.iter_mut(value_len)
@@ -32,15 +33,15 @@ where
 
 impl<S, T> BigUintPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs the unary `-` operation.
     #[inline]
     pub fn neg_to<A, B>(&self, output: &mut BigUintPolynomial<A>, modulus: &BigUint<B>)
     where
-        A: RawData<Elem = T> + DataMut,
-        B: RawData<Elem = T> + Data,
+        A: DataMut<Elem = T>,
+        B: Data<Elem = T>,
     {
         debug_assert_eq!(self.len(), output.len());
         let value_len = modulus.len();

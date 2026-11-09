@@ -3,18 +3,26 @@ use primus_integer::UnsignedInteger;
 use primus_reduce::ReduceError;
 
 /// Reduces `value` by subtracting `modulus` at most once.
+///
+/// # Correctness
+/// `value < 2 * modulus` is required for a canonical result. The input and
+/// modulus must be representable; the mathematical bound `2 * modulus` need
+/// not itself fit in `T`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_once<T: UnsignedInteger>(modulus: T, value: T) -> T {
     value.min(value.wrapping_sub(modulus))
 }
 
 /// Reduces `value` in place by subtracting `modulus` at most once.
+/// Inherits [`reduce_once`]'s input range.
 #[inline(always)]
 pub fn reduce_once_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
     *value = reduce_once(modulus, *value);
 }
 
 /// Returns the additive inverse of `value` modulo `modulus`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_neg<T: UnsignedInteger>(modulus: T, value: T) -> T {
     if value.is_zero() {
@@ -33,6 +41,7 @@ pub fn reduce_neg_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
 }
 
 /// Returns `(a + b) mod modulus` for canonical inputs.
+#[must_use]
 #[inline(always)]
 pub fn reduce_add<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
     let threshold = modulus - b;
@@ -51,6 +60,7 @@ pub fn reduce_add_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
 }
 
 /// Returns `(2 * value) mod modulus` for a canonical input.
+#[must_use]
 #[inline(always)]
 pub fn reduce_double<T: UnsignedInteger>(modulus: T, value: T) -> T {
     reduce_add(modulus, value, value)
@@ -63,6 +73,7 @@ pub fn reduce_double_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
 }
 
 /// Returns `(a - b) mod modulus` for canonical inputs.
+#[must_use]
 #[inline(always)]
 pub fn reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
     if a >= b { a - b } else { modulus - b + a }
@@ -83,6 +94,7 @@ pub fn reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
 /// # Panics
 ///
 /// Panics if `value` has no inverse modulo `modulus`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_inv<T: UnsignedInteger>(modulus: T, value: T) -> T {
     debug_assert!(modulus > value);
@@ -104,6 +116,11 @@ pub fn reduce_inv_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
 }
 
 /// Attempts to return the multiplicative inverse of `value` modulo `modulus`.
+///
+/// # Correctness
+/// `1 < modulus` and `value < modulus`. A non-invertible value returns
+/// [`ReduceError::NoInverse`]; violating the input range is not an error case
+/// promised by this function.
 #[inline(always)]
 pub fn try_reduce_inv<T: UnsignedInteger>(modulus: T, value: T) -> Result<T, ReduceError<T>> {
     debug_assert!(modulus > value);
@@ -118,6 +135,7 @@ pub fn try_reduce_inv<T: UnsignedInteger>(modulus: T, value: T) -> Result<T, Red
 }
 
 /// Returns the lazy additive inverse `modulus - value`.
+#[must_use]
 #[inline(always)]
 pub fn lazy_reduce_neg<T: UnsignedInteger>(modulus: T, value: T) -> T {
     modulus - value

@@ -1,5 +1,5 @@
 use itertools::izip;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_factor::{Factor, FactorMul, FactorSliceOps};
 use primus_integer::FheUint;
 use primus_modulus::common::compact;
@@ -12,7 +12,9 @@ use primus_integer::SimdArray;
 
 use super::DcrtPolynomial;
 
-fn slice_butterfly<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
+// Writes (a+s, (a-s)*w) modulo the current CRT limb's modulus. Preserve the
+// original a for the difference; the two outputs are not independent updates.
+fn butterfly_mul_factor_slice<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
 where
     T: FheUint,
     F: Copy + FactorMul<T>,
@@ -29,9 +31,11 @@ where
     });
 }
 
+// Factors remain scalar-packed: convert each complete vector of factors once,
+// then delegate the tail to the same scalar butterfly used without SIMD.
 #[cfg(feature = "simd")]
 #[allow(clippy::chunks_exact_to_as_chunks)]
-fn simd_butterfly<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
+fn simd_butterfly_mul_factor_slice<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
 where
     T: FheUint,
     F: SimdFactorMul<T>,
@@ -65,15 +69,16 @@ where
         *b = wf.factor_mul_modulo(diff, m).to_array();
     }
 
-    slice_butterfly(a_rem, s_rem, w_rem, out_rem, modulus);
+    butterfly_mul_factor_slice(a_rem, s_rem, w_rem, out_rem, modulus);
 }
 
 impl<S, T> DcrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
-    /// Performs `self * scalar` according to `moduli`.
+    /// Performs `self * scalars` according to `moduli`.
+    #[must_use]
     #[inline]
     pub fn mul_scalar<M>(mut self, scalars: &[T], poly_length: usize, moduli: &[M]) -> Self
     where
@@ -83,7 +88,7 @@ where
         self
     }
 
-    /// Performs `self *= scalar` according to `moduli`.
+    /// Performs `self *= scalars` according to `moduli`.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalars: &[T], poly_length: usize, moduli: &[M])
     where
@@ -94,7 +99,7 @@ where
         )
     }
 
-    /// Performs `self += scalar * rhs` according to `moduli`.
+    /// Performs `self += scalars * rhs` according to `moduli`.
     #[inline]
     pub fn add_mul_scalar_assign<M, A>(
         &mut self,
@@ -104,7 +109,7 @@ where
         moduli: &[M],
     ) where
         M: Copy + ReduceMulAddSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         izip!(
             self.iter_each_modulus_mut(poly_length),
@@ -117,7 +122,8 @@ where
         });
     }
 
-    /// Performs `self * scalar` according to `moduli`.
+    /// Performs `self * factors` according to `moduli`.
+    #[must_use]
     #[inline]
     pub fn mul_factor<F>(mut self, factors: &[F], poly_length: usize, moduli: &[T]) -> Self
     where
@@ -127,7 +133,7 @@ where
         self
     }
 
-    /// Performs `self *= scalar` according to `moduli`.
+    /// Performs `self *= factors` according to `moduli`.
     #[inline]
     pub fn mul_factor_assign<F>(&mut self, factors: &[F], poly_length: usize, moduli: &[T])
     where
@@ -137,7 +143,7 @@ where
             .for_each(|(poly, &factor, &modulus)| factor.factor_mul_slice_assign(poly, modulus))
     }
 
-    /// Performs `self += scalar * rhs` according to `moduli`.
+    /// Performs `self += factors * rhs` according to `moduli`.
     #[inline]
     pub fn add_mul_factor_assign<F, A>(
         &mut self,
@@ -147,7 +153,7 @@ where
         moduli: &[T],
     ) where
         F: Copy + FactorSliceOps<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         izip!(
             self.iter_each_modulus_mut(poly_length),
@@ -161,11 +167,12 @@ where
     }
 
     /// Performs `self * rhs` according to `moduli`.
+    #[must_use]
     #[inline]
     pub fn mul<M, A>(mut self, rhs: &DcrtPolynomial<A>, poly_length: usize, moduli: &[M]) -> Self
     where
         M: Copy + ReduceMulSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         self.mul_assign(rhs, poly_length, moduli);
         self
@@ -176,7 +183,7 @@ where
     pub fn mul_assign<M, A>(&mut self, rhs: &DcrtPolynomial<A>, poly_length: usize, moduli: &[M])
     where
         M: Copy + ReduceMulSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         izip!(
             self.iter_each_modulus_mut(poly_length),
@@ -191,7 +198,19 @@ where
     /// `(self, result) = (self + rhs, (self_orig - rhs) * w)`.
     ///
     /// `self` and `rhs` are expected in `[0, q)`. Both outputs are written
-    /// back in `[0, q)`.
+    /// back in `[0, q)`. `w` is a modulus-major factor polynomial with one
+    /// factor per stored point, so its length equals the backing length of each
+    /// DCRT polynomial. `output` is overwritten; no scratch is needed.
+    ///
+    /// # Correctness
+    ///
+    /// All buffers contain exactly `poly_length * moduli.len()` points, with
+    /// nonzero `poly_length` and matching modulus order. Each factor in `w`
+    /// must be prepared for its block's modulus and satisfy [`Factor`]'s contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `poly_length` is zero.
     #[inline]
     pub fn butterfly_mul_factor_to<F, A, B>(
         &mut self,
@@ -202,29 +221,29 @@ where
         moduli: &[T],
     ) where
         F: Factor<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataMut,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
     {
-        izip!(
-            self.iter_each_modulus_mut(poly_length),
-            rhs.iter_each_modulus(poly_length),
-            w.chunks_exact(poly_length),
-            output.iter_each_modulus_mut(poly_length),
-            moduli
-        )
-        .for_each(|(a, s, w, b, &modulus)| {
-            #[cfg(not(feature = "simd"))]
-            slice_butterfly(a, s, w, b, modulus);
-
-            #[cfg(feature = "simd")]
-            simd_butterfly(a, s, w, b, modulus);
-        })
+        debug_assert!(poly_length > 0);
+        let rns_poly_len = self.len();
+        debug_assert_eq!(rns_poly_len, rhs.len());
+        debug_assert_eq!(rns_poly_len, w.len());
+        debug_assert_eq!(rns_poly_len, output.len());
+        debug_assert_eq!(rns_poly_len, moduli.len() * poly_length);
+        butterfly_mul_factor_to_kernel(
+            self.as_mut_view(),
+            rhs.as_view(),
+            w,
+            output.as_mut_view(),
+            poly_length,
+            moduli,
+        );
     }
 }
 
 impl<S, T> DcrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs `result = self * rhs` according to `moduli`.
@@ -237,8 +256,8 @@ where
         moduli: &[M],
     ) where
         M: Copy + ReduceMulSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataMut,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),
@@ -249,7 +268,7 @@ where
         .for_each(|(a, b, output, modulus)| modulus.reduce_mul_slice_to(a, b, output))
     }
 
-    /// Performs `result = self * scalar` according to `moduli`.
+    /// Performs `result = self * scalars` according to `moduli`.
     #[inline]
     pub fn mul_scalar_to<M, A>(
         &self,
@@ -259,7 +278,7 @@ where
         moduli: &[M],
     ) where
         M: Copy + ReduceMulSlice<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),
@@ -272,7 +291,7 @@ where
         })
     }
 
-    /// Performs `result = self * scalar` according to `moduli`.
+    /// Performs `result = self * factors` according to `moduli`.
     #[inline]
     pub fn mul_factor_to<F, A>(
         &self,
@@ -282,7 +301,7 @@ where
         moduli: &[T],
     ) where
         F: Copy + FactorSliceOps<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),
@@ -294,4 +313,35 @@ where
             f.factor_mul_slice_to(in_poly, out_poly, modulus)
         })
     }
+}
+
+// The caller supplies complete modulus-major blocks; the public entry retains
+// the shape diagnostics. Each limb uses its own scalar or SIMD butterfly and
+// corresponding factor block.
+#[inline]
+fn butterfly_mul_factor_to_kernel<T, F>(
+    mut lhs: DcrtPolynomial<&mut [T]>,
+    rhs: DcrtPolynomial<&[T]>,
+    w: &[F],
+    mut output: DcrtPolynomial<&mut [T]>,
+    poly_length: usize,
+    moduli: &[T],
+) where
+    T: FheUint,
+    F: Factor<T>,
+{
+    izip!(
+        lhs.iter_each_modulus_mut(poly_length),
+        rhs.iter_each_modulus(poly_length),
+        w.chunks_exact(poly_length),
+        output.iter_each_modulus_mut(poly_length),
+        moduli
+    )
+    .for_each(|(a, s, w, b, &modulus)| {
+        #[cfg(not(feature = "simd"))]
+        butterfly_mul_factor_slice(a, s, w, b, modulus);
+
+        #[cfg(feature = "simd")]
+        simd_butterfly_mul_factor_slice(a, s, w, b, modulus);
+    })
 }

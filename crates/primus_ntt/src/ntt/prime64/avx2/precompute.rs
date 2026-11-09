@@ -1,70 +1,46 @@
 use aligned_vec::AVec;
 
+fn extend_t2_roots(out: &mut AVec<u64>, roots: &[u64]) {
+    for &root in roots {
+        out.extend_from_slice(&[root; 2]);
+    }
+}
+
+fn extend_t1_roots(out: &mut AVec<u64>, roots: &[u64]) {
+    let (root_quads, remainder) = roots.as_chunks::<4>();
+    debug_assert!(remainder.is_empty());
+    for root_quad in root_quads {
+        for &root in root_quad.iter().rev() {
+            out.push(root);
+        }
+    }
+}
+
 /// Build pre-expanded root vectors for AVX2 T2/T1 stages (u64 lanes).
 ///
-/// `inverse` controls traversal direction.
+/// Forward roots start at the canonical T2 region (`n / 4`) and use stage
+/// order T2/T1. Inverse roots start at index 1 and use T1/T2.
 pub(in crate::ntt::prime64) fn build_avx2_roots_u64(
     n: usize,
     roots: &[u64],
     inverse: bool,
 ) -> AVec<u64> {
-    // n < 16 -> scalar fallback, no pre-expanded data needed.
     if n < 16 {
         return AVec::with_capacity(64, 0);
     }
-    let mut out = AVec::with_capacity(64, (n / 4) * 4);
-    let mut ri = 1usize;
-    let (mut t, mut m) = if inverse {
-        (1usize, n >> 1)
+    debug_assert_eq!(roots.len(), n);
+
+    let mut out = AVec::with_capacity(64, n);
+
+    if inverse {
+        let (t1_roots, roots) = roots[1..].split_at(n / 2);
+        let (t2_roots, _) = roots.split_at(n / 4);
+        extend_t1_roots(&mut out, t1_roots);
+        extend_t2_roots(&mut out, t2_roots);
     } else {
-        (n >> 1, 1usize)
-    };
-    loop {
-        if t >= 4 {
-            ri += n / (2 * t); // T4: broadcast, skip
-        } else {
-            match t {
-                2 => {
-                    for _ in 0..(n / 8) {
-                        let w_a = roots[ri];
-                        let w_b = roots[ri + 1];
-                        ri += 2;
-                        out.push(w_a);
-                        out.push(w_a);
-                        out.push(w_b);
-                        out.push(w_b);
-                    }
-                }
-                1 => {
-                    for _ in 0..(n / 8) {
-                        let w0 = roots[ri];
-                        let w1 = roots[ri + 1];
-                        let w2 = roots[ri + 2];
-                        let w3 = roots[ri + 3];
-                        ri += 4;
-                        out.push(w3);
-                        out.push(w2);
-                        out.push(w1);
-                        out.push(w0);
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-        if inverse {
-            t <<= 1;
-            m >>= 1;
-        } else {
-            t >>= 1;
-            m <<= 1;
-        }
-        if inverse {
-            if m < 1 {
-                break;
-            }
-        } else if m >= n {
-            break;
-        }
+        let (t2_roots, t1_roots) = roots[n / 4..].split_at(n / 4);
+        extend_t2_roots(&mut out, t2_roots);
+        extend_t1_roots(&mut out, t1_roots);
     }
     out
 }

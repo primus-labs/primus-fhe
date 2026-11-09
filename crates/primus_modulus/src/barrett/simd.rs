@@ -1,18 +1,21 @@
 //! SIMD Barrett modulus implementation and dot-product helper.
 
-use primus_integer::{CarryingAdd, CarryingMul, SimdArray, SimdUnsignedInteger, WideningMul};
+use core::simd::cmp::SimdPartialOrd;
+
+use primus_integer::{
+    CarryingAdd, CarryingMul, FheUint, SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedArray,
+    SimdUnsignedInteger, WideningMul,
+};
 use primus_reduce::prelude::*;
 
 use super::BarrettModulus;
 
 use crate::common::compact;
 
-/// A modulus, using barrett reduction algorithm.
+/// A lane-wise Barrett context used by SIMD kernels.
 ///
-/// The struct stores the modulus number and some precomputed
-/// data. Here, `b` = 2^T::BITS
-///
-/// It's efficient if many reductions are performed with a single modulus.
+/// It broadcasts a scalar modulus and its reciprocal to every SIMD lane. The
+/// scalar modulus must satisfy `1 < value < 2^(T::BITS - 2)`.
 #[derive(Debug, Clone, Copy)]
 pub struct SimdBarrettModulus<T: SimdUnsignedInteger> {
     value: T::SimdT,
@@ -20,8 +23,16 @@ pub struct SimdBarrettModulus<T: SimdUnsignedInteger> {
 }
 
 impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
-    /// Creates a new [`SimdBarrettModulus<T>`].
-    pub fn new(value: T, ratio: [T; 2]) -> Self {
+    /// Creates a [`SimdBarrettModulus<T>`] from precomputed parts.
+    ///
+    /// # Correctness
+    ///
+    /// `value` must satisfy `1 < value < 2^(T::BITS - 2)`, and `ratio` must be
+    /// the little-endian limbs `[low, high]` of `floor(B² / value)`, where
+    /// `B = 2^(T::BITS)`. Prefer converting a validated [`BarrettModulus`] when
+    /// runtime construction is sufficient.
+    #[must_use]
+    pub fn from_parts(value: T, ratio: [T; 2]) -> Self {
         Self {
             value: T::SimdT::splat(value),
             ratio: [T::SimdT::splat(ratio[0]), T::SimdT::splat(ratio[1])],
@@ -31,6 +42,9 @@ impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
 
 impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
     /// Lazily reduces a lane-wise 2-limb value `(hi * B + lo)` modulo this modulus.
+    ///
+    /// The result in every lane is in `[0, 2 * modulus)`.
+    #[must_use]
     #[inline]
     pub fn lazy_reduce_wide(&self, lo: T::SimdT, hi: T::SimdT) -> T::SimdT {
         let ah = lo.widening_mul_hw(self.ratio[0]);
@@ -44,11 +58,12 @@ impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
 
         let q = d + bch;
 
-        // Step 2.
+        // Subtract the estimated multiple modulo `B` lane-wise.
         lo - (q * self.value)
     }
 
     /// Reduces a lane-wise 2-limb value `(hi * B + lo)` modulo this modulus.
+    #[must_use]
     #[inline]
     pub fn reduce_wide(&self, lo: T::SimdT, hi: T::SimdT) -> T::SimdT {
         compact::simd::reduce_once::<T>(self.value, self.lazy_reduce_wide(lo, hi))
@@ -71,11 +86,10 @@ impl<T: SimdUnsignedInteger> LazyReduce<T::SimdT> for SimdBarrettModulus<T> {
 
     #[inline]
     fn lazy_reduce(self, value: T::SimdT) -> Self::Output {
-        let tmp = value.widening_mul_hw(self.ratio[0]); // tmp1
-        let q = value.carrying_mul_hw(self.ratio[1], tmp); // q₃
+        let tmp = value.widening_mul_hw(self.ratio[0]);
+        let q = value.carrying_mul_hw(self.ratio[1], tmp);
 
-        // Step 2.
-        value - (q * self.value) // r = r₁ - r₂
+        value - (q * self.value)
     }
 }
 
@@ -174,25 +188,27 @@ impl<T: SimdUnsignedInteger> ReduceMulAddAssign<T::SimdT> for SimdBarrettModulus
     }
 }
 
-// ---------------------------------------------------------------------------
-// SIMD dot_product
+// Each outer chunk contains `K = DOT_PRODUCT_INNER_CHUNK` SIMD vectors. Every
+// lane accumulates `K` widening products, is reduced, and is then added to the
+// running lane-wise residue. The final horizontal sum and scalar tail complete
+// the dot product.
 //
-// Outer chunk size = `K * N`, where `K = super::slice::DOT_PRODUCT_INNER_CHUNK`
-// (currently 16). Inside each outer chunk we accumulate `K` SIMD widening
-// products into a `[T::SimdT; 2]` double-word per lane, then collapse the
-// double-word back into a single SIMD word in `[0, m)` via Barrett + the
-// `min(v, v - m)` reduce_once trick. Cross-chunk accumulation stays in `[0, m)`
-// lane-wise via `simd_reduce_add`, so the running SIMD accumulator never grows.
-// After the chunked loop, a horizontal modular sum collapses the N lanes to a
-// scalar, and any tail shorter than `K * N` is handled by the scalar helper.
-//
-// Hi-limb safety: each scalar widening product has `hi < m^2 / 2^BITS`, and the
-// lo-limb's running sum can carry at most `K - 1` extra units into hi. With
-// `m < 2^(BITS - 1)` enforced by `BarrettModulus::new` and `K ≤ 16`, both
-// limbs stay strictly below `2^BITS` — identical bound to the scalar path.
-// ---------------------------------------------------------------------------
-
+// Accumulator safety: each operand is below `2^(BITS - 2)`, even if it
+// exceeds the destination modulus, so
+// each product is less than `2^(2 * BITS - 4)`. With `K = 16`, their sum is
+// less than `2^(2 * BITS)` and fits in the two-limb accumulator.
 /// Computes the dot product of `a` and `b` modulo `modulus` using SIMD chunks.
+///
+/// # Correctness
+///
+/// Every operand is below `2^(T::BITS - 2)`; it may exceed the modulus.
+/// The scalar context and its SIMD conversion must agree and satisfy
+/// `1 < modulus < 2^(T::BITS - 2)`, with canonical two-limb reduction.
+///
+/// # Panics
+///
+/// Panics if `a` and `b` have different lengths.
+#[must_use]
 #[inline]
 pub fn simd_reduce_dot_product<T: SimdUnsignedInteger, M>(modulus: M, a: &[T], b: &[T]) -> T
 where
@@ -200,8 +216,13 @@ where
 {
     assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
 
-    let k = 16;
-    let outer = k * T::LANE_COUNT;
+    let outer = compact::DOT_PRODUCT_INNER_CHUNK * T::LANE_COUNT;
+
+    // Below one complete SIMD accumulator chunk, setup and horizontal
+    // reduction cost more than the scalar kernel.
+    if a.len() < outer {
+        return compact::slice::reduce_dot_product(modulus, a, b);
+    }
 
     let sm: SimdBarrettModulus<T> = modulus.into();
     let mv = sm.value;
@@ -212,9 +233,7 @@ where
     let mut b_outer = b.chunks_exact(outer);
 
     for (a_chunk, b_chunk) in (&mut a_outer).zip(&mut b_outer) {
-        // Each outer chunk is exactly `K * N` elements, so the inner
-        // `as_chunks::<N>` always splits into `K` lane-wide subchunks with
-        // an empty tail.
+        // An outer chunk contains exactly `K` full SIMD vectors.
         let (a_lanes, _) = T::simd_as_chunks(a_chunk);
         let (b_lanes, _) = T::simd_as_chunks(b_chunk);
         let mut c = [T::SimdT::splat(T::ZERO); 2];
@@ -237,4 +256,70 @@ where
         compact::slice::reduce_dot_product(modulus, a_outer.remainder(), b_outer.remainder());
 
     modulus.reduce_add(result, tail_result)
+}
+
+/// Computes a mixed signed dot product with scalar/SIMD dispatch.
+///
+/// # Correctness
+///
+/// The scalar modulus and its SIMD conversion must agree and satisfy
+/// `1 < q < 2^(T::BITS - 2)`. Inputs must satisfy
+/// [`ReduceDotProductSigned::reduce_dot_product_signed`]'s range contracts.
+/// The scalar context must implement canonical two-limb reduction.
+///
+/// # Panics
+///
+/// Panics if the slices have different lengths.
+#[must_use]
+#[inline]
+pub fn simd_reduce_dot_product_signed<T: FheUint, M>(
+    modulus: M,
+    lhs: &[T],
+    rhs: &[T::SignedInteger],
+) -> T
+where
+    M: EncodeSigned<T>
+        + Into<SimdBarrettModulus<T>>
+        + ReduceAdd<T, Output = T>
+        + ReduceAddAssign<T>
+        + Reduce<[T; 2], Output = T>,
+{
+    assert_eq!(
+        lhs.len(),
+        rhs.len(),
+        "reduce_dot_product_signed: length mismatch"
+    );
+    let outer = compact::DOT_PRODUCT_INNER_CHUNK * T::LANE_COUNT;
+    if lhs.len() < outer {
+        return compact::slice::dot_product_signed(modulus, lhs, rhs);
+    }
+    let sm: SimdBarrettModulus<T> = modulus.into();
+    let mv = sm.value;
+    let signed_max = T::SimdT::splat(T::MAX >> 1u32);
+    let mut total_acc = T::SimdT::splat(T::ZERO);
+    let mut lhs_outer = lhs.chunks_exact(outer);
+    let mut rhs_outer = rhs.chunks_exact(outer);
+    for (lhs, rhs) in (&mut lhs_outer).zip(&mut rhs_outer) {
+        let (lhs_lanes, _) = T::simd_as_chunks(lhs);
+        let (rhs_lanes, _) = T::SignedInteger::simd_as_chunks(rhs);
+        let mut acc = [T::SimdT::splat(T::ZERO); 2];
+        for (lhs, rhs) in lhs_lanes.iter().zip(rhs_lanes) {
+            let a = T::SimdT::from_array(*lhs);
+            let s = <T::SignedInteger as SimdInteger>::SimdT::from_array(*rhs);
+            let bits = T::simd_cast_from_signed(s);
+            // Only negative lanes add q. Wrapping addition gives q + s in
+            // [0, q), keeping the unsigned kernel's 16-product bound intact.
+            let encoded = bits.simd_gt(signed_max).select(bits + mv, bits);
+            compact::simd::multiply_add::<T>(&mut acc, a, encoded);
+        }
+        let block = compact::simd::reduce_once::<T>(mv, sm.lazy_reduce_wide(acc[0], acc[1]));
+        total_acc = compact::simd::reduce_add::<T>(mv, total_acc, block);
+    }
+    let mut result = T::ZERO;
+    for lane in total_acc.to_array() {
+        result = modulus.reduce_add(result, lane);
+    }
+    let tail =
+        compact::slice::dot_product_signed(modulus, lhs_outer.remainder(), rhs_outer.remainder());
+    modulus.reduce_add(result, tail)
 }

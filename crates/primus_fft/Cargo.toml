@@ -4,11 +4,24 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-primus_data = { path = "../primus_data" }
 primus_integer = { path = "../primus_integer" }
+primus_shape = { path = "../primus_shape" }
+aligned-vec = { version = "0.6.4", optional = true }
 num-complex = { workspace = true }
-rustfft = { workspace = true }
-thiserror = { workspace = true }
+rustfft = { workspace = true, optional = true }
+tfhe-fft = { version = "0.10.1", optional = true }
+dyn-stack = { version = "0.13.2", optional = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "fft"
+harness = false
+required-features = ["rustfft", "tfhe-fft"]
 
 [features]
 default = []
+rustfft = ["dep:rustfft", "dep:aligned-vec"]
+tfhe-fft = ["dep:tfhe-fft", "dep:dyn-stack", "dep:aligned-vec"]

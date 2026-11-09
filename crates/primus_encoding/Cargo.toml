@@ -1,0 +1,37 @@
+[package]
+name = "primus_encoding"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror.workspace = true
+primus_data = { path = "../primus_data", optional = true }
+primus_poly = { path = "../primus_poly", optional = true }
+primus_rns = { path = "../primus_rns", optional = true }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_modulus = { path = "../primus_modulus" }
+primus_factor = { path = "../primus_factor" }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[features]
+default = []
+rns = ["dep:primus_data", "dep:primus_poly", "dep:primus_rns"]
+simd = [
+    "primus_poly?/simd",
+    "primus_rns?/simd",
+    "primus_integer/simd",
+    "primus_modulus/simd",
+    "primus_factor/simd",
+]
+
+[[bench]]
+name = "plaintext_codec"
+harness = false
+
+[[bench]]
+name = "bfv_rns"
+harness = false
+required-features = ["rns"]

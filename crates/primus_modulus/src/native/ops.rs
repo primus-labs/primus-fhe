@@ -1,8 +1,15 @@
 use primus_gcd::Xgcd;
-use primus_integer::UnsignedInteger;
+use primus_integer::{FheUint, SignedInteger, UnsignedInteger};
 use primus_reduce::{ReduceError, prelude::*};
 
 use super::NativeModulus;
+
+impl<T: FheUint> EncodeSigned<T> for NativeModulus<T> {
+    #[inline(always)]
+    fn encode_signed(self, value: T::SignedInteger) -> T {
+        value.cast_to_unsigned()
+    }
+}
 
 impl<T: UnsignedInteger> Reduce<T> for NativeModulus<T> {
     type Output = T;
@@ -149,10 +156,7 @@ impl<T: UnsignedInteger> TryReduceInv<T> for NativeModulus<T> {
 
     #[inline]
     fn try_reduce_inv(self, value: T) -> Result<Self::Output, ReduceError<T>> {
-        Xgcd::gcdinv_native(value).ok_or(ReduceError::NoInverse {
-            value,
-            modulus: T::ZERO,
-        })
+        Xgcd::gcdinv_native(value).ok_or(ReduceError::NoInverseImplicitModulus { value })
     }
 }
 
@@ -196,7 +200,7 @@ where
     }
 }
 
-impl<T: UnsignedInteger> ReduceExpPowOf2<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceExpPowerOf2<T> for NativeModulus<T> {
     #[inline]
     fn reduce_exp_power_of_2(self, base: T, exp_log: u32) -> T {
         if base.is_zero() {

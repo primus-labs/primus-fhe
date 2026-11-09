@@ -186,11 +186,8 @@ impl<T: FheUint> ReduceMulAddSlice<T> for PowOf2Modulus<T> {
 
 #[cfg(not(feature = "simd"))]
 impl<T: FheUint> ReduceDotProduct<T> for PowOf2Modulus<T> {
-    type Output = T;
     #[inline]
-    fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> T {
-        let a = a.as_ref();
-        let b = b.as_ref();
+    fn reduce_dot_product(self, a: &[T], b: &[T]) -> T {
         assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
         a.iter()
             .zip(b)
@@ -205,6 +202,23 @@ impl<T: FheUint> ReduceDotProduct<T> for PowOf2Modulus<T> {
     ) -> T {
         std::iter::zip(a, b).fold(T::ZERO, |acc, (x, y)| x.wrapping_mul(y).wrapping_add(acc))
             & self.mask
+    }
+}
+
+impl<T: FheUint> ReduceDotProductSigned<T> for PowOf2Modulus<T> {
+    #[inline(always)]
+    fn reduce_dot_product_signed(self, lhs: &[T], rhs: &[T::SignedInteger]) -> T {
+        assert_eq!(
+            lhs.len(),
+            rhs.len(),
+            "reduce_dot_product_signed: length mismatch"
+        );
+        // Preserve the existing loop shape: moving all masks to the final sum
+        // did not give a consistent improvement in signed phase benchmarks.
+        self.reduce_dot_product_iter(
+            lhs.iter().copied(),
+            rhs.iter().copied().map(|s| self.encode_signed(s)),
+        )
     }
 }
 

@@ -1,15 +1,15 @@
 use primus_integer::{FheUint, UnsignedInteger};
-use primus_reduce::{Modulus, prelude::*};
+use primus_reduce::{ExplicitModulus, prelude::*};
 
 pub use crate::common::uint::slice::{
-    lazy_reduce_neg_slice_assign, lazy_reduce_neg_slice_to, reduce_inv_slice_assign,
-    reduce_inv_slice_to, reduce_neg_slice_assign, reduce_neg_slice_to, reduce_once_slice_assign,
-    reduce_once_slice_to, try_reduce_inv_slice_assign, try_reduce_inv_slice_to,
+    lazy_reduce_neg_slice_assign, lazy_reduce_neg_slice_to, reduce_inv_slice_to,
+    reduce_neg_slice_assign, reduce_neg_slice_to, reduce_once_slice_assign, reduce_once_slice_to,
+    try_reduce_inv_slice_to,
 };
 
 use super::DOT_PRODUCT_INNER_CHUNK;
 
-/// Adds `b` into `a` element-wise modulo `modulus` using compact-modulus bounds.
+/// Adds `b` into `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_add_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -305,11 +305,11 @@ where
 pub fn lazy_reduce_sub_mul_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
     T: FheUint,
-    M: Copy + Modulus<ValueT = T> + ReduceMul<T, Output = T>,
+    M: Copy + ExplicitModulus<ValueT = T> + ReduceMul<T, Output = T>,
 {
     debug_assert_eq!(acc.len(), a.len());
     debug_assert_eq!(acc.len(), b.len());
-    let m = unsafe { modulus.value_unchecked() };
+    let m = modulus.value();
     acc.iter_mut().zip(a).zip(b).for_each(|((acc, &a), &b)| {
         let prod = modulus.reduce_mul(a, b);
         *acc = acc.wrapping_add(m - prod);
@@ -366,16 +366,31 @@ pub fn lazy_reduce_mul_scalar_add_slice_to<T, M>(
         .for_each(|((&a, &c), o)| *o = modulus.lazy_reduce_mul_add(a, scalar, c));
 }
 
-/// `c += a * b` on a double-word accumulator.
+/// Adds `a * b` to the two-limb accumulator `c`.
+///
+/// # Correctness
+///
+/// The sum must fit in two limbs.
 #[inline]
-pub fn multiply_add<T: UnsignedInteger>(c: &mut [T; 2], a: T, b: T) {
+fn multiply_add<T: UnsignedInteger>(c: &mut [T; 2], a: T, b: T) {
     let (lw, hw) = a.widening_mul(b);
     let carry;
     (c[0], carry) = c[0].overflowing_add(lw);
     (c[1], _) = c[1].carrying_add(hw, carry);
 }
 
-/// Computes the dot product of `a` and `b` modulo `modulus`.
+/// Computes the dot product of equally sized slices modulo `modulus`.
+///
+/// # Correctness
+/// Each operand is below `2^(T::BITS - 2)` but may exceed the modulus.
+/// Sixteen products then sum to less than `2^(2*T::BITS)`; the context must
+/// reduce any such two-limb value canonically. Chunk results are added modulo
+/// the context's modulus. No per-operand reduction or range check is performed.
+///
+/// # Panics
+///
+/// Panics if the slices have different lengths.
+#[must_use]
 #[inline]
 pub fn reduce_dot_product<T, M>(modulus: M, a: &[T], b: &[T]) -> T
 where
@@ -405,6 +420,10 @@ where
 }
 
 /// Computes the dot product of two iterators modulo `modulus`.
+///
+/// Iteration stops when either iterator ends. Operands and the arithmetic context
+/// must satisfy [`reduce_dot_product`]'s bounded two-limb accumulation contract.
+#[must_use]
 #[inline]
 pub fn reduce_dot_product_iter<T, M>(
     modulus: M,
@@ -435,4 +454,47 @@ where
     }
 
     result
+}
+
+/// Computes a dot product with bounded signed right-hand coefficients.
+///
+/// # Correctness
+///
+/// The modulus must satisfy `1 < q < 2^(T::BITS - 2)`. Inputs must satisfy
+/// [`ReduceDotProductSigned::reduce_dot_product_signed`]'s canonical-residue and
+/// signed-magnitude contracts. The modulus must implement canonical two-limb reduction.
+///
+/// # Panics
+///
+/// Panics if the slices have different lengths.
+#[must_use]
+#[inline]
+pub fn reduce_dot_product_signed<T, M>(modulus: M, lhs: &[T], rhs: &[T::SignedInteger]) -> T
+where
+    T: FheUint,
+    M: EncodeSigned<T> + Reduce<[T; 2], Output = T> + ReduceAddAssign<T>,
+{
+    assert_eq!(
+        lhs.len(),
+        rhs.len(),
+        "reduce_dot_product_signed: length mismatch"
+    );
+    dot_product_signed(modulus, lhs, rhs)
+}
+
+/// Scalar kernel after equal lengths and the public entry's range contracts
+/// have been established. Keep the fused iterator kernel: a separate fixed-block
+/// signed loop measured slower for scalar u64 Barrett dot products. Encoding
+/// before widening preserves the existing 16-product accumulator bound.
+#[inline]
+pub(crate) fn dot_product_signed<T, M>(modulus: M, lhs: &[T], rhs: &[T::SignedInteger]) -> T
+where
+    T: FheUint,
+    M: EncodeSigned<T> + Reduce<[T; 2], Output = T> + ReduceAddAssign<T>,
+{
+    reduce_dot_product_iter(
+        modulus,
+        lhs.iter().copied(),
+        rhs.iter().copied().map(|s| modulus.encode_signed(s)),
+    )
 }

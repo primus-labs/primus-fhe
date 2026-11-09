@@ -1,58 +1,54 @@
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
-use primus_reduce::ReduceInvSlice;
+use primus_reduce::{ReduceError, ReduceInvSlice, TryReduceInvSlice};
 
 use super::NttPolynomial;
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs the point-wise inverse in the NTT domain.
     ///
-    /// # Panics
+    /// # Correctness
     ///
-    /// Panics if `scratch.len() < self.poly_length()` or any value is zero.
-    #[inline]
-    pub fn inv<M>(mut self, modulus: M, scratch: &mut [T]) -> Self
-    where
-        M: Copy + ReduceInvSlice<T>,
-    {
-        self.inv_assign(modulus, scratch);
-        self
-    }
-
-    /// Performs the point-wise inverse in the NTT domain in place.
+    /// - `output.len()` equals `self.len()`
+    /// - Every input value is less than `modulus`
     ///
     /// # Panics
     ///
-    /// Panics if `scratch.len() < self.poly_length()` or any value is zero.
-    #[inline]
-    pub fn inv_assign<M>(&mut self, modulus: M, scratch: &mut [T])
-    where
-        M: Copy + ReduceInvSlice<T>,
-    {
-        modulus.reduce_inv_slice_assign(self.as_mut_slice(), scratch);
-    }
-}
-
-impl<S, T> NttPolynomial<S>
-where
-    S: RawData<Elem = T> + Data,
-    T: FheUint,
-{
-    /// Performs the point-wise inverse in the NTT domain.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `output.poly_length() < self.poly_length()` or any value is zero.
+    /// Panics if any value has no inverse modulo `modulus`.
     #[inline]
     pub fn inv_to<M, A>(&self, output: &mut NttPolynomial<A>, modulus: M)
     where
         M: Copy + ReduceInvSlice<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         modulus.reduce_inv_slice_to(self.as_slice(), output.as_mut_slice());
+    }
+
+    /// Attempts to write the point-wise inverse in the NTT domain to `output`.
+    ///
+    /// # Correctness
+    ///
+    /// - `output.len()` equals `self.len()`
+    /// - Every input value is less than `modulus`
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ReduceError`] if any point value has no inverse modulo
+    /// `modulus`. `output` may be modified when an error is returned.
+    #[inline]
+    pub fn try_inv_to<M, A>(
+        &self,
+        output: &mut NttPolynomial<A>,
+        modulus: M,
+    ) -> Result<(), ReduceError<T>>
+    where
+        M: Copy + TryReduceInvSlice<T>,
+        A: DataMut<Elem = T>,
+    {
+        modulus.try_reduce_inv_slice_to(self.as_slice(), output.as_mut_slice())
     }
 }

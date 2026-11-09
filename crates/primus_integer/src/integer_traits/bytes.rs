@@ -1,6 +1,10 @@
-/// Extension trait to provide access to bytes of integers.
+/// An integer type whose in-memory size is available as an associated constant.
+///
+/// This trait gives generic code a common way to obtain the storage size of
+/// primitive integers. The size of `isize` and `usize` depends on the target's
+/// pointer width.
 pub trait ByteCount {
-    /// The number of bytes this type has.
+    /// The size, in bytes, of a value of this type.
     const BYTES: usize;
 }
 

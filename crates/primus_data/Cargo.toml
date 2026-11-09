@@ -5,4 +5,9 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/primus-labs/primus-fhe"
 
+[features]
+default = []
+aligned-vec = ["dep:aligned-vec"]
+
 [dependencies]
+aligned-vec = { version = "0.6.4", optional = true }

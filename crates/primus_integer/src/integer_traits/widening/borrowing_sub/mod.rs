@@ -2,18 +2,22 @@ mod primitive;
 #[cfg(feature = "simd")]
 mod simd;
 
-/// Borrowing sub operation trait
+/// Borrowing subtraction for unsigned words.
 pub trait BorrowingSub: Sized {
-    /// The type of `borrow`.
+    /// A scalar borrow bit or a SIMD mask encoding one borrow bit per lane.
     type BorrowT;
 
-    /// Calculates `self` &minus; `rhs` &minus; `borrow` and returns a tuple
-    /// containing the difference and the output borrow.
+    /// Calculates `self - rhs - borrow`, returning `(difference, borrow_out)`.
     ///
-    /// Performs "ternary subtraction" by subtracting both an integer
-    /// operand and a borrow-in bit from `self`, and returns an output
-    /// integer and a borrow-out bit. This allows chaining together multiple
-    /// subtractions to create a wider subtraction, and can be useful for
-    /// bignum subtraction.
+    /// This performs ternary subtraction of an unsigned word and a borrow-in
+    /// bit from `self`, like a full subtractor. Chaining the borrow-out into the
+    /// next more-significant word permits multi-word subtraction.
+    ///
+    /// For word radix `B = 2^w`, each scalar value or SIMD lane satisfies
+    /// `self + borrow_out * B = difference + rhs + borrow`, with each borrow
+    /// interpreted as either zero or one.
+    ///
+    /// With a zero borrow-in, this is equivalent to `overflowing_sub`.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn borrowing_sub(self, rhs: Self, borrow: Self::BorrowT) -> (Self, Self::BorrowT);
 }

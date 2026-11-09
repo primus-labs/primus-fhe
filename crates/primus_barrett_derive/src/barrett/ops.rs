@@ -4,6 +4,18 @@ use syn::Ident;
 
 pub(crate) fn ops(name: &Ident, modulus: &TokenStream, ty: &syn::Path) -> TokenStream {
     quote! {
+        impl ::primus_modulus::reduce::EncodeSigned<#ty> for #name {
+            #[inline(always)]
+            fn encode_signed(
+                self,
+                value: <#ty as ::primus_modulus::integer::UnsignedInteger>::SignedInteger,
+            ) -> #ty {
+                ::primus_modulus::reduce::EncodeSigned::encode_signed(
+                    ::primus_modulus::UintModulus(#modulus), value,
+                )
+            }
+        }
+
         impl ::primus_modulus::reduce::Reduce<#ty> for #name {
             type Output = #ty;
 
@@ -297,7 +309,7 @@ pub(crate) fn ops(name: &Ident, modulus: &TokenStream, ty: &syn::Path) -> TokenS
             }
         }
 
-        impl ::primus_modulus::reduce::ReduceExpPowOf2<#ty> for #name {
+        impl ::primus_modulus::reduce::ReduceExpPowerOf2<#ty> for #name {
             #[inline]
             fn reduce_exp_power_of_2(self, base: #ty, exp_log: u32) -> #ty {
                 use ::primus_modulus::reduce::ReduceSquareAssign;

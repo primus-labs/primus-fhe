@@ -132,24 +132,12 @@ use crate::{UintModulus, common::uint::slice};
 
 impl<T: FheUint> ReduceInvSlice<T> for UintModulus<T> {
     #[inline]
-    fn reduce_inv_slice_assign(self, values: &mut [T], _scratch: &mut [T]) {
-        slice::reduce_inv_slice_assign(self.0, values);
-    }
-    #[inline]
     fn reduce_inv_slice_to(self, input: &[T], output: &mut [T]) {
         slice::reduce_inv_slice_to(self.0, input, output);
     }
 }
 
 impl<T: FheUint> TryReduceInvSlice<T> for UintModulus<T> {
-    #[inline]
-    fn try_reduce_inv_slice_assign(
-        self,
-        values: &mut [T],
-        _scratch: &mut [T],
-    ) -> Result<(), ReduceError<T>> {
-        slice::try_reduce_inv_slice_assign(self.0, values)
-    }
     #[inline]
     fn try_reduce_inv_slice_to(self, input: &[T], output: &mut [T]) -> Result<(), ReduceError<T>> {
         slice::try_reduce_inv_slice_to(self.0, input, output)

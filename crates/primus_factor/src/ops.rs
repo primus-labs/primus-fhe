@@ -3,14 +3,16 @@ use primus_integer::SimdUnsignedInteger;
 
 /// Lazy modular multiplication by a precomputed factor.
 ///
-/// Implementations return a value in the representation-specific lazy range,
-/// usually `[0, 2 * modulus)`, and callers can canonicalize it with a final
-/// modular reduction when needed.
+/// Implementations return a value congruent to the product modulo `modulus`
+/// in a representation-specific lazy range, usually `[0, 2 * modulus)`.
+/// Callers can canonicalize it with a final modular reduction when needed.
 ///
 /// The factor must have been precomputed for the `modulus` supplied to each
 /// call.
 pub trait LazyFactorMul<T> {
-    /// Calculates `self * b (mod 2 * modulus)` for canonical `b`.
+    /// Calculates a lazy representative of `self * b` modulo `modulus` for
+    /// canonical `b`.
+    #[must_use]
     fn lazy_factor_mul_modulo(self, b: T, modulus: T) -> T;
 }
 
@@ -20,6 +22,7 @@ pub trait LazyFactorMul<T> {
 /// call, and the result is in `[0, modulus)`.
 pub trait FactorMul<T>: LazyFactorMul<T> {
     /// Calculates `self * b (mod modulus)` for canonical `b`.
+    #[must_use]
     fn factor_mul_modulo(self, b: T, modulus: T) -> T;
 }
 
@@ -37,6 +40,7 @@ where
     type SimdFactor: Copy + FactorMul<T::SimdT>;
 
     /// Broadcasts one scalar factor into every SIMD lane.
+    #[must_use]
     fn simd_from_factor(factor: Self) -> Self::SimdFactor;
 
     /// Packs one SIMD chunk of scalar factors into a SIMD factor.
@@ -44,6 +48,7 @@ where
     /// # Panics
     ///
     /// Implementations may panic if `factors.len()` is not the SIMD lane count.
+    #[must_use]
     fn simd_from_factor_slice(factors: &[Self]) -> Self::SimdFactor;
 }
 
@@ -54,12 +59,15 @@ where
 /// the scalar path.
 ///
 /// The factor must have been precomputed for the `modulus` supplied to each
-/// call. Input slice elements are expected to be canonical.
+/// call. Inputs follow the concrete factor's scalar range contract:
+/// [`ShoupFactor`](crate::ShoupFactor) accepts full-width multiplicands.
 pub trait LazyFactorSliceOps<T> {
-    /// Calculates `factor * value (mod 2 * modulus)` for each element in-place.
+    /// Calculates a lazy representative of `factor * value` modulo `modulus`
+    /// for each element in-place.
     fn lazy_factor_mul_slice_assign(self, values: &mut [T], modulus: T);
 
-    /// Calculates `factor * input (mod 2 * modulus)` into `output`.
+    /// Calculates lazy representatives of `factor * input` modulo `modulus`
+    /// into `output`.
     ///
     /// # Debug assertions
     ///
@@ -70,12 +78,14 @@ pub trait LazyFactorSliceOps<T> {
 
 /// Slice-level canonical multiplication by a precomputed factor.
 ///
-/// Implementations may use SIMD internally when the `simd` feature is enabled.
-/// Callers keep the normal scalar slice layout, and the remainder is handled by
-/// the scalar path.
+/// Implementations may use native CPU-specific SIMD, or portable SIMD when the
+/// `simd` feature is enabled. Callers keep the normal scalar slice layout.
 ///
 /// The factor must have been precomputed for the `modulus` supplied to each
-/// call. Input and accumulator slice elements are expected to be canonical.
+/// call. Multiplicands follow the concrete factor's scalar range contract:
+/// [`ShoupFactor`](crate::ShoupFactor) accepts full-width values in `values`,
+/// `input` and `rhs`. Accumulators and addends must be canonical. All participating
+/// slices must have equal lengths; shape diagnostics are debug-only.
 pub trait FactorSliceOps<T>: LazyFactorSliceOps<T> {
     /// Calculates `factor * value (mod modulus)` for each element in-place.
     fn factor_mul_slice_assign(self, values: &mut [T], modulus: T);

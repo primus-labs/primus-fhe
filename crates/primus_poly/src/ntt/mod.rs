@@ -1,10 +1,9 @@
 use num_traits::Zero;
 use primus_data::{Data, DataMut, DataOwned, RawData};
 use primus_integer::{ByteCount, FheUint, Size};
-use primus_reduce::{LazyReduceMulAddSlice, ReduceMulAddSlice};
+use primus_reduce::ReduceMulAddSlice;
 
 mod basic;
-mod random;
 
 mod add;
 mod inv;
@@ -19,8 +18,20 @@ pub type NttPolynomialRef<'a, T> = NttPolynomial<&'a [T]>;
 /// Mutably borrowed [`NttPolynomial`] backed by a mutable slice.
 pub type NttPolynomialMut<'a, T> = NttPolynomial<&'a mut [T]>;
 
-/// Represents a ntt polynomial where values are elements of a specified numeric `T`.
-/// It stores the values of the polynomial at some particular points.
+/// Raw NTT evaluations under one modulus, in the originating table's order.
+///
+/// This wrapper stores no ring length, modulus or transform identity. Empty,
+/// arbitrary-length and packed storage are allowed; [`Self::len`] counts all
+/// stored evaluations. Callers establish the complete layout before arithmetic.
+///
+/// # Correctness
+///
+/// Pointwise arithmetic requires equal input and output lengths, a common
+/// modulus, and compatible NTT roots, evaluation order and normalization.
+/// Values must satisfy the selected reduction or factor operation's input
+/// ranges; lazy transform output is not automatically canonical. The wrapper
+/// does not validate these conditions, and zipped loops can leave unmatched
+/// tails untouched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NttPolynomial<S>(pub S)
 where
@@ -29,12 +40,15 @@ where
 
 impl_iters!(NttPolynomial, ntt_poly);
 
+impl_views!(NttPolynomial);
+
 impl<S, T> NttPolynomial<S>
 where
     S: RawData<Elem = T>,
     T: FheUint,
 {
-    /// Creates a new [`NttPolynomial<T>`].
+    /// Creates a new [`NttPolynomial<S>`] from NTT evaluation storage.
+    #[must_use]
     #[inline]
     pub fn new(values: S) -> Self {
         Self(values)
@@ -43,22 +57,18 @@ where
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + DataOwned,
+    S: DataOwned<Elem = T>,
     T: FheUint,
 {
-    /// Creates a [`NttPolynomial<T>`] with all coefficients equal to zero.
+    /// Creates a [`NttPolynomial<S>`] with `len` zero NTT evaluations.
+    #[must_use]
     #[inline]
-    pub fn zero(poly_length: usize) -> Self {
-        Self(S::from_vec(vec![T::ZERO; poly_length]))
-    }
-
-    /// Drop self, and return the data.
-    #[inline]
-    pub fn into_owned(self) -> S {
-        self.0
+    pub fn zero(len: usize) -> Self {
+        Self(S::from_vec(vec![T::ZERO; len]))
     }
 
     /// Constructs a new ntt polynomial from a slice.
+    #[must_use]
     #[inline]
     pub fn from_slice(polynomial: &[T]) -> Self {
         Self::new(S::from_slice(polynomial))
@@ -67,7 +77,7 @@ where
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Extracts a mutable slice of the entire vector.
@@ -78,13 +88,13 @@ where
         self.0.as_mut_slice()
     }
 
-    /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
+    /// Returns an iterator over mutable NTT values.
     #[inline]
     pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, T> {
         self.0.iter_mut()
     }
 
-    /// Copy the coefficients from another slice.
+    /// Copies NTT values from another slice.
     #[inline]
     pub fn copy_from(&mut self, src: impl AsRef<[T]>) {
         self.0.copy_from_slice(src.as_ref())
@@ -105,31 +115,16 @@ where
         modulus: M,
     ) where
         M: Copy + ReduceMulAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
     {
         modulus.reduce_add_mul_slice_assign(self.as_mut_slice(), a.as_slice(), b.as_slice());
-    }
-
-    /// Performs `self = self + (a * b)`.
-    #[inline]
-    pub fn add_mul_assign_fast<M, A, B>(
-        &mut self,
-        a: &NttPolynomial<A>,
-        b: &NttPolynomial<B>,
-        modulus: M,
-    ) where
-        M: Copy + LazyReduceMulAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + Data,
-    {
-        modulus.lazy_reduce_add_mul_slice_assign(self.as_mut_slice(), a.as_slice(), b.as_slice());
     }
 }
 
 impl<S, T> NttPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Extracts a slice containing the entire vector.
@@ -140,25 +135,28 @@ where
         self.0.as_slice()
     }
 
-    /// Get the `coefficient counts`/`polynomial length` of polynomial.
+    /// Returns the total number of stored NTT evaluations, without validating a ring length.
+    #[must_use]
     #[inline]
-    pub fn poly_length(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    /// Returns whether the backing storage contains no NTT evaluations.
+    #[must_use]
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns an iterator over NTT values.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, T> {
         self.0.iter()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
-    #[inline]
-    pub fn copied_iter(&self) -> core::iter::Copied<core::slice::Iter<'_, T>> {
-        self.0.iter().copied()
-    }
-
     /// Returns `true` if `self` is equal to `0`.
+    #[must_use]
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.0.iter().all(Zero::is_zero)
@@ -174,33 +172,11 @@ where
         modulus: M,
     ) where
         M: Copy + ReduceMulAddSlice<T>,
-        B: RawData<Elem = T> + Data,
-        C: RawData<Elem = T> + Data,
-        D: RawData<Elem = T> + DataMut,
+        B: Data<Elem = T>,
+        C: Data<Elem = T>,
+        D: DataMut<Elem = T>,
     {
         modulus.reduce_mul_add_slice_to(
-            self.as_slice(),
-            b.as_slice(),
-            c.as_slice(),
-            output.as_mut_slice(),
-        );
-    }
-
-    /// Performs `result = self * b + c`.
-    #[inline]
-    pub fn mul_add_to_fast<M, B, C, D>(
-        &self,
-        b: &NttPolynomial<B>,
-        c: &NttPolynomial<C>,
-        output: &mut NttPolynomial<D>,
-        modulus: M,
-    ) where
-        M: Copy + LazyReduceMulAddSlice<T>,
-        B: RawData<Elem = T> + Data,
-        C: RawData<Elem = T> + Data,
-        D: RawData<Elem = T> + DataMut,
-    {
-        modulus.lazy_reduce_mul_add_slice_to(
             self.as_slice(),
             b.as_slice(),
             c.as_slice(),
@@ -211,7 +187,7 @@ where
 
 impl<S, T> Size for NttPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     #[inline]

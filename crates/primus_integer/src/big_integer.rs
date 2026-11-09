@@ -1,50 +1,174 @@
-use core::cmp::Ordering;
-use std::{
+use core::{
+    cmp::Ordering,
+    iter::FusedIterator,
     ops::{Index, IndexMut},
-    slice::SliceIndex,
+    slice::{ChunksExact, ChunksExactMut, SliceIndex},
 };
 
 use primus_data::{Data, DataMut, RawData};
-use serde::{Deserialize, Serialize};
 
-use crate::{UnsignedInteger, impl_iters};
+use crate::UnsignedInteger;
 
-/// A big unsigned integer backed by externally provided limb storage.
+/// A fixed-width unsigned integer backed by little-endian limb storage.
 ///
-/// `BigUint<S>` is designed to work as a lightweight view or container over an
-/// existing limb buffer instead of as a normalized arbitrary-precision integer.
-/// The storage backend `S` can therefore be borrowed or owned, for example:
+/// `BigUint<S>` is a lightweight view or container over borrowed or owned
+/// storage. It does not remove leading zero limbs: the limb count is part of
+/// the representation and equality. Operations involving multiple `BigUint`s
+/// require matching limb counts; higher-level callers are responsible for
+/// validating their buffer layouts.
 ///
-/// - `BigUint<&[T]>`
-/// - `BigUint<&mut [T]>`
-/// - `BigUint<Vec<T>>`
-/// - `BigUint<Box<[T]>>`
-///
-/// The limb order is little-endian: index `0` stores the least significant
-/// limb.
-///
-/// # Design note
-///
-/// Most arithmetic and comparison methods in this type are intended for
-/// buffer-based, fixed-width style usage in higher-level crates, where
-/// operands are expected to have the same limb length. This type does not try
-/// to canonicalize away leading zero limbs automatically.
-///
-/// In particular, [`PartialEq::eq`], [`cmp`](BigUint::cmp), and the arithmetic
-/// in-place methods all require that all participating [`BigUint`]s share the
-/// same storage length. Calling them on operands of differing length is a
-/// programmer error and triggers a `debug_assert!` in debug builds; in release
-/// builds the comparison/operation iterates the shorter common prefix and any
-/// extra trailing limbs are ignored, so prefer to enforce length equality at
-/// the call site.
-#[derive(Debug, Serialize, Deserialize)]
+/// With the `serde` feature, serialization delegates to the backing storage
+/// `S` and preserves all limbs, including leading zeros. Deserialization does
+/// not validate the limb count or an arithmetic domain.
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
 pub struct BigUint<S>(pub S)
 where
     S: RawData,
     <S as RawData>::Elem: UnsignedInteger;
 
-impl_iters!(BigUint, big_uint);
+/// Iterator over non-overlapping, immutable [`BigUint`] values.
+#[derive(Debug, Clone)]
+pub struct BigUintIter<'a, T>
+where
+    T: UnsignedInteger,
+{
+    /// The underlying immutable chunk iterator.
+    pub iter: ChunksExact<'a, T>,
+}
+
+impl<'a, T: UnsignedInteger> BigUintIter<'a, T> {
+    /// Creates an iterator over complete `BigUint` values with `limb_count` limbs each.
+    ///
+    /// A trailing partial value is not yielded. Callers that require complete
+    /// coverage must ensure that `data.len()` is divisible by `limb_count`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `limb_count` is zero.
+    #[inline]
+    pub fn new(data: &'a [T], limb_count: usize) -> Self {
+        Self {
+            iter: data.chunks_exact(limb_count),
+        }
+    }
+}
+
+impl<'a, T: UnsignedInteger> Iterator for BigUintIter<'a, T> {
+    type Item = BigUint<&'a [T]>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(BigUint)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth(n).map(BigUint)
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+}
+
+impl<T: UnsignedInteger> DoubleEndedIterator for BigUintIter<'_, T> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map(BigUint)
+    }
+
+    #[inline]
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth_back(n).map(BigUint)
+    }
+}
+
+impl<T: UnsignedInteger> ExactSizeIterator for BigUintIter<'_, T> {}
+impl<T: UnsignedInteger> FusedIterator for BigUintIter<'_, T> {}
+
+/// Iterator over non-overlapping, mutable [`BigUint`] values.
+#[derive(Debug)]
+pub struct BigUintIterMut<'a, T>
+where
+    T: UnsignedInteger,
+{
+    /// The underlying mutable chunk iterator.
+    pub iter: ChunksExactMut<'a, T>,
+}
+
+impl<'a, T: UnsignedInteger> BigUintIterMut<'a, T> {
+    /// Creates an iterator over complete `BigUint` values with `limb_count` limbs each.
+    ///
+    /// A trailing partial value is not yielded. Callers that require complete
+    /// coverage must ensure that `data.len()` is divisible by `limb_count`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `limb_count` is zero.
+    #[inline]
+    pub fn new(data: &'a mut [T], limb_count: usize) -> Self {
+        Self {
+            iter: data.chunks_exact_mut(limb_count),
+        }
+    }
+}
+
+impl<'a, T: UnsignedInteger> Iterator for BigUintIterMut<'a, T> {
+    type Item = BigUint<&'a mut [T]>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(BigUint)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth(n).map(BigUint)
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+}
+
+impl<T: UnsignedInteger> DoubleEndedIterator for BigUintIterMut<'_, T> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map(BigUint)
+    }
+
+    #[inline]
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth_back(n).map(BigUint)
+    }
+}
+
+impl<T: UnsignedInteger> ExactSizeIterator for BigUintIterMut<'_, T> {}
+impl<T: UnsignedInteger> FusedIterator for BigUintIterMut<'_, T> {}
 
 /// Owned [`BigUint`] backed by a [`Vec`].
 pub type BigUintOwned<T> = BigUint<Vec<T>>;
@@ -86,7 +210,7 @@ where
 
 impl<S, T, I: SliceIndex<[T]>> IndexMut<I> for BigUint<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: UnsignedInteger,
 {
     #[inline]
@@ -103,8 +227,7 @@ where
 {
     #[inline]
     fn eq(&self, other: &BigUint<A>) -> bool {
-        debug_assert_eq!(self.len(), other.len());
-        self.iter().zip(other.iter()).all(|(&a, &b)| a == b)
+        self.digits() == other.digits()
     }
 }
 
@@ -137,12 +260,14 @@ where
     ///
     /// This is the storage length, not the effective mathematical bit length.
     #[allow(clippy::len_without_is_empty)]
+    #[must_use]
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns the limbs as a slice in little-endian order.
+    #[must_use]
     #[inline(always)]
     pub fn digits(&self) -> &[T] {
         self.0.as_slice()
@@ -150,12 +275,14 @@ where
 
     /// Returns an iterator over the limbs from least significant to most
     /// significant.
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
     #[inline(always)]
-    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, T> {
+    pub fn iter<'a>(&'a self) -> core::slice::Iter<'a, T> {
         self.0.iter()
     }
 
     /// Returns `true` if all limbs are zero.
+    #[must_use]
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.iter().all(T::is_zero)
@@ -163,98 +290,60 @@ where
 
     /// Returns the effective bit width of the represented value.
     ///
-    /// Leading zero limbs are ignored.
+    /// Leading zero limbs are ignored; empty and all-zero storage have width zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the effective bit width exceeds `u32::MAX`.
     #[must_use]
     #[inline]
-    pub fn bits_count(&self) -> u32 {
-        self.iter()
-            .enumerate()
-            .rev()
-            .find(|(_, v)| !v.is_zero())
-            .map_or(0, |(i, v)| T::BITS * (i as u32 + 1) - v.leading_zeros())
+    pub fn bit_width(&self) -> u32 {
+        self.checked_bit_width()
+            .expect("BigUint bit width exceeds u32::MAX")
+    }
+
+    /// Returns the effective bit width, or `None` if it exceeds `u32::MAX`.
+    ///
+    /// Leading zero limbs are ignored; empty and all-zero storage return `Some(0)`.
+    /// Parameter constructors can use this to validate the width once before
+    /// preparing bit offsets and decomposition storage.
+    #[must_use]
+    #[inline]
+    pub fn checked_bit_width(&self) -> Option<u32> {
+        let Some((index, &high)) = self.iter().enumerate().rev().find(|(_, v)| !v.is_zero()) else {
+            return Some(0);
+        };
+        checked_bit_width_from_high_limb(index, high)
     }
 
     /// Borrows the same value as an immutable slice-backed [`BigUint`].
+    #[must_use]
     #[inline(always)]
     pub fn view(&self) -> BigUint<&[T]> {
         BigUint(self.0.as_slice())
     }
 
-    /// Adds a value to the big integer, returning true if there was a carry.
+    /// Writes `self + value` to `output` and returns the carry beyond its fixed width.
     #[must_use]
     #[inline]
     pub fn add_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
-        debug_assert!(!self.0.as_slice().is_empty());
-        debug_assert_eq!(self.len(), output.len());
-
-        let mut carry;
-
-        let mut a_iter = self.iter();
-        let mut b_iter = output.iter_mut();
-
-        let a_first = a_iter.next().unwrap();
-        let b_first = b_iter.next().unwrap();
-
-        (*b_first, carry) = a_first.overflowing_add(value);
-
-        while carry {
-            if let Some(a_next) = a_iter.next()
-                && let Some(b_next) = b_iter.next()
-            {
-                (*b_next, carry) = a_next.overflowing_add(T::ONE);
-            } else {
-                return carry;
-            }
-        }
-
-        for (a, b) in a_iter.zip(b_iter) {
-            *b = *a;
-        }
-
-        carry
+        self.view().add_value_to_kernel(value, output.view_mut())
     }
 
-    /// Subtracts a value to the big integer, returning true if there was a borrow.
+    /// Writes `self - value` to `output` and returns the final borrow.
     #[must_use]
     #[inline]
     pub fn sub_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
-        debug_assert!(!self.0.as_slice().is_empty());
-        debug_assert_eq!(self.len(), output.len());
-
-        let mut borrow;
-
-        let mut a_iter = self.iter();
-        let mut b_iter = output.iter_mut();
-
-        let a_first = a_iter.next().unwrap();
-        let b_first = b_iter.next().unwrap();
-
-        (*b_first, borrow) = a_first.overflowing_sub(value);
-
-        while borrow {
-            if let Some(a_next) = a_iter.next()
-                && let Some(b_next) = b_iter.next()
-            {
-                (*b_next, borrow) = a_next.overflowing_sub(T::ONE);
-            } else {
-                return borrow;
-            }
-        }
-
-        for (a, b) in a_iter.zip(b_iter) {
-            *b = *a;
-        }
-
-        borrow
+        self.view().sub_value_to_kernel(value, output.view_mut())
     }
 
-    /// Multiplies the big integer by a value, storing the result in another big integer.
+    /// Writes the low limbs of `self * value` to `output` and returns the high limb.
     #[must_use]
     #[inline]
     pub fn mul_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> T
@@ -276,7 +365,7 @@ where
         carry
     }
 
-    /// Multiplies the big integer by a value, then add to another big integer.
+    /// Accumulates `self * value` into `acc` and returns the carry beyond its fixed width.
     #[must_use]
     #[inline]
     pub fn mul_value_add_to<A>(&self, value: T, acc: &mut BigUint<A>) -> T
@@ -291,13 +380,13 @@ where
 
         let mut carry = T::ZERO;
         for (ele, res) in self.iter().zip(acc.iter_mut()) {
-            (*res, carry) = value.carrying_mul_add(*ele, *res, carry);
+            (*res, carry) = value.carrying_mul_add(*ele, carry, *res);
         }
 
         carry
     }
 
-    /// Adds two big integers to the result, returning true if there was a carry.
+    /// Writes `self + other` to `output` and returns the carry beyond its fixed width.
     #[must_use]
     #[inline]
     pub fn add_to<A, B>(&self, other: &BigUint<A>, output: &mut BigUint<B>) -> bool
@@ -316,7 +405,7 @@ where
         carry
     }
 
-    /// Subtracts another big integer from this one, returning true if there was a borrow.
+    /// Writes `self - other` to `output` and returns the final borrow.
     #[must_use]
     #[inline]
     pub fn sub_to<A, B>(&self, other: &BigUint<A>, output: &mut BigUint<B>) -> bool
@@ -355,7 +444,10 @@ where
         Ordering::Equal
     }
 
-    /// Adds two big integers to the result modulo a given modulus.
+    /// Adds two reduced big integers and writes the result modulo `modulus`.
+    ///
+    /// Requires `self` and `other` to be less than `modulus` and all operands
+    /// to have the same limb count.
     #[inline]
     pub fn add_modulo_to<A, B, C>(
         &self,
@@ -370,8 +462,6 @@ where
         debug_assert!(
             self.len() == other.len() && self.len() == output.len() && self.len() == modulus.len()
         );
-        debug_assert!(self.cmp(modulus).is_lt());
-        debug_assert!(other.cmp(modulus).is_lt());
 
         let carry = self.add_to(other, output);
         if carry || output.cmp(modulus).is_ge() {
@@ -379,7 +469,10 @@ where
         }
     }
 
-    /// Subs another big integer to this one modulo a given modulus.
+    /// Subtracts two reduced big integers and writes the result modulo `modulus`.
+    ///
+    /// Requires `self` and `other` to be less than `modulus` and all operands
+    /// to have the same limb count.
     #[inline]
     pub fn sub_modulo_to<A, B, C>(
         &self,
@@ -394,15 +487,16 @@ where
         debug_assert!(
             self.len() == other.len() && self.len() == output.len() && self.len() == modulus.len()
         );
-        debug_assert!(self.cmp(modulus).is_lt());
-        debug_assert!(other.cmp(modulus).is_lt());
 
         if self.sub_to(other, output) {
             let _ = output.add_assign(modulus);
         }
     }
 
-    /// Negates the big integer modulo a given modulus.
+    /// Negates a reduced big integer modulo `modulus`.
+    ///
+    /// Requires `self < modulus` and equal limb counts for the input, output,
+    /// and modulus.
     #[inline]
     pub fn neg_modulo_to<A, B>(&self, output: &mut BigUint<A>, modulus: &BigUint<B>)
     where
@@ -410,7 +504,6 @@ where
         B: Data<Elem = T>,
     {
         debug_assert!(self.len() == output.len() && self.len() == modulus.len());
-        debug_assert!(self.cmp(modulus).is_lt());
 
         if self.is_zero() {
             output.set_zero();
@@ -423,12 +516,85 @@ where
     }
 }
 
+impl<T: UnsignedInteger> BigUint<&[T]> {
+    /// Propagates the scalar carry, then copies the remaining high limbs unchanged.
+    /// Input and output must have equal, nonzero fixed widths; only their storage
+    /// is borrowed, so the same kernel serves owned and slice-backed callers.
+    #[inline]
+    fn add_value_to_kernel(&self, value: T, mut output: BigUint<&mut [T]>) -> bool {
+        debug_assert!(!self.0.is_empty());
+        debug_assert_eq!(self.len(), output.len());
+
+        let mut carry;
+
+        let mut a_iter = self.iter();
+        let mut b_iter = output.iter_mut();
+
+        let a_first = a_iter.next().unwrap();
+        let b_first = b_iter.next().unwrap();
+
+        (*b_first, carry) = a_first.overflowing_add(value);
+
+        while carry {
+            if let Some(a_next) = a_iter.next()
+                && let Some(b_next) = b_iter.next()
+            {
+                (*b_next, carry) = a_next.overflowing_add(T::ONE);
+            } else {
+                return carry;
+            }
+        }
+
+        for (a, b) in a_iter.zip(b_iter) {
+            *b = *a;
+        }
+
+        carry
+    }
+
+    /// Propagates the scalar borrow, then copies the remaining high limbs unchanged.
+    /// Like the carry kernel, this preserves the caller's complete fixed width,
+    /// including any leading zero limbs, and requires equal nonempty storage.
+    #[inline]
+    fn sub_value_to_kernel(&self, value: T, mut output: BigUint<&mut [T]>) -> bool {
+        debug_assert!(!self.0.is_empty());
+        debug_assert_eq!(self.len(), output.len());
+
+        let mut borrow;
+
+        let mut a_iter = self.iter();
+        let mut b_iter = output.iter_mut();
+
+        let a_first = a_iter.next().unwrap();
+        let b_first = b_iter.next().unwrap();
+
+        (*b_first, borrow) = a_first.overflowing_sub(value);
+
+        while borrow {
+            if let Some(a_next) = a_iter.next()
+                && let Some(b_next) = b_iter.next()
+            {
+                (*b_next, borrow) = a_next.overflowing_sub(T::ONE);
+            } else {
+                return borrow;
+            }
+        }
+
+        for (a, b) in a_iter.zip(b_iter) {
+            *b = *a;
+        }
+
+        borrow
+    }
+}
+
 impl<S, T> BigUint<S>
 where
     S: DataMut<Elem = T>,
     T: UnsignedInteger,
 {
     /// Returns the limbs as a mutable slice in little-endian order.
+    #[must_use]
     #[inline(always)]
     pub fn digits_mut(&mut self) -> &mut [T] {
         self.0.as_mut_slice()
@@ -436,6 +602,7 @@ where
 
     /// Returns a mutable iterator over the limbs from least significant to most
     /// significant.
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
     #[inline(always)]
     pub fn iter_mut<'a>(&'a mut self) -> std::slice::IterMut<'a, T> {
         self.0.iter_mut()
@@ -448,12 +615,16 @@ where
     }
 
     /// Borrows the same value as a mutable slice-backed [`BigUint`].
+    #[must_use]
     #[inline(always)]
     pub fn view_mut(&mut self) -> BigUint<&mut [T]> {
         BigUint(self.0.as_mut_slice())
     }
 
-    /// Left shifts the big integer.
+    /// Shifts left within the fixed width and returns the bits shifted out.
+    ///
+    /// `bits` must be less than `T::BITS`; larger shifts are unsupported and
+    /// may panic. A zero shift leaves the value unchanged.
     #[must_use]
     #[inline]
     pub fn left_shift_assign(&mut self, bits: u32) -> T {
@@ -472,7 +643,10 @@ where
         }
     }
 
-    /// Right shifts the big integer.
+    /// Shifts right within the fixed width, discarding the low bits.
+    ///
+    /// `bits` must be less than `T::BITS`; larger shifts are unsupported and
+    /// may panic. A zero shift leaves the value unchanged.
     #[inline]
     pub fn right_shift_assign(&mut self, bits: u32) {
         if bits != 0 {
@@ -487,7 +661,10 @@ where
         }
     }
 
-    /// Adds a value to the big integer, returning true if there was a carry.
+    /// Adds `value` and returns the carry beyond the fixed width.
+    ///
+    /// Higher-level callers must validate that the representation contains at
+    /// least one limb before entering this arithmetic kernel.
     #[must_use]
     #[inline]
     pub fn add_value_assign(&mut self, value: T) -> bool {
@@ -507,7 +684,10 @@ where
         }
     }
 
-    /// Subtracts a value from the big integer, returning true if there was a borrow.
+    /// Subtracts `value` and returns the final borrow.
+    ///
+    /// Higher-level callers must validate that the representation contains at
+    /// least one limb before entering this arithmetic kernel.
     #[must_use]
     #[inline]
     pub fn sub_value_assign(&mut self, value: T) -> bool {
@@ -527,7 +707,7 @@ where
         }
     }
 
-    /// Multiplies the big integer by a value, returning any carry that results.
+    /// Multiplies by `value` and returns the high limb beyond the fixed width.
     #[must_use]
     #[inline]
     pub fn mul_value_assign(&mut self, value: T) -> T {
@@ -544,7 +724,7 @@ where
         carry
     }
 
-    /// Adds another big integer to this one, returning true if there was a carry.
+    /// Adds `other` and returns the carry beyond the fixed width.
     #[must_use]
     #[inline]
     pub fn add_assign<A>(&mut self, other: &BigUint<A>) -> bool
@@ -562,7 +742,7 @@ where
         carry
     }
 
-    /// Subtracts another big integer from this one, returning true if there was a borrow.
+    /// Subtracts `other` and returns the final borrow.
     #[must_use]
     #[inline]
     pub fn sub_assign<A>(&mut self, other: &BigUint<A>) -> bool
@@ -580,7 +760,10 @@ where
         borrow
     }
 
-    /// Adds another big integer to this one modulo a given modulus.
+    /// Adds another reduced big integer to this one modulo `modulus`.
+    ///
+    /// Requires both operands to be less than `modulus` and to have the same
+    /// limb count as the modulus.
     #[inline]
     pub fn add_modulo_assign<A, B>(&mut self, other: &BigUint<A>, modulus: &BigUint<B>)
     where
@@ -588,8 +771,6 @@ where
         B: Data<Elem = T>,
     {
         debug_assert!(self.len() == other.len() && self.len() == modulus.len());
-        debug_assert!(self.cmp(modulus).is_lt());
-        debug_assert!(other.cmp(modulus).is_lt());
 
         let carry = self.add_assign(other);
         if carry || self.cmp(modulus).is_ge() {
@@ -599,10 +780,8 @@ where
 
     /// Performs `self = other - self` modulo `modulus`.
     ///
-    /// # Panics
-    ///
-    /// Panics if any operand has a different length, or if `self` or `other` is
-    /// not strictly less than `modulus`.
+    /// Requires both operands to be less than `modulus` and to have the same
+    /// limb count as the modulus.
     #[inline]
     pub fn sub_modulo_rev_assign<A, B>(&mut self, other: &BigUint<A>, modulus: &BigUint<B>)
     where
@@ -610,8 +789,6 @@ where
         B: Data<Elem = T>,
     {
         debug_assert!(self.len() == other.len() && self.len() == modulus.len());
-        debug_assert!(self.cmp(modulus).is_lt());
-        debug_assert!(other.cmp(modulus).is_lt());
 
         let mut borrow = false;
         for (self_limb, &other_limb) in self.iter_mut().zip(other.iter()) {
@@ -624,7 +801,10 @@ where
         }
     }
 
-    /// Subs another big integer from this one modulo a given modulus.
+    /// Subtracts another reduced big integer from this one modulo `modulus`.
+    ///
+    /// Requires both operands to be less than `modulus` and to have the same
+    /// limb count as the modulus.
     #[inline]
     pub fn sub_modulo_assign<A, B>(&mut self, other: &BigUint<A>, modulus: &BigUint<B>)
     where
@@ -632,32 +812,21 @@ where
         B: Data<Elem = T>,
     {
         debug_assert!(self.len() == other.len() && self.len() == modulus.len());
-        debug_assert!(
-            self.cmp(modulus).is_lt(),
-            "self: {:?}\nmodulus: {:?}",
-            self.0.as_slice(),
-            modulus.0.as_slice()
-        );
-        debug_assert!(
-            other.cmp(modulus).is_lt(),
-            "other: {:?}\nmodulus: {:?}",
-            other.0.as_slice(),
-            modulus.0.as_slice()
-        );
 
         if self.sub_assign(other) {
             let _ = self.add_assign(modulus);
         }
     }
 
-    /// Negates the big integer modulo a given modulus.
+    /// Negates this reduced big integer modulo `modulus`.
+    ///
+    /// Requires `self < modulus` and matching limb counts.
     #[inline]
     pub fn neg_modulo_assign<A>(&mut self, modulus: &BigUint<A>)
     where
         A: Data<Elem = T>,
     {
         debug_assert!(self.len() == modulus.len());
-        debug_assert!(self.cmp(modulus).is_lt());
 
         if !self.is_zero() {
             let mut borrow = false;
@@ -667,16 +836,28 @@ where
         }
     }
 }
-/// Multiplies many values together, returning the result as a big integer slice.
+
+/// Computes the width from the highest nonzero limb without narrowing its index.
+/// Limb indices use `usize`, while the effective width and bit offsets use `u32`.
+#[inline]
+fn checked_bit_width_from_high_limb<T: UnsignedInteger>(index: usize, high: T) -> Option<u32> {
+    u32::try_from(index)
+        .ok()?
+        .checked_mul(T::BITS)?
+        .checked_add(high.bit_width())
+}
+
+/// Multiplies the values and returns their product as an owned [`BigUint`].
 ///
-/// # Panics if
+/// # Panics
 ///
-/// - `values` is empty
+/// Panics if `values` is empty.
+#[must_use]
 pub fn multiply_many_values<T: UnsignedInteger>(values: &[T]) -> BigUint<Vec<T>> {
-    debug_assert!(!values.is_empty());
+    let (&first, remaining) = values.split_first().expect("values must be nonempty");
     let mut result = BigUint(Vec::with_capacity(values.len()));
-    result.0.push(values[0]);
-    for &v in values.iter().skip(1) {
+    result.0.push(first);
+    for &v in remaining {
         let carry = result.mul_value_assign(v);
         if !carry.is_zero() {
             result.0.push(carry);
@@ -685,281 +866,34 @@ pub fn multiply_many_values<T: UnsignedInteger>(values: &[T]) -> BigUint<Vec<T>>
     result
 }
 
-/// Multiplies many values together, except for one specified by index, returning the result as a big integer slice.
-///
-/// # Panics if
-///
-/// - `values` is empty
-/// - `except >= values.len()`
-pub fn multiply_many_values_except<T: UnsignedInteger>(values: &[T], except: usize) -> Vec<T> {
-    debug_assert!(!values.is_empty() && except < values.len());
-    let mut result = BigUint(Vec::with_capacity(values.len() - 1));
-    result.0.push(T::ONE);
-
-    for (_, &v) in values.iter().enumerate().filter(|(i, _)| *i != except) {
-        let carry = result.mul_value_assign(v);
-        if !carry.is_zero() {
-            result.0.push(carry);
-        }
-    }
-
-    result.0
-}
-
-/// Multiplies many values together, except for one specified by index, returning the result as a big integer slice.
-///
-/// # Panics if
-///
-/// - `values` is empty
-/// - `except >= values.len()`
-pub fn multiply_many_values_except_to<T: UnsignedInteger>(
-    values: &[T],
-    except: usize,
-    output: &mut [T],
-) {
-    debug_assert!(!values.is_empty() && except < values.len());
-    output.fill(T::ZERO);
-    output[0] = T::ONE;
-    let mut len = 1;
-
-    for (_, &v) in values.iter().enumerate().filter(|(i, _)| *i != except) {
-        let carry = BigUint(&mut output[0..len]).mul_value_assign(v);
-        if !carry.is_zero() {
-            output[len] = carry;
-            len += 1;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use rand::RngExt;
-    use rand::distr::{Distribution, Uniform};
-    use rand::{SeedableRng, rngs::StdRng};
+    use super::checked_bit_width_from_high_limb;
+    use crate::UnsignedInteger;
 
-    use super::*;
-
-    type ValueT = u32;
-
-    fn compose(value: &[ValueT]) -> u128 {
-        assert!(value.len() <= 4);
-        let mut result = 0u128;
-        for &r in value.iter().rev() {
-            result <<= ValueT::BITS;
-            result |= r as u128;
+    /// A wide integer oracle checks the u32 limit using virtual limb indices.
+    #[test]
+    fn bit_width_range_does_not_truncate_limb_indices() {
+        fn check<T: UnsignedInteger>() {
+            let last_index = (u32::MAX / T::BITS) as usize;
+            for index in [
+                0,
+                last_index - 1,
+                last_index,
+                last_index + 1,
+                u32::MAX as usize,
+                usize::MAX,
+            ] {
+                for high in [T::ONE, T::ONE << (T::BITS - 2), T::MAX] {
+                    let width = index as u128 * u128::from(T::BITS) + u128::from(high.bit_width());
+                    assert_eq!(
+                        checked_bit_width_from_high_limb(index, high),
+                        u32::try_from(width).ok(),
+                    );
+                }
+            }
         }
-        result
-    }
-
-    fn compose_u64(value: &[u64]) -> u128 {
-        assert!(value.len() <= 2);
-        let mut result = 0u128;
-        for &r in value.iter().rev() {
-            result <<= u64::BITS;
-            result |= r as u128;
-        }
-        result
-    }
-
-    #[test]
-    fn test_big_uint_ops() {
-        let mut rng = rand::rng();
-        let moduli: [ValueT; 3] = [134215681, 134176769, 132120577];
-        let modulus = multiply_many_values(&moduli);
-        let m_raw = compose(modulus.digits());
-
-        assert_eq!(128 - m_raw.leading_zeros(), modulus.bits_count());
-
-        let distr = moduli.map(|m| Uniform::new(0, m).unwrap());
-
-        let a_residues = distr.map(|distr| distr.sample(&mut rng));
-        let mut a = multiply_many_values(&a_residues);
-        let mut a_raw = compose(a.digits());
-
-        a.right_shift_assign(3);
-        a_raw >>= 3;
-        assert_eq!(a_raw, compose(a.digits()));
-
-        let carry = a.left_shift_assign(3);
-        assert_eq!(carry, 0);
-        a_raw <<= 3;
-        assert_eq!(a_raw, compose(a.digits()));
-
-        let v: ValueT = rng.random();
-        let _r = a.add_value_assign(v);
-        a_raw += v as u128;
-        assert_eq!(a_raw, compose(a.digits()));
-
-        let _r = a.sub_value_assign(v);
-        a_raw -= v as u128;
-        assert_eq!(a_raw, compose(a.digits()));
-
-        let r = a.mul_value_assign(v);
-        let mut p = a.clone();
-        p.0.push(r);
-        a_raw *= v as u128;
-        assert_eq!(a_raw, compose(p.digits()));
-
-        let mut result = BigUint(vec![0; a.len()]);
-        a_raw = compose(a.digits());
-        let _carry = a.add_value_to(v, &mut result);
-        assert_eq!(a_raw + v as u128, compose(result.digits()));
-
-        let _borrow = a.sub_value_to(v, &mut result);
-        assert_eq!(a_raw - v as u128, compose(result.digits()));
-
-        let r = a.mul_value_to(v, &mut result);
-        result.0.push(r);
-        assert_eq!(a_raw * v as u128, compose(result.digits()));
-
-        let a_residues = distr.map(|distr| distr.sample(&mut rng));
-        let b_residues = distr.map(|distr| distr.sample(&mut rng));
-        let mut a = multiply_many_values(&a_residues);
-        let b = multiply_many_values(&b_residues);
-        let a_raw = compose(a.digits());
-        let b_raw = compose(b.digits());
-
-        let mut result = b.clone();
-        let carry = a.mul_value_add_to(v, &mut result);
-        result.0.push(carry);
-        assert_eq!(a_raw * v as u128 + b_raw, compose(result.digits()));
-
-        let _r = a.add_assign(&b);
-        assert_eq!(a_raw + b_raw, compose(a.digits()));
-
-        let _r = a.sub_assign(&b);
-        assert_eq!(a_raw, compose(a.digits()));
-
-        a.add_modulo_assign(&b, &modulus);
-        let r = (a_raw + b_raw) % m_raw;
-        assert_eq!(r, compose(a.digits()));
-
-        let a_residues = distr.map(|distr| distr.sample(&mut rng));
-        let b_residues = distr.map(|distr| distr.sample(&mut rng));
-        let mut a = multiply_many_values(&a_residues);
-        let b = multiply_many_values(&b_residues);
-        let a_raw = compose(a.digits());
-        let b_raw = compose(b.digits());
-
-        a.sub_modulo_assign(&b, &modulus);
-        let r = (a_raw + m_raw - b_raw) % m_raw;
-        assert_eq!(r, compose(a.digits()));
-
-        let mut c = a.clone();
-        c.neg_modulo_assign(&modulus);
-        let r = a.add_assign(&c);
-        assert!(!r);
-        assert!(a.is_zero() || a == modulus);
-    }
-
-    #[test]
-    fn add_value_to_stops_after_carry_chain() {
-        let input = [u32::MAX, u32::MAX, 7, 9];
-        let mut result = [0u32; 4];
-
-        let carry = BigUint(&input[..]).add_value_to(1, &mut BigUint(&mut result[..]));
-
-        assert!(!carry);
-        assert_eq!(result, [0, 0, 8, 9]);
-    }
-
-    #[test]
-    fn add_value_to_reports_final_carry() {
-        let input = [u32::MAX, u32::MAX];
-        let mut result = [1u32; 2];
-
-        let carry = BigUint(&input[..]).add_value_to(1, &mut BigUint(&mut result[..]));
-
-        assert!(carry);
-        assert_eq!(result, [0, 0]);
-    }
-
-    #[test]
-    fn sub_value_to_stops_after_borrow_chain() {
-        let input = [0u32, 0, 7, 9];
-        let mut result = [0u32; 4];
-
-        let borrow = BigUint(&input[..]).sub_value_to(1, &mut BigUint(&mut result[..]));
-
-        assert!(!borrow);
-        assert_eq!(result, [u32::MAX, u32::MAX, 6, 9]);
-    }
-
-    #[test]
-    fn sub_value_to_reports_final_borrow() {
-        let input = [0u32, 0];
-        let mut result = [1u32; 2];
-
-        let borrow = BigUint(&input[..]).sub_value_to(1, &mut BigUint(&mut result[..]));
-
-        assert!(borrow);
-        assert_eq!(result, [u32::MAX, u32::MAX]);
-    }
-
-    // Coverage for u64 BigUint multi-limb operations.
-    // Builds 2-limb u64 BigUints by decomposing u128 values, so we always
-    // exercise the multi-limb path and can cross-check against u128 arithmetic.
-    // `mul_value` is omitted because a 2-limb u64 * u64 value can exceed u128.
-    #[test]
-    fn test_big_uint_ops_u64_two_limbs() {
-        let mut rng = StdRng::seed_from_u64(0xCAFE_BABE_0000_0005);
-
-        // Modulus: a 2-limb u64 value strictly less than 2^128.
-        let m_raw: u128 = 0xc0ff_ee15_dead_beef_face_b00c_1337_4242;
-        let modulus = BigUint::<Vec<u64>>(vec![m_raw as u64, (m_raw >> 64) as u64]);
-
-        assert_eq!(128 - m_raw.leading_zeros(), modulus.bits_count());
-
-        let split = |v: u128| -> Vec<u64> { vec![v as u64, (v >> 64) as u64] };
-
-        let a_raw: u128 = rng.random_range(0..m_raw);
-        let b_raw: u128 = rng.random_range(0..m_raw);
-
-        let mut a = BigUint::<Vec<u64>>(split(a_raw));
-        let b = BigUint::<Vec<u64>>(split(b_raw));
-
-        // shift
-        let mut a_shifted = a.clone();
-        a_shifted.right_shift_assign(5);
-        assert_eq!(a_raw >> 5, compose_u64(a_shifted.digits()));
-        let carry = a_shifted.left_shift_assign(5);
-        assert_eq!(carry, 0);
-        assert_eq!((a_raw >> 5) << 5, compose_u64(a_shifted.digits()));
-
-        // add_value / sub_value within range that doesn't overflow the BigUint
-        let v: u64 = rng.random_range(0u64..(1 << 32));
-        let mut a_av = a.clone();
-        let _r = a_av.add_value_assign(v);
-        assert_eq!(a_raw.wrapping_add(v as u128), compose_u64(a_av.digits()));
-        let _r = a_av.sub_value_assign(v);
-        assert_eq!(a_raw, compose_u64(a_av.digits()));
-
-        // add_modulo / sub_modulo / neg_modulo
-        // Compute expected results without intermediate u128 overflow.
-        let (sum, sum_overflow) = a_raw.overflowing_add(b_raw);
-        let expected_add = if sum_overflow || sum >= m_raw {
-            sum.wrapping_sub(m_raw)
-        } else {
-            sum
-        };
-        let expected_sub = if a_raw >= b_raw {
-            a_raw - b_raw
-        } else {
-            m_raw - (b_raw - a_raw)
-        };
-
-        let mut s = a.clone();
-        s.add_modulo_assign(&b, &modulus);
-        assert_eq!(expected_add, compose_u64(s.digits()));
-
-        let mut s = a.clone();
-        s.sub_modulo_assign(&b, &modulus);
-        assert_eq!(expected_sub, compose_u64(s.digits()));
-
-        let mut c = a.clone();
-        c.neg_modulo_assign(&modulus);
-        let r = a.add_assign(&c);
-        assert!(!r);
-        assert!(a.is_zero() || a == modulus);
+        check::<u32>();
+        check::<u64>();
     }
 }
