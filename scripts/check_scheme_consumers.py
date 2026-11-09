@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run basic BFV/BGV workflows and advanced key backends as isolated normal-dependency consumers.
+"""Check BFV/BGV workflows as isolated normal-dependency consumers.
 
 No workspace development dependencies or feature selections are inherited. Use
 --output-dir outside this repository to retain source, manifests, lockfiles,
 command output and normal dependency trees. Build artifacts remain reusable in
 target/scheme-consumers; this script needs only Python's standard library.
+The default mode also runs the workflows and checks their results.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ def run(command: list[str], directory: Path, log: str, env: dict[str, str]) -> s
     return result.stdout
 
 
-def check_consumers(output_dir: Path) -> None:
+def check_consumers(output_dir: Path, *, check_only: bool) -> None:
     output_dir = output_dir.resolve()
     if output_dir == ROOT or ROOT in output_dir.parents:
         raise ValueError("--output-dir must be outside the FHE repository")
@@ -88,8 +89,7 @@ def check_consumers(output_dir: Path) -> None:
                 ROOT / "crates" / f"primus_{scheme}" / "examples" / f"{example}.rs",
                 directory / "src" / "main.rs",
             )
-            # Each package owns an independent lock and feature resolution. The
-            # tree uses the same target and dependency kinds as `cargo run`.
+            # Each consumer owns its lockfile and normal feature resolution.
             run(["cargo", "generate-lockfile", "--offline"], directory, "lock.log", env)
             metadata = json.loads(run(
                 ["cargo", "metadata", "--offline", "--locked", "--no-deps", "--format-version=1"],
@@ -111,6 +111,11 @@ def check_consumers(output_dir: Path) -> None:
                 raise RuntimeError(f"{name}: coefficient consumer unexpectedly enabled batching")
             if batching and 'primus_encoding feature "batching"' not in tree:
                 raise RuntimeError(f"{name}: scheme batching did not enable the shared encoder")
+            if check_only:
+                run(["cargo", "check", "--offline", "--locked"], directory, "check.log", env)
+                print(f"{name}: normal dependencies and compilation passed", flush=True)
+                continue
+
             command = ["cargo", "run", "--offline", "--locked"]
             if example == "working_basis":
                 command.append("--release")
@@ -128,12 +133,13 @@ def check_consumers(output_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, help="retain evidence outside this repository")
+    parser.add_argument("--check-only", action="store_true", help="compile-check the consumers")
     args = parser.parse_args()
     if args.output_dir is not None:
-        check_consumers(args.output_dir)
+        check_consumers(args.output_dir, check_only=args.check_only)
     else:
         with tempfile.TemporaryDirectory(prefix="primus-scheme-consumers-") as temporary:
-            check_consumers(Path(temporary))
+            check_consumers(Path(temporary), check_only=args.check_only)
 
 
 if __name__ == "__main__":

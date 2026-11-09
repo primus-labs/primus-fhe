@@ -14,6 +14,7 @@ env:
   # Override target-cpu=native so cached artifacts work across runner CPUs.
   RUSTFLAGS: ""
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
 
 jobs:
   stable:
@@ -27,7 +28,14 @@ jobs:
         with:
           tool: just,cargo-nextest
       - uses: Swatinem/rust-cache@v2
-      - run: just ci
+      - name: Check formatting
+        run: just fmt-check
+      - name: Check isolated Stable feature sets and consumers
+        run: just ci-stable-check
+      - name: Lint Stable targets
+        run: just ci-stable-lint
+      - name: Run Stable tests and doctests
+        run: just ci-stable-test
 
   nightly:
     runs-on: ubuntu-latest
@@ -40,4 +48,9 @@ jobs:
         with:
           tool: just,cargo-nextest
       - uses: Swatinem/rust-cache@v2
-      - run: just ci-nightly
+      - name: Check minimal SIMD builds
+        run: just ci-nightly-check
+      - name: Lint and test all Nightly features
+        run: just simd
+      - name: Build strict all-feature Rustdoc
+        run: just ci-nightly-doc
