@@ -3,7 +3,7 @@
 use primus_decompose::{
     DecompositionBaseLog, DecompositionLevelCount, big_integer::BigUintApproxSignedBasis,
 };
-use primus_distr::SignedDiscreteGaussian;
+use primus_distr::ErrorSampler;
 use primus_integer::{BigUint, FheUint};
 use primus_lattice::{GlweDimension, RnsGadgetSize};
 use primus_reduce::FieldContext;
@@ -220,11 +220,12 @@ where
 
     /// Returns a reference to the noise distribution of this [`CrtGlevParameters<T, M>`].
     #[inline]
-    pub fn noise_distribution(&self) -> &SignedDiscreteGaussian<T::SignedInteger> {
+    pub fn noise_distribution(&self) -> &ErrorSampler<T> {
         &self.encryption_parameters.noise_distribution
     }
 
-    /// Returns the noise standard deviation of this  [`CrtGlevParameters<T, M>`].
+    /// Returns the Gaussian scale or the exact CBD standard deviation sqrt(eta/2).
+    /// Equal values do not identify the distribution; inspect [`Self::noise_distribution`].
     pub fn noise_standard_deviation(&self) -> f64 {
         self.encryption_parameters
             .noise_distribution

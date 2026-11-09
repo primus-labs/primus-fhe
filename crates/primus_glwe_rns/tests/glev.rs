@@ -7,11 +7,14 @@ use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_lattice::{glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
 use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
-use primus_poly::{BigUintPolynomial, CrtPolynomial, Polynomial};
+use primus_poly::{BigUintPolynomial, CrtPolynomial, DcrtPolynomial, Polynomial};
 use primus_rns::RNSBase;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
-use std::sync::Arc;
+use std::{
+    panic::{AssertUnwindSafe, catch_unwind},
+    sync::Arc,
+};
 
 /// Test GLev–BigUint multiplication correctness.
 ///
@@ -86,11 +89,73 @@ fn test_rns_glev() {
     let mut msg1: CrtPolynomial<Vec<ValueT>> = CrtPolynomial::zero(rns_poly_len);
     base_q.wrapping_decompose_small_values_to(input1.as_ref(), msg1.as_mut(), t);
 
-    dcrt_sk.try_bind_gadget(&domain).unwrap().encrypt_crt_to(
-        &msg1.as_view(),
-        &mut dcrt_glev.as_mut_view(),
-        &mut rng,
-    );
+    let encryptor = dcrt_sk.try_bind_gadget(&domain).unwrap();
+
+    // Both representations reject incomplete or oversized layouts before they
+    // consume coins or touch even a borrowed, dirty destination.
+    for is_dcrt in [false, true] {
+        for (input_len, output_len) in [
+            (0, rns_glev_len),
+            (rns_poly_len - 1, rns_glev_len),
+            (rns_poly_len + 1, rns_glev_len),
+            (rns_poly_len, 0),
+            (rns_poly_len, rns_glev_len - 1),
+            (rns_poly_len, rns_glev_len + 1),
+        ] {
+            let input = vec![1; input_len];
+            let mut output = vec![2; output_len + 2];
+            let mut rejected_rng = StdRng::seed_from_u64(0x474c_4556);
+            let mut untouched_rng = StdRng::seed_from_u64(0x474c_4556);
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                let mut output_view = DcrtGlev::new(&mut output[1..output_len + 1]);
+                if is_dcrt {
+                    encryptor.encrypt_dcrt_to(
+                        &DcrtPolynomial::new(input.as_slice()),
+                        &mut output_view,
+                        &mut rejected_rng,
+                    );
+                } else {
+                    encryptor.encrypt_crt_to(
+                        &CrtPolynomial::new(input.as_slice()),
+                        &mut output_view,
+                        &mut rejected_rng,
+                    );
+                }
+            }));
+            assert!(
+                result.is_err(),
+                "is_dcrt={is_dcrt}, input_len={input_len}, output_len={output_len}"
+            );
+            assert!(output.iter().all(|&value| value == 2));
+            assert_eq!(
+                rand::Rng::next_u64(&mut rejected_rng),
+                rand::Rng::next_u64(&mut untouched_rng)
+            );
+        }
+    }
+
+    // NTT linearity makes the CRT and pretransformed DCRT paths identical for
+    // the same coins. Repeat with dirty reused allocations and borrowed views;
+    // the resulting GLev also feeds the independent multiplication check below.
+    let mut msg1_dcrt = DcrtPolynomial::new(msg1.as_ref().to_vec());
+    table.transform_slice(msg1_dcrt.as_mut());
+    let mut dcrt_storage = vec![0; rns_glev_len + 2];
+    for seed in [0x474c_4556, 0x474c_4557] {
+        dcrt_glev.as_mut().fill(ValueT::MAX);
+        dcrt_storage.fill(ValueT::MAX - 1);
+        let mut crt_rng = StdRng::seed_from_u64(seed);
+        let mut dcrt_rng = StdRng::seed_from_u64(seed);
+        encryptor.encrypt_crt_to(&msg1.as_view(), &mut dcrt_glev.as_mut_view(), &mut crt_rng);
+        let mut dcrt_view = DcrtGlev::new(&mut dcrt_storage[1..rns_glev_len + 1]);
+        encryptor.encrypt_dcrt_to(&msg1_dcrt.as_view(), &mut dcrt_view, &mut dcrt_rng);
+        assert_eq!(dcrt_glev.as_ref(), dcrt_view.as_ref());
+        assert_eq!(
+            rand::Rng::next_u64(&mut crt_rng),
+            rand::Rng::next_u64(&mut dcrt_rng)
+        );
+        assert_eq!(dcrt_storage[0], ValueT::MAX - 1);
+        assert_eq!(dcrt_storage[rns_glev_len + 1], ValueT::MAX - 1);
+    }
 
     // m₂ is decomposed into CRT, then scaled by δ (so it represents
     // δ·m₂ mod Q in the RNS basis), then composed into BigUint form.

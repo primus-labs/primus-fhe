@@ -2,7 +2,8 @@ use primus_decompose::{ApproxSignedBasisError, big_integer::BigUintApproxSignedB
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
     BfvRnsCodec, CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweParameters, CrtGlweParametersError, DcrtGadgetDomain, RnsDomainError, SecretKeyDistr,
+    CrtGlweEncryptionParametersError, CrtGlweParameters, CrtGlweParametersError, DcrtGadgetDomain,
+    RnsDomainError, SecretKeyDistr,
 };
 use primus_integer::BigUint;
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
@@ -36,9 +37,11 @@ fn noise_support_must_fit_every_rns_modulus() {
         if valid {
             assert!(result.is_ok());
         } else {
-            assert!(matches!(result, Err(CrtGlweParametersError::Noise(
-                primus_distr::GaussianError::ModulusTooSmall { maximum_magnitude, modulus_minus_one: 16 }
-            )) if maximum_magnitude == magnitude));
+            assert!(
+                matches!(result, Err(CrtGlweEncryptionParametersError::ErrorSampler(
+                primus_distr::ErrorSamplerError::ModulusTooSmall { maximum_magnitude, modulus_minus_one: 16 }
+            )) if maximum_magnitude == magnitude)
+            );
         }
     }
 }
@@ -62,7 +65,7 @@ fn secret_support_must_fit_every_rns_modulus() {
         } else {
             assert!(matches!(
                 result,
-                Err(CrtGlweParametersError::SecretKey(
+                Err(CrtGlweEncryptionParametersError::SecretKey(
                     primus_distr::SecretKeySamplerError::ModulusTooSmall {
                         modulus_minus_one: 16,
                         ..
@@ -71,6 +74,103 @@ fn secret_support_must_fit_every_rns_modulus() {
             ));
         }
     }
+}
+
+#[test]
+fn explicit_error_distributions_keep_codec_free_bounds_and_auxiliary_bases() {
+    use primus_distr::{CenteredBinomialError, ErrorDistribution, ErrorSamplerError};
+    use rand::{SeedableRng, rngs::StdRng};
+
+    let moduli = [97_u32, 193].map(BarrettModulus::new);
+    let base_q = RNSBase::new(&moduli).unwrap();
+    const N: usize = 32;
+    let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(N)), 2);
+    let construct = |error| {
+        CrtGlweEncryptionParameters::try_with_error_distribution(
+            size,
+            &base_q,
+            SecretKeyDistr::SparseTernary,
+            error,
+        )
+    };
+    assert!(matches!(
+        construct(ErrorDistribution::CenteredBinomial { eta: 0 }),
+        Err(CrtGlweEncryptionParametersError::ErrorSampler(
+            ErrorSamplerError::CenteredBinomial(CenteredBinomialError::InvalidEta { eta: 0 })
+        ))
+    ));
+    let core = construct(ErrorDistribution::CenteredBinomial { eta: 21 }).unwrap();
+    assert_eq!(core.noise_distribution().maximum_magnitude(), 21);
+    // A Q core can sample the same integer into a checked QP auxiliary basis.
+    // It must use the provided count, rather than truncating to its two Q limbs.
+    let qp = [97, 193, 257];
+    let mut output = vec![u32::MAX; 3 * N];
+    core.sample_noise_to(&mut output, &qp, &mut StdRng::seed_from_u64(507));
+    for coefficient in 0..N {
+        let residue = i64::from(output[coefficient]);
+        let signed = if residue > 97 / 2 {
+            residue - 97
+        } else {
+            residue
+        };
+        assert!(signed.abs() <= 21);
+        for (index, modulus) in qp.iter().enumerate() {
+            assert_eq!(
+                i64::from(output[index * N + coefficient]),
+                signed.rem_euclid(i64::from(*modulus))
+            );
+        }
+    }
+
+    let small_base = RNSBase::new(&[97_u32, 17].map(BarrettModulus::new)).unwrap();
+    assert!(matches!(
+        CrtGlweEncryptionParameters::try_with_error_distribution(
+            size,
+            &small_base,
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        ),
+        Err(CrtGlweEncryptionParametersError::ErrorSampler(
+            ErrorSamplerError::ModulusTooSmall {
+                maximum_magnitude: 21,
+                modulus_minus_one: 16,
+            }
+        ))
+    ));
+}
+
+#[test]
+fn ordinary_sampling_errors_retain_their_real_source() {
+    use std::error::Error;
+    let error = CrtGlweParameters::try_new(
+        GlweDimension::new(1),
+        PolyLength::new(32),
+        BarrettModulus::new(3_u32),
+        BarrettModulus::new(101),
+        &[BarrettModulus::new(97)],
+        SecretKeyDistr::SparseTernary,
+        f64::NAN,
+    )
+    .err()
+    .expect("NaN scale must fail sampling preparation");
+    assert!(matches!(
+        &error,
+        CrtGlweParametersError::Encryption(CrtGlweEncryptionParametersError::ErrorSampler(
+            primus_distr::ErrorSamplerError::Gaussian(_)
+        ))
+    ));
+    let mut current: &(dyn Error + 'static) = &error;
+    let mut found = false;
+    while let Some(source) = current.source() {
+        found |= source
+            .downcast_ref::<primus_distr::GaussianError>()
+            .is_some();
+        current = source;
+    }
+    assert!(
+        found,
+        "Gaussian construction reason must remain in the source chain"
+    );
 }
 
 // Every noise support fits q=97; only the joint BFV recovery margin varies.
@@ -197,7 +297,7 @@ fn fixed_secret_weights_are_checked_against_the_complete_logical_key() {
         } else {
             assert!(matches!(
                 result,
-                Err(CrtGlweParametersError::SecretKey(
+                Err(CrtGlweEncryptionParametersError::SecretKey(
                     primus_distr::SecretKeySamplerError::InvalidWeight { length: 64 }
                 ))
             ));
@@ -303,7 +403,7 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
             SecretKeyDistr::UniformBinary,
             1.0,
         ),
-        Err(CrtGlweParametersError::Domain(
+        Err(CrtGlweEncryptionParametersError::Domain(
             RnsDomainError::ModuliCountMismatch {
                 expected: 3,
                 actual: 2,

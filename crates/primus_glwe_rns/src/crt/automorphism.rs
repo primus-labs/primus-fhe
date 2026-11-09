@@ -323,14 +323,17 @@ where
     /// # Correctness
     /// Both ciphertexts must have the bound domain's complete RNS GLWE layout and
     /// coefficient representation, and use the secret for which the key was generated.
+    ///
+    /// # Panics
+    /// Panics before writes if either ciphertext has an incorrect complete length.
     pub fn automorphism_to<A: Data<Elem = T>, B: DataMut<Elem = T>>(
         &mut self,
         input: &CrtGlweCiphertext<A>,
         output: &mut CrtGlweCiphertext<B>,
     ) {
         let len = self.domain.parameters().rns_glwe_len();
-        debug_assert_eq!(input.as_ref().len(), len);
-        debug_assert_eq!(output.as_ref().len(), len);
+        assert_eq!(input.as_ref().len(), len);
+        assert_eq!(output.as_ref().len(), len);
         self.key.data.automorphism_kernel(
             input.as_view(),
             output.as_mut_view(),

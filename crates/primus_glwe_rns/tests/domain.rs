@@ -516,3 +516,115 @@ fn automorphism_key_sets_reject_foreign_secrets_before_sampling() {
         );
     }
 }
+
+/// A bad complete length must fail at the public boundary, before a scalar or
+/// component zip can leave a partially updated destination.
+#[test]
+fn evaluation_rejects_incomplete_layouts_before_writes() {
+    use primus_glwe_rns::{CrtGlweCiphertext, DcrtGlweCiphertext};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    fn rejects(length: usize, mut operation: impl FnMut(&[u32], &mut [u32])) {
+        for (input_length, output_length) in [
+            (length - 1, length),
+            (length + 1, length),
+            (length, length - 1),
+            (length, length + 1),
+        ] {
+            let input = vec![0; input_length];
+            let mut output = vec![1; output_length];
+            assert!(catch_unwind(AssertUnwindSafe(|| operation(&input, &mut output))).is_err());
+            assert!(output.iter().all(|&value| value == 1));
+        }
+    }
+
+    let n = PolyLength::new(32);
+    let q = [257u32, 769].map(BarrettModulus::new);
+    let parameters = parameters(2, n.get(), &q);
+    let table = UintDcrtTable::new(n, &q).unwrap();
+    let gadget =
+        CrtGlevParameters::with_glwe_params(&parameters, DecompositionBaseLog::new(4), None);
+    let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
+    let mut rng = StdRng::seed_from_u64(0x4c45_4e47_5448);
+    let secret = GlweSecretKey::generate(
+        parameters.glwe_size(),
+        parameters.secret_key_sampler(),
+        &mut rng,
+    );
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let crt_auto_key = CrtGlweAutoKey::new(&domain, 3, &secret, &key, &mut rng);
+    let dcrt_auto_key = DcrtGlweAutoKey::new(&domain, 3, &key, &mut rng);
+    let crt_trace_key = CrtGlweTraceKey::new(&domain, &secret, &key, &mut rng);
+    let dcrt_trace_key = DcrtGlweTraceKey::new(&domain, &key, &mut rng);
+    let reverse_key = DcrtGlweRevTraceKey::new(&domain, &key, &mut rng);
+    let switch_key = DcrtGlweKeySwitchingKey::generate(
+        &secret,
+        parameters.encryption_parameters(),
+        &key,
+        &domain,
+        &mut rng,
+    );
+    let mut crt_auto = CrtGlweAutoEvaluator::new(&crt_auto_key, &domain);
+    let mut dcrt_auto = DcrtGlweAutoEvaluator::new(&dcrt_auto_key, &domain);
+    let mut crt_trace = CrtGlweTraceEvaluator::new(&crt_trace_key, &domain);
+    let mut dcrt_trace = DcrtGlweTraceEvaluator::new(&dcrt_trace_key, &domain);
+    let mut reverse = DcrtGlweRevTraceEvaluator::new(&reverse_key, &domain);
+    let mut switching = DcrtGlweKeySwitchEvaluator::new(&switch_key, &domain);
+    let length = parameters.rns_glwe_len();
+    rejects(length, |input, output| {
+        crt_auto.automorphism_to(
+            &CrtGlweCiphertext::new(input),
+            &mut CrtGlweCiphertext::new(output),
+        )
+    });
+    rejects(length, |input, output| {
+        dcrt_auto.automorphism_to(
+            &DcrtGlweCiphertext::new(input),
+            &mut DcrtGlweCiphertext::new(output),
+        )
+    });
+    rejects(length, |input, output| {
+        crt_trace.trace_to(
+            &CrtGlweCiphertext::new(input),
+            &mut CrtGlweCiphertext::new(output),
+        )
+    });
+    rejects(length, |input, output| {
+        dcrt_trace.trace_to(
+            &DcrtGlweCiphertext::new(input),
+            &mut DcrtGlweCiphertext::new(output),
+        )
+    });
+    rejects(length, |input, output| {
+        reverse.trace_to(
+            &DcrtGlweCiphertext::new(input),
+            &mut DcrtGlweCiphertext::new(output),
+        )
+    });
+    rejects(length, |input, output| {
+        switching.key_switch_to(
+            &CrtGlweCiphertext::new(input),
+            &mut DcrtGlweCiphertext::new(output),
+        )
+    });
+
+    let p = [1153u32].map(BarrettModulus::new);
+    let hybrid = HybridRNS::new(&q, &p, 1).unwrap();
+    let qp = q.iter().chain(&p).copied().collect::<Vec<_>>();
+    let qp_table = UintDcrtTable::new(n, &qp).unwrap();
+    let hybrid_domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &qp_table).unwrap();
+    let hybrid_key = HybridRnsGlweKeySwitchingKey::generate(
+        &secret,
+        parameters.encryption_parameters(),
+        &secret,
+        &hybrid_domain,
+        &mut rng,
+    );
+    let mut hybrid_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&hybrid_key, &hybrid_domain);
+    rejects(length, |input, output| {
+        hybrid_evaluator.key_switch_to(
+            &DcrtGlweCiphertext::new(input),
+            &mut DcrtGlweCiphertext::new(output),
+        )
+    });
+}

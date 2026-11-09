@@ -1,4 +1,4 @@
-use primus_distr::{sample_crt_gaussian_values_to, sample_crt_uniform_values_to};
+use primus_distr::sample_crt_uniform_values_to;
 use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
 use primus_ntt::NttTable;
@@ -101,13 +101,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 .zip(key_for_secret.chunks_exact_mut(qp_size.rns_glwe_len()))
             {
                 let (mask, body) = key_entry.split_at_mut(qp_size.rns_mask_len());
-                sample_crt_gaussian_values_to(
-                    body,
-                    poly_length,
-                    &qp_moduli_values,
-                    noise_distribution,
-                    rng,
-                );
+                input_parameters.sample_noise_to(body, &qp_moduli_values, rng);
 
                 let q_range = partition.q_range();
                 let partition_elements = q_range.start * poly_length..q_range.end * poly_length;

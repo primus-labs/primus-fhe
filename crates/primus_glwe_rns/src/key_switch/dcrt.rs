@@ -253,13 +253,16 @@ where
     /// # Correctness
     /// Input and output must have the key's complete input/output layouts.
     /// The caller maintains the input secret identity and table representation.
+    ///
+    /// # Panics
+    /// Panics before writes if either ciphertext has an incorrect complete length.
     pub fn key_switch_to<A: Data<Elem = T>, B: DataMut<Elem = T>>(
         &mut self,
         input: &CrtGlweCiphertext<A>,
         output: &mut DcrtGlweCiphertext<B>,
     ) {
-        debug_assert_eq!(input.as_ref().len(), self.key.input_size.rns_glwe_len());
-        debug_assert_eq!(
+        assert_eq!(input.as_ref().len(), self.key.input_size.rns_glwe_len());
+        assert_eq!(
             output.as_ref().len(),
             self.key.output_size.rns_glwe_size().rns_glwe_len()
         );

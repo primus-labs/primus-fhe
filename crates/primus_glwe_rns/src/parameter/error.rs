@@ -2,7 +2,21 @@ use primus_decompose::ApproxSignedBasisError;
 use primus_integer::FheUint;
 use primus_lattice::GlweSizeError;
 
-/// Invalid CRT GLWE layout, BFV encoding or coefficient sampling parameters.
+/// Invalid codec-free RNS GLWE sampling state or its ordered domain.
+#[derive(Debug, thiserror::Error)]
+pub enum CrtGlweEncryptionParametersError<T: FheUint> {
+    /// The supplied layout and ordered sampler basis differ.
+    #[error(transparent)]
+    Domain(#[from] super::RnsDomainError<T>),
+    /// Invalid secret probabilities, fixed weights or supported magnitudes.
+    #[error(transparent)]
+    SecretKey(#[from] primus_distr::SecretKeySamplerError),
+    /// Invalid integer error distribution or insufficient modulus support.
+    #[error("invalid CRT GLWE error sampler")]
+    ErrorSampler(#[from] primus_distr::ErrorSamplerError),
+}
+
+/// Invalid ordinary CRT GLWE parameters, including BFV encoding and recovery.
 #[derive(Debug, thiserror::Error)]
 pub enum CrtGlweParametersError<T: FheUint> {
     /// Invalid ring geometry or an unrepresentable RNS storage length.
@@ -17,12 +31,9 @@ pub enum CrtGlweParametersError<T: FheUint> {
     /// Invalid BFV moduli or insufficient fresh private-key plaintext recovery margin.
     #[error(transparent)]
     Encoding(#[from] primus_encoding::BfvRnsCodecError<T>),
-    /// Invalid secret probabilities, fixed weights or supported magnitudes.
+    /// Codec-free secret/error sampling preparation failed.
     #[error(transparent)]
-    SecretKey(#[from] primus_distr::SecretKeySamplerError),
-    /// Invalid Gaussian noise or support that does not fit an RNS modulus.
-    #[error("invalid CRT GLWE noise distribution")]
-    Noise(#[from] primus_distr::GaussianError),
+    Encryption(#[from] CrtGlweEncryptionParametersError<T>),
 }
 
 /// An invalid decomposition basis or layout for CRT GLev/GGSW parameters.
