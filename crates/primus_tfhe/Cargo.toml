@@ -1,0 +1,28 @@
+[package]
+name = "primus_tfhe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_distr = { path = "../primus_distr" }
+primus_decompose = { path = "../primus_decompose" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_modulus = { path = "../primus_modulus" }
+primus_poly = { path = "../primus_poly" }
+primus_encoding = { path = "../primus_encoding" }
+primus_lwe = { path = "../primus_lwe" }
+primus_lattice = { path = "../primus_lattice" }
+
+thiserror = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+
+[features]
+default = []
+simd = [
+    "primus_encoding/simd",
+    "primus_integer/simd",
+    "primus_lwe/simd",
+]

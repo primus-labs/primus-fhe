@@ -6,10 +6,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{NtruEncryptionParameters, SecretKeyDistr};
 
-/// A small signed polynomial `f` for NTRU.
+/// A small signed polynomial `f` used to derive an NTT key.
 ///
 /// Signed coefficients are intentionally stored independently of a ciphertext
-/// modulus: `-1` is encoded as `q - 1` during conversion to NTT.
+/// modulus: `-1` is encoded as `q - 1` when converting to an NTT key.
 /// Conversion to an explicit modulus `q` requires every coefficient's unsigned
 /// magnitude to be strictly less than `q`. Generated keys satisfy this bound
 /// for their parameter modulus; imported keys and conversions to another
@@ -88,9 +88,8 @@ impl<T: FheUint> NtruSecretKey<T> {
 
     /// Samples a coefficient key from `params`.
     ///
-    /// This method does not impose backend-specific invertibility. Use
-    /// `NttNtruSecretKey::generate` (feature `ntt`) when an immediately
-    /// usable encryption key is required.
+    /// This method samples signed coefficients without checking invertibility. Use
+    /// `NttNtruSecretKey::generate` (feature `ntt`) for an encryption key.
     pub fn generate<R, M>(params: &NtruEncryptionParameters<T, M>, rng: &mut R) -> Self
     where
         R: rand::Rng + rand::CryptoRng,

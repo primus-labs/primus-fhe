@@ -123,7 +123,7 @@ impl<T: FheUint> NttGlweSecretKey<T> {
     /// The caller must validate key/output layouts and matching parameter/transform
     /// domains before entering this kernel.
     #[inline]
-    pub(super) fn encrypt_zeros_kernel_to<M, Table, R>(
+    pub(crate) fn encrypt_zeros_kernel_to<M, Table, R>(
         &self,
         output: NttGlweCiphertext<&mut [T]>,
         params: &GlweEncryptionParameters<T, M>,

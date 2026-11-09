@@ -78,6 +78,12 @@ where
     /// `level` must be less than its decomposition length. The caller is
     /// responsible for matching the actual buffers to `size`.
     /// Inputs must share the FFT table, evaluation order and torus scale.
+    ///
+    /// # Panics
+    ///
+    /// Debug builds check `level`. Slice indexing panics if a visited diagonal
+    /// lies outside its stored row. Complete layouts are not systematically
+    /// validated.
     #[inline]
     pub fn add_gadget_diagonal_assign<A>(
         &mut self,

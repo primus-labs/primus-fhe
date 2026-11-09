@@ -26,6 +26,12 @@ macro_rules! impl_gadget_diagonal_single_modulus {
             /// `level` must be less than its decomposition length. The caller must match
             /// the actual buffers to `size` before invoking this operation.
             /// Input residues must be canonical; results remain canonical.
+            ///
+            /// # Panics
+            ///
+            /// Debug builds check `level`. Slice indexing panics if a visited
+            /// diagonal lies outside its stored row. Complete layouts are not
+            /// systematically validated.
             #[inline]
             pub fn add_gadget_diagonal_assign<M, A>(
                 &mut self,
@@ -86,6 +92,12 @@ macro_rules! impl_gadget_diagonal_multiple_modulus {
             /// Each polynomial contains one block per modulus, of length
             /// `size.rns_glwe_size().poly_length().get()`, in the same nonempty basis
             /// order as `moduli`. `moduli.len()` must equal the modulus count in `size`.
+            ///
+            /// # Panics
+            ///
+            /// Debug builds check `level`. Slice indexing panics if a visited
+            /// diagonal lies outside its stored row. Complete layouts are not
+            /// systematically validated.
             #[inline]
             pub fn add_gadget_diagonal_assign<M, A>(
                 &mut self,

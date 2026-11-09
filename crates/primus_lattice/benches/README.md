@@ -35,4 +35,4 @@ cargo bench -p primus_lattice --bench rns_glev --features rns
 cargo bench -p primus_lattice --bench rns_ggsw --features rns
 ```
 
-Append `-- '<regex>'` to select cases, or `-- --test` to execute each fixture once without collecting timings.
+Append `-- '<regex>'` to select cases, or `-- --test` to execute each fixture once without collecting timings. See the workspace [testing guide](../../../guides/development/testing.md) for validation entry points.

@@ -10,64 +10,34 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Override target-cpu=native so cached artifacts work across runner CPUs.
+  RUSTFLAGS: ""
+  CARGO_INCREMENTAL: "0"
+
 jobs:
-  format:
-    name: fmt
+  stable:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --all -- --check
-
-  clippy-stable:
-    name: clippy (stable)
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_RUSTFLAGS: ""
-    steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: v1-rust
-      - run: cargo clippy --workspace -- -D warnings
-
-  test-stable:
-    name: test (stable)
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_RUSTFLAGS: ""
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+          components: clippy,rustfmt
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          tool: just,cargo-nextest
       - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: v1-rust
-      - run: cargo nextest run --workspace
+      - run: just ci
 
   nightly:
-    name: clippy + test + doc (nightly, all features)
     runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_RUSTFLAGS: ""
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          tool: just,cargo-nextest
       - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: v1-rust
-      - run: cargo +nightly clippy --workspace --all-features -- -D warnings
-      - run: cargo +nightly nextest run --workspace --all-features
-      - run: cargo +nightly doc --workspace --all-features --no-deps --document-private-items
-        env:
-          RUSTDOCFLAGS: "-D warnings"
+      - run: just ci-nightly

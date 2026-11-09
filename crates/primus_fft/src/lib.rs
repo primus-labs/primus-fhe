@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+
 //! Negacyclic FFT wrappers for `Z[X] / (X^N + 1)`.
 //!
 //! The default build provides [`FftTable`], [`FftEngine`], and torus conversions.

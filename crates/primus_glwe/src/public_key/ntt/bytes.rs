@@ -11,6 +11,14 @@ where
     T: FheUint,
 {
     /// Creates a public key from its native-endian byte representation.
+    ///
+    /// # Correctness
+    /// Inherits [`NttGlweCiphertext::from_bytes`]'s raw-layout contract. The bytes
+    /// must encode a complete public key in the modulus and NTT representation
+    /// required by [`NttGlwePublicKey`]; no parameter metadata is stored.
+    ///
+    /// # Panics
+    /// Inherits [`NttGlweCiphertext::from_bytes`]'s byte-size and alignment checks.
     #[inline]
     #[must_use]
     pub fn from_bytes(data: &[u8]) -> Self {
@@ -26,6 +34,13 @@ where
     T: FheUint,
 {
     /// Replaces this public key from its native-endian byte representation.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::from_bytes`]'s layout and representation requirements.
+    ///
+    /// # Panics
+    /// Inherits [`NttGlweCiphertext::read_bytes`]'s byte-size, alignment and
+    /// destination-length checks.
     #[inline]
     pub fn read_bytes(&mut self, data: &[u8]) {
         self.key.read_bytes(data);
@@ -45,6 +60,9 @@ where
     }
 
     /// Writes this public key as native-endian bytes into `data`.
+    ///
+    /// # Panics
+    /// Panics if `data.len()` differs from [`Self::byte_count`].
     #[inline]
     pub fn write_bytes(&self, data: &mut [u8]) {
         self.key.write_bytes(data);

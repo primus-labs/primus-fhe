@@ -9,11 +9,16 @@ pub trait TorusFftValue: FheUint {
 
     /// Reinterprets the bit pattern as a signed integer and converts it to `f64`.
     fn into_signed_f64(self) -> f64;
-    /// Converts the bit pattern to a normalized torus value in `[-0.5, 0.5)`.
+
+    /// Converts the bit pattern to a normalized torus value in `[-0.5, 0.5]`.
+    ///
+    /// For `u64`, rounding the signed integer to `f64` can produce `+0.5`
+    /// at the positive endpoint.
     #[inline]
     fn into_torus_f64(self) -> f64 {
         self.into_signed_f64() * Self::TORUS_SCALE
     }
+
     /// Converts a normalized torus value back to its unsigned bit pattern.
     ///
     /// Built-in implementations scale by `2^BITS`, round half-way cases away

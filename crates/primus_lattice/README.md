@@ -140,4 +140,4 @@ Each target declares the representations and concrete FFT implementations it nee
 
 ## Tests and benchmarks
 
-The [benchmark guide](benches/README.md) lists independently runnable targets and their endpoints; measure complete PBS and sequential evaluation-key access in the upper layers.
+Validation commands are in the workspace [testing guide](../../guides/development/testing.md). The [benchmark guide](benches/README.md) lists independently runnable targets and their endpoints; measure complete PBS and sequential evaluation-key access in the upper layers.

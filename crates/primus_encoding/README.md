@@ -17,7 +17,7 @@ Plaintext coefficient encoding and decoding for Primus FHE.
 
 Single-modulus constructors use `new(plaintext_modulus, ciphertext_modulus)`, for example `RoundedCodec::new(256u64, NativeModulus::new())` or `RoundedCodec::new(7u64, BarrettModulus::new(131))`. Construct once and reuse the codec. When `t` divides `q`, both encodings use the exact scale `q/t`; otherwise Rounded rounds each message while Scaled uses one integer scale.
 
-The output `RoundedCodec` for ordinary TFHE LUTs uses the accumulator modulus and may choose a different plaintext modulus from the input. Decode with the same output plaintext modulus at the returned ciphertext modulus, especially for NTRU Q→q.
+The output `RoundedCodec` for ordinary TFHE LUTs uses the accumulator modulus and may choose a different plaintext modulus from the input. Decode with the same output plaintext modulus at the returned ciphertext modulus, especially for NTRU Q→q. See the [output encoding guide](../primus_tfhe/README.md#choosing-the-output-encoding).
 
 These are coefficient codecs. BFV/BGV integer slot packing, BGV's unscaled plaintext lifting, and CKKS canonical embedding are not implemented.
 
@@ -77,7 +77,7 @@ Per-limb RNS distances do not measure the error under the product modulus.
 
 ## Further reading
 
-The [public API sources](src/lib.rs) document method contracts. Commands and measured workloads are recorded in the [single-modulus benchmark](benches/plaintext_codec.rs) and [RNS benchmark](benches/bfv_rns.rs).
+The [public API sources](src/lib.rs) document method contracts. Commands and measured workloads are recorded in the [single-modulus benchmark](benches/plaintext_codec.rs) and [RNS benchmark](benches/bfv_rns.rs); see the [testing guide](../../guides/development/testing.md) for validation entry points.
 
 ## Features
 

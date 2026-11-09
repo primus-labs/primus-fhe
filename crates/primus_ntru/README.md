@@ -124,7 +124,7 @@ Evaluation keys retain their decomposition bases; construct matching workspaces 
 
 `NttNlev::lift_monomial_to` fuse public-polynomial lifting with the first binary/ternary rotation. Supply NLev[1], a positive NLev bit and an optional negative NLev bit; a zero exponent still performs the lift. Subsequent ternary `cmux_ternary_monomial_to` uses positive/negative NGSW bits, which must be mutually exclusive. Exponents are already quantized into `0..2N`. Reuse `NttNtruCmuxWorkspace::new(poly_length, levels)`.
 
-Sample extraction, external products, lift and CMUX are documented in [`primus_lattice`](../primus_lattice/README.md).
+Sample extraction, external products, lift and CMUX are documented in [`primus_lattice`](../primus_lattice/README.md). For PBS, ManyLUT and CBS workflows, see [the NTRU NTT backend](../primus_tfhe_ntru_ntt/README.md).
 
 ## Independent LWE return
 
@@ -182,7 +182,7 @@ Tests, examples and benchmarks declare `required-features`; Cargo skips an entir
 
 ## Further reading
 
-See [API sources](src) for method contracts, [benchmarks](benches/README.md) for workloads and run commands.
+See [API sources](src) for method contracts, [benchmarks](benches/README.md) for workloads and run commands, and the workspace [testing guide](../../guides/development/testing.md) for validation commands.
 
 ## License
 

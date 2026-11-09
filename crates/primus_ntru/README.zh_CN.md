@@ -86,7 +86,7 @@ NTT 生成拒绝零点值。有界拒绝采样可能失败，重试次数及求�
 
 一般 NTRU 支持非 binary 环秘密。NTRU TFHE 使用独立外部 LWE 秘密作为 binary/ternary 盲旋转控制，不要求环秘密为补零 binary。
 
-私钥及私有加密、生成、解密工作区析构时擦除自身缓冲区。显式清零后应丢弃私钥。调用方持有的明文和相位输出另行管理生命周期。
+私钥及私有加密、生成、解密工作区析构时擦除自身缓冲区。显式清零后应丢弃私钥。内置 FFT 后端析构时擦除 scratch，长寿命 engine 可使用 `FftEngine::zeroize_workspace()`。调用方持有的明文和相位输出另行管理生命周期。
 
 [自同构示例](examples/automorphism.rs) 展示密钥生成，以及原秘密下可复用的 NTT 求值：
 
@@ -124,7 +124,7 @@ NTT 私钥运算不需要工作区。已编码 NTT 输入须为模 q 的规范�
 
 `NttNlev::lift_monomial_to` 融合公开多项式提升与首次 binary/ternary 旋转。传入 NLev[1]、正控制 NLev 位和可选的负控制 NLev 位，指数为零时仍须提升。后续 ternary `cmux_ternary_monomial_to` 使用互斥的正/负 NGSW 控制位。指数应已量化到 `0..2N`。复用 `NttNtruCmuxWorkspace::new(poly_length, levels)`。
 
-样本提取、外积、lift 和 CMUX 见 [`primus_lattice`](../primus_lattice/README.zh_CN.md)。
+样本提取、外积、lift 和 CMUX 见 [`primus_lattice`](../primus_lattice/README.zh_CN.md)。PBS、ManyLUT 与 CBS 流程见 [NTRU NTT 后端](../primus_tfhe_ntru_ntt/README.zh_CN.md)。
 
 ## 独立 LWE 返回
 
@@ -144,7 +144,7 @@ NTT 私钥运算不需要工作区。已编码 NTT 输入须为模 q 的规范�
 
 运算先逐系数计算 `c' = round(q*c/Q) mod q`（最近舍入，半点向上），再在 f 下提取并于 q 下 key switch。提取的相位为 `b-<a,f> = (f*c')[index]`。**舍入先于提取中的取负**，交换次序会改变半点结果。Mask 布局见 [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs)。
 
-Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类型（u32→u32 或 u64→u64），缩小 q 不改变字宽。输入须为 Q 下规范剩余类。噪声预算包含 f 加权的舍入、秘密加权的分解误差和 LWE 密钥噪声，以及已有 NTRU 误差。将 Q 下编码消息缩放到 q，一般不等于直接在 q 下重新编码。
+Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类型（u32→u32 或 u64→u64），缩小 q 不改变字宽。输入须为 Q 下规范剩余类。噪声预算包含 f 加权的舍入、秘密加权的分解误差和 LWE 密钥噪声，以及已有 NTRU/FFT 误差。将 Q 下编码消息缩放到 q，一般不等于直接在 q 下重新编码。
 
 ## Trace、投影与展开
 
@@ -182,7 +182,7 @@ Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类
 
 ## 更多资料
 
-逐方法契约见 [API 源码](src)，负载与运行命令见[基准指南](benches/README.zh_CN.md)，
+逐方法契约见 [API 源码](src)，负载与运行命令见[基准指南](benches/README.zh_CN.md)，验证命令见 workspace [测试指南](../../guides/development/testing.md)。
 
 ## 许可证
 

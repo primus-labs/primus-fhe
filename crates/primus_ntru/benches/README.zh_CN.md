@@ -29,4 +29,4 @@ cargo bench -p primus_ntru --bench lwe_return
 cargo bench -p primus_ntru --bench ternary_cmux --features ntt
 ```
 
-追加 `-- '<regex>'` 筛选用例，或追加 `-- --test` 只做 smoke check、不采集计时样本。
+追加 `-- '<regex>'` 筛选用例，或追加 `-- --test` 只做 smoke check、不采集计时样本。以上 features 包含各 target 必需的 FFT engine。验证命令见 workspace [测试指南](../../../guides/development/testing.md)。

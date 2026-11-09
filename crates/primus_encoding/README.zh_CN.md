@@ -17,7 +17,7 @@ Primus FHE 的明文系数编码与解码。
 
 单模数构造器为 `new(plaintext_modulus, ciphertext_modulus)`，例如 `RoundedCodec::new(256u64, NativeModulus::new())` 或 `RoundedCodec::new(7u64, BarrettModulus::new(131))`。构造一次后复用 codec。`t` 整除 `q` 时两种编码都使用精确尺度 `q/t`；否则 Rounded 对每个消息舍入，Scaled 使用统一的整数尺度。
 
-TFHE 普通 LUT 的输出 `RoundedCodec` 使用 accumulator 模数，明文模数可与输入不同。解码使用返回密文模数下、相同输出明文模数的 codec；NTRU 的 Q→q 路径尤其需要区分二者。
+TFHE 普通 LUT 的输出 `RoundedCodec` 使用 accumulator 模数，明文模数可与输入不同。解码使用返回密文模数下、相同输出明文模数的 codec；NTRU 的 Q→q 路径尤其需要区分二者。见[输出编码指南](../primus_tfhe/README.zh_CN.md#选择输出编码)。
 
 这些类型负责系数编码。目前未实现 BFV/BGV 整数槽打包、BGV 的无缩放明文提升，以及 CKKS 的典范嵌入。
 
@@ -66,7 +66,7 @@ assert_eq!(phase_error_magnitude(phase, expected_phase, modulus), 64);
 
 ## 进一步阅读
 
-[公开 API 源码](src/lib.rs)记录方法契约。运行命令与测量对象见[单模数基准](benches/plaintext_codec.rs)和 [RNS 基准](benches/bfv_rns.rs)。
+[公开 API 源码](src/lib.rs)记录方法契约。运行命令与测量对象见[单模数基准](benches/plaintext_codec.rs)和 [RNS 基准](benches/bfv_rns.rs)；验证入口见[测试指南](../../guides/development/testing.md)。
 
 ## Feature
 

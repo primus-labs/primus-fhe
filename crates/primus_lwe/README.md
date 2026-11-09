@@ -117,7 +117,7 @@ Prepare `LweKeySwitchingParameters::try_new(output, basis)` from owned `LweEncry
 
 ## Features and benchmarks
 
-Default features are empty; `simd` enables the underlying crates' nightly SIMD arithmetic. Public contracts are documented in the [API sources](src/lib.rs).
+Default features are empty; `simd` enables the underlying crates' nightly SIMD arithmetic. Public contracts are documented in the [API sources](src/lib.rs); validation commands are in the workspace [testing guide](../../guides/development/testing.md).
 
 The three benchmarks measure secret-key encryption/phase extraction (including output reuse and packed messages), public-key generation/encryption, and key-switch generation/evaluation. Run from the workspace root:
 

@@ -57,6 +57,11 @@ impl<T: FheUint> NttGlweAutomorphismKey<T> {
     /// This relationship is not checked.
     /// Coefficients negated by the automorphism must have representable signed
     /// negations, as required by [`CoeffAutomorphismPermutation::apply_signed_to`].
+    ///
+    /// # Panics
+    ///
+    /// Panics before sampling if the degree is not odd and in `[1, 2N)`, or
+    /// secret, parameter, table or workspace layouts/moduli are incompatible.
     pub fn generate<M, Table, R>(
         degree: usize,
         secret_key: &GlweSecretKey<T>,

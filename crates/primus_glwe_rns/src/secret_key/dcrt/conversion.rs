@@ -20,6 +20,9 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
     /// Each signed secret coefficient's magnitude must be less than every
     /// modulus in `table`. The table's NTT representation requirements apply;
     /// see [`NttTable::new`].
+    /// Distribution metadata does not establish this bound for imported keys.
+    /// In particular, conversion from Q to QP must also satisfy the auxiliary
+    /// P moduli's bounds, not merely those of the original Q basis.
     ///
     /// # Panics
     ///

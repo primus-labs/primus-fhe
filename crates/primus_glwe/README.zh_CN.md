@@ -135,6 +135,8 @@ Fourier 建钥先在 native 环中精确完成每行及 gadget 对角项，再�
 
 [Scheme switching](src/scheme_switch) 在 NTT 生成时使用相互匹配的系数及变换私钥，Fourier 生成时只传一个目标准备态。Fourier 自同构和 trace 生成同样只接收准备态，内部从目标秘密派生所需明文。输出 gadget 缩放继承输入 GLev；`key_basis()` 控制分解，可以不同于输出基。传入的外积工作区须匹配 `key.key_size()`。
 
+Rank1 NTT scheme switching 仅保存平方 `GLev(s²)`，以 `sum D(a) GLev(s²) + (b,0)` 构造各层 mask 行，并复用已变换的 body 行。更高 rank 和 Fourier 保持完整 `GGSW(-s_i)` 外积。平方式删除 body 分解及对应密钥误差，但输入误差传播和平方秘密残差仍在，不保证逐输入噪声更小。Trace 与 scheme switching 仍为独立运算。
+
 ## Trace、投影与展开
 
 `NttGlweTraceKey` 和 `FourierGlweTraceKey` 操作系数密文。下表中 `M` 是输入消息，目标消息省略求值噪声。
@@ -178,4 +180,4 @@ Trace packing 使用 [RevHomTrace](https://github.com/Stirling75/RevHomTrace/blo
 
 ## 更多资料
 
-逐方法契约见 [API 源码](src)，负载与运行命令见[基准指南](benches/README.zh_CN.md)，
+逐方法契约见 [API 源码](src)，负载与运行命令见[基准指南](benches/README.zh_CN.md)，验证命令见 workspace [测试指南](../../guides/development/testing.md)。

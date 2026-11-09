@@ -1,8 +1,8 @@
-use primus_shape::PolyLength;
 use std::{f64::consts::PI, sync::Arc};
 
 use aligned_vec::{ABox, AVec, CACHELINE_ALIGN, avec};
 use num_complex::Complex64;
+use primus_shape::PolyLength;
 use rustfft::{Fft, FftPlanner};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -62,7 +62,9 @@ impl RustFftTable {
     ) {
         assert_eq!(input.len(), self.poly_length.get());
         assert_eq!(output.len(), self.poly_length.fourier_poly_len());
+
         let (first, second) = input.split_at(self.poly_length.fourier_poly_len());
+
         for (((output, &re), &im), &twist) in output
             .iter_mut()
             .zip(first)
@@ -71,6 +73,7 @@ impl RustFftTable {
         {
             *output = Complex64::new(convert(re), convert(im)) * twist;
         }
+
         self.forward
             .process_with_scratch(output, &mut workspace.fft);
     }
@@ -82,9 +85,11 @@ impl FftTable for RustFftTable {
     fn new(poly_length: PolyLength) -> Self {
         let n = poly_length.get();
         let h = poly_length.fourier_poly_len();
+
         let mut planner = FftPlanner::new();
         let forward = planner.plan_fft_forward(h);
         let inverse = planner.plan_fft_inverse(h);
+
         let twist = AVec::from_iter(
             CACHELINE_ALIGN,
             (0..h).map(|j| Complex64::cis(PI * j as f64 / n as f64)),
@@ -95,6 +100,7 @@ impl FftTable for RustFftTable {
             (0..h).map(|j| Complex64::cis(-PI * j as f64 / n as f64) / h as f64),
         )
         .into_boxed_slice();
+
         Self {
             poly_length,
             forward,
@@ -117,6 +123,7 @@ impl FftTable for RustFftTable {
             .forward
             .get_inplace_scratch_len()
             .max(self.inverse.get_inplace_scratch_len());
+
         RustFftWorkspace {
             values: avec![Complex64::default(); self.poly_length.fourier_poly_len()]
                 .into_boxed_slice(),
@@ -150,10 +157,15 @@ impl FftTable for RustFftTable {
     ) {
         assert_eq!(input.len(), self.poly_length.fourier_poly_len());
         assert_eq!(output.len(), self.poly_length.get());
+
         let RustFftWorkspace { values, fft } = workspace;
+
         values.copy_from_slice(input);
+
         self.inverse.process_with_scratch(values, fft);
+
         let (first, second) = output.split_at_mut(self.poly_length.fourier_poly_len());
+
         for ((&value, &inverse_twist), (first, second)) in values
             .iter()
             .zip(self.inverse_twist_scaled.iter())

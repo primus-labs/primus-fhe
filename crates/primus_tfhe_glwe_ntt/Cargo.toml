@@ -1,0 +1,64 @@
+[package]
+name = "primus_tfhe_glwe_ntt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_encoding = { path = "../primus_encoding" }
+primus_data = { path = "../primus_data" }
+primus_glwe = { path = "../primus_glwe", features = ["ntt"] }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice", features = ["ntt"] }
+primus_lwe = { path = "../primus_lwe" }
+primus_modulus = { path = "../primus_modulus" }
+primus_ntt = { path = "../primus_ntt" }
+primus_decompose = { path = "../primus_decompose" }
+primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
+primus_tfhe = { path = "../primus_tfhe" }
+primus_tfhe_glwe = { path = "../primus_tfhe_glwe" }
+
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "pbs"
+harness = false
+
+[[bench]]
+name = "many_lut"
+harness = false
+
+[[bench]]
+name = "mvb"
+harness = false
+
+[[bench]]
+name = "cbs"
+harness = false
+
+[[bench]]
+name = "cbs_identity"
+harness = false
+
+[features]
+default = []
+simd = [
+    "primus_glwe/simd",
+    "primus_integer/simd",
+    "primus_lattice/simd",
+    "primus_lwe/simd",
+    "primus_modulus/simd",
+    "primus_ntt/simd",
+    "primus_tfhe/simd",
+    "primus_tfhe_glwe/simd",
+]
+
+[[bench]]
+name = "modulus_domains"
+harness = false
