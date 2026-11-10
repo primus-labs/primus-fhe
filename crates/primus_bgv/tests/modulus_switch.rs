@@ -176,6 +176,7 @@ fn exact_constrained_quotients_match_integer_oracle_and_compose_beyond_u128() {
         (254, [1_007_873, 829_057, 585_217]),
         (193, WIDE_Q),
         (193, [WIDE_Q[2], WIDE_Q[1], WIDE_Q[0]]),
+        (193, [WIDE_Q[0], WIDE_Q[2], WIDE_Q[1]]),
     ] {
         let context = context(p, &moduli);
         let total = product(&moduli);
@@ -200,6 +201,7 @@ fn exact_constrained_quotients_match_integer_oracle_and_compose_beyond_u128() {
             (&drop >> 1) - IBig::ONE,
             &drop >> 1,
             (&drop >> 1) + IBig::ONE,
+            -&plain,
             &correction_half - &plain,
             correction_half.clone(),
             &correction_half + &plain,

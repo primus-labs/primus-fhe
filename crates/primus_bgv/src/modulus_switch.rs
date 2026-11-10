@@ -52,7 +52,13 @@ impl<'a> BgvModulusSwitch<'a> {
         let prime_mod_q: Vec<_> = target
             .moduli()
             .iter()
-            .map(|&modulus| modulus.reduce(prime.value()))
+            .map(|&modulus| {
+                if prime.value() < modulus.value() {
+                    prime.value()
+                } else {
+                    modulus.reduce(prime.value())
+                }
+            })
             .collect();
         let inverse_prime = target
             .moduli()
@@ -136,6 +142,7 @@ impl<'a> BgvModulusSwitch<'a> {
         let target = self.context.base_q(self.source_level + 1);
         let dropped_index = source.moduli_count() - 1;
         let prime = source.moduli_values()[dropped_index];
+        let prime_half = prime / 2;
         self.dropped_coefficients
             .copy_from_slice(&input[dropped_index * n..]);
         self.context.table().ntt_tables()[dropped_index]
@@ -154,15 +161,30 @@ impl<'a> BgvModulusSwitch<'a> {
             )
             .enumerate()
         {
-            for (&residue, correction) in
-                self.dropped_coefficients.iter().zip(output_limb.iter_mut())
-            {
-                let residue_mod_q = modulus.reduce(residue);
-                *correction = if residue > prime / 2 {
-                    modulus.reduce_sub(residue_mod_q, self.prime_mod_q[index])
-                } else {
-                    residue_mod_q
-                };
+            if prime < modulus.value() {
+                // The dropped residues are canonical modulo prime. Their
+                // negative centered lifts are already canonical after adding q.
+                let negative_offset = modulus.value() - prime;
+                for (&residue, correction) in
+                    self.dropped_coefficients.iter().zip(output_limb.iter_mut())
+                {
+                    *correction = if residue > prime_half {
+                        residue + negative_offset
+                    } else {
+                        residue
+                    };
+                }
+            } else {
+                for (&residue, correction) in
+                    self.dropped_coefficients.iter().zip(output_limb.iter_mut())
+                {
+                    let residue_mod_q = modulus.reduce(residue);
+                    *correction = if residue > prime_half {
+                        modulus.reduce_sub(residue_mod_q, self.prime_mod_q[index])
+                    } else {
+                        residue_mod_q
+                    };
+                }
             }
             self.plain_factors[index].factor_mul_slice_assign(output_limb, modulus.value());
             table.transform_slice(output_limb);
