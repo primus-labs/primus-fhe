@@ -9,7 +9,7 @@ use primus_reduce::{Modulus, RingContext};
 
 use crate::{BlockBootstrappingKeyError, GlweBlindRotationControls};
 
-/// Coefficient GGSWs for a block-binary input secret, with no bucket map.
+/// Coefficient GGSWs for a block-binary input secret.
 ///
 /// Logical input positions are contiguous, equally sized blocks. Each block
 /// stores its `w` bit controls. [`BlockOccupancy::AtMostOne`] adds an independently

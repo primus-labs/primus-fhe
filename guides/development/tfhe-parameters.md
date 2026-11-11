@@ -21,15 +21,13 @@ Here t is the message modulus, not the number of padded inputs: a front-half inp
 | --- | --- |
 | `CLASSIC_PBS_U64` | All four backends: Rounded 32→32, classic binary. Form z=2x+y, apply score=min(z,6), then price=2*score+[score>=4]. |
 | `CLASSIC_PBS_U64` with `messages=PbsMessageConfig::new(4)` | Boolean access rule: admin OR (member AND NOT revoked), Rounded 4→4. |
-| `SPARSE_PBS_U64` | Same scoring pipeline and 32→32 messages, fixed-weight binary sparse BR with three copies and 64 buckets. |
 | `CLASSIC_MANY_LUT_U64` | Rounded 16→8, inputs 0..8, two lanes/stride two: grade=x/2 and flag=[x>=5], then code=2*grade+flag. |
 | `CLASSIC_THRESHOLD_MVB_U64` | Rounded t_in=128, inputs 0..64; 17 threshold flags with Scaled t_out=2. |
 | `CLASSIC_CBS_U64` | Rounded t_in=8, inputs 0..4; predicate F=[m>=2] selects an encrypted fee vector, then encrypted extras are added. Candidates use Scaled t_ring=8. |
 | GLWE `CLASSIC_CBS_U64` with `input_encoding=MsbBoolean` | CBS input t=2, bits at 0/round(q_external/2); NOT selects encrypted service limits. Ordinary PBS messages remain unchanged. |
-| `SPARSE_CBS_U64` | GLWE only: the same CBS fee-vector workflow with fixed-weight sparse BR. |
 | `CLASSIC_ONE_HOT_U64` | NTRU only: t_in=8/M=4; generate the three nonzero NGSW selectors and perform four-way CMux over encrypted records at t_ring=8, with C0 as default. |
 
-Classic is the default for every entry except the two explicitly sparse configs. NTRU's fixed-weight one-hot config can also support sparse BR with corresponding material; this is a separate choice, not the default teaching path. See the [backend support guide](../../crates/primus_tfhe/README.md#selecting-blind-rotation).
+All teaching entries use Classic. See the [backend support guide](../../crates/primus_tfhe/README.md#selecting-blind-rotation) for Block.
 
 ## Moduli, geometry and secret domains
 
@@ -47,17 +45,17 @@ For the u64 configs, n denotes the small BR-control dimension in GLWE and the in
 | Family / configs | n / N | Small or external secret | Ring secret |
 | --- | --- | --- | --- |
 | GLWE classic PBS / Boolean | 866 / 2048 | Uniform binary | Uniform binary |
-| GLWE sparse PBS / ManyLUT / MVB / sparse CBS | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
+| GLWE ManyLUT / MVB | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
 | GLWE NTT classic CBS | 866 / 2048 | Uniform binary | Uniform binary |
 | GLWE Fourier classic CBS | 800 / 1024 | Uniform binary | Uniform ternary |
 | NTRU classic PBS / Boolean | 866 / 2048 | Uniform binary | Sparse ternary |
-| NTRU sparse PBS / ManyLUT / MVB | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
+| NTRU ManyLUT / MVB | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
 | NTRU classic CBS | 800 / 1024 | Uniform binary | Sparse ternary |
 | NTRU one-hot | 800 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
 
 GLWE teaching configs use `BootstrapKeyswitch` (BR→KS), except MVB, which uses `KeyswitchBootstrap` (KS→BR). The external LWE dimension is n in BR→KS and kN in KS→BR. Both orders return under their external secret. NTRU returns by coefficient Q→q switching, phase extraction and LWE KS. See [domain and return contracts](bootstrapping-contracts.md#ciphertext-domains-and-return).
 
-`SparseTernary` has probabilities (-1,0,+1)=(1/4,1/2,1/4), not an exact Hamming weight. NTRU teaching configs sample f from this signed distribution and screen for backend invertibility/stability; it is not a `1+2F` distribution. The independent external fixed-weight secret and the conditioned ring secret have different roles. Sparse public-map conditioning is covered in the [numerical guide](bootstrapping-contracts.md#ternary-and-sparse-rotation).
+`SparseTernary` has probabilities (-1,0,+1)=(1/4,1/2,1/4), not an exact Hamming weight. NTRU teaching configs sample f from this signed distribution and screen for backend invertibility/stability; it is not a `1+2F` distribution. The independent external fixed-weight secret and the conditioned ring secret have different roles.
 
 ## Noise by key role
 
@@ -95,7 +93,7 @@ oracle scenario; they do **not** certify the full public material. In particular
 correlated ring equations and the trace/SS/KS key-dependent messages require
 separate treatment. The evaluated-noise model is conditional on captured data
 and residual assumptions; complete request DFR remains unknown. These statements
-do not apply to the unchanged Fourier or sparse CBS fixtures.
+do not apply to the Fourier CBS fixtures.
 
 ## Decomposition by operation
 
@@ -117,7 +115,7 @@ The crate-local benchmarks consume the operation configs but measure the followi
 
 | Target | Configuration and timed request |
 | --- | --- |
-| `pbs` | Dense classic u32/u64, fixed-weight classic u64 and fixed-weight sparse u64; one PBS of `F(x)=(3x+1) mod 16` at Rounded 32→32. The fixed pair shares the sparse config's numerical choices and changes only BR method. |
+| `pbs` | Dense Classic u32/u64, one PBS of `F(x)=(3x+1) mod 16` at Rounded 32→32. |
 | `many_lut` | `CLASSIC_MANY_LUT_U64`: one two-output PBS returning grade and flag; no subsequent code-combining addition. |
 | `mvb` | `CLASSIC_THRESHOLD_MVB_U64`: one factorized request returning all 17 threshold flags. |
 | `cbs` | `CLASSIC_CBS_U64`: predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE; no extra ring addition. NTT names include `n866_N2048` to separate the revised config from old n800/N1024 results. The `predicate_cmux_return` workload includes return cost and is not the former `predicate_cmux` measurement. |
@@ -133,9 +131,8 @@ to select the cases and the [performance guide](../performance/README.md#tfhe-co
 to interpret the comparison.
 
 The dense PBS benchmarks provide explicit word-specific u32/u64 fixtures, rather
-than casts of one config. Dense and fixed-weight PBS change geometry, secrets
-and noise; only the fixed classic/sparse pair isolates the BR method. Consult the
-bench-local config before comparing two timings.
+than casts of one config. Consult the bench-local geometry, secrets and noise
+before comparing two timings.
 
 ## Evidence and changes to a workload
 

@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于原生环面和 Fourier 变换的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary、sparse fixed-weight binary 或直接 block binary 盲旋转（Block 要求 u64）。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
+基于原生环面和 Fourier 变换的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary 和直接 block binary 盲旋转（Block 要求 u64）。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -38,7 +38,6 @@ let context = TfheContext::<u64, Table, _>::try_from_pbs_config(config)?;
 | --- | --- | --- |
 | 两次连续 PBS | `CLASSIC_PBS_U64` | [ntru_fourier_basic](examples/ntru_fourier_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`，消息 4→4 | [ntru_fourier_boolean](examples/ntru_fourier_boolean.rs) |
-| 使用 sparse BR 的相同评分流程 | `SPARSE_PBS_U64` | [ntru_fourier_sparse](examples/ntru_fourier_sparse.rs) |
 | ManyLUT grade/flag，再做密文组合 | `CLASSIC_MANY_LUT_U64` | [ntru_fourier_many_lut](examples/ntru_fourier_many_lut.rs) |
 | CBS 谓词 → CMux → 环加法 → LWE | `CLASSIC_CBS_U64` | [ntru_fourier_circuit_bootstrap](examples/ntru_fourier_circuit_bootstrap.rs) |
 | 同一输入产生 17 个数值阈值标志 | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_fourier_mvb_thresholds](examples/ntru_fourier_mvb_thresholds.rs) |
@@ -56,7 +55,7 @@ PBS 在 Q 下使用环秘密 f 求值，然后逐系数 Q→q 最近舍入、提
 
 环 Q 只支持 `NativeModulus<T>`，不支持 `PowOf2Modulus` 环，但外部 LWE q 可独立使用 `PowOf2Modulus`。`RustFftTable` 和 `TfheFftTable` 均支持 u32/u64。变换域密钥、数据和 evaluator 须使用**同一个 FFT 表实例**，长度相同不能证明表示一致。
 
-Classic、public lift 和 CBS 在 Fourier 转换前先生成原生模环系数行。Sparse 和 block 以系数形式保存控制行。普通 Classic 与 Sparse 支持 u32/u64。Split 精度和直接 Block BR 要求 u64。使用 `TfheContext::try_from_parameters` 绑定已准备的 PBS 参数并检查字宽。
+Classic、public lift 和 CBS 在 Fourier 转换前先生成原生模环系数行。Block 以系数形式保存控制行。普通 Classic 支持 u32/u64，包括固定重量二进制秘密。Split 精度和直接 Block BR 要求 u64。使用 `TfheContext::try_from_parameters` 绑定已准备的 PBS 参数并检查字宽。
 
 从旧版未约简复数生成路径迁移时，须重新生成受影响的密文和求值密钥。若曾对外提供相关材料，须更换对应环秘密，以及由受影响 BR 材料保护的外部 LWE 秘密。已有参数的数值误差预算也须重新核对。
 
@@ -80,27 +79,11 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 
 CBS/one-hot 操作和已编译 MVB 表必须使用原 context 绑定，即使另一个 context 的数值参数相等也不能混用。串行复用时，CBS/one-hot 操作在执行时借用 `BootstrapResources`。通过 `Evaluator::try_from_resources` 恢复普通 PBS 时，传入原 context 和 `server.server_key()`。
 
-## Sparse 盲旋转
-
-在 `config.method`（CBS 的 `config.pbs.method`）中选择 `BlindRotationMethod::Sparse`。它要求 fixed-weight binary 外部秘密，满足 `0<h<n`、`copy_count>=1`、`bucket_count>=max(copy_count,h)`；仅修改秘密分布不会选择 sparse，classic 同样支持固定重量秘密。
-
-PBS、ManyLUT、MVB、CBS 和 one-hot 均支持此模式。Sparse CBS/one-hot 可从 `CLASSIC_ONE_HOT_U64` 开始，其外部秘密为 n800/h32 fixed-weight binary。Dense `CLASSIC_CBS_U64` 不能仅修改算法就改为 sparse：
-
-```rust,ignore
-use primus_tfhe_ntru_fourier::BlindRotationMethod;
-
-let mut config = experimental::CLASSIC_ONE_HOT_U64;
-config.pbs.method = BlindRotationMethod::Sparse { copy_count: 3, bucket_count: 64 };
-let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
-```
-
-随后用 `try_generate_circuit_bootstrap_keys` 生成完整 CBS 组合，使用相同的 CBS/one-hot evaluator 工厂。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
-
 ## Block 盲旋转
 
 设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }`（CBS 位于 `config.pbs` 内）。使用 u64，逻辑维数须能被正块宽整除，`AtMostOne` 允许空块并增加 dummy，`ExactlyOne` 每块恰有一个 `1` 且无需 dummy。精确 native 生成器直接生成全部 bit 控制与模式要求的独立 dummy 的系数行：首块 NLEV 提升公开 LUT，后续 NGSW 旋转密文。Native 聚合在模 2^64 下精确。Split BR 在每块聚合后拆分并变换，先处理负循环符号和进位，再取高低位。Ordinary 和 split 外积都需要数值误差预算。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂与工作区。
 
-通过 `CbsConfig.fourier_precision.blind_rotation` 选择 BR 精度；仅 PBS 的 context 使用 ordinary BR。Trace、SS 精度仍独立选择，可配合已有 split trace/SS 及相应投影策略。只分配选中的聚合频谱，split 转换复用外积 scratch。Context 构造时在准备变换表前拒绝 u32 Block。One-hot 的 `new_pair_workspace` / `with_pair` 支持 Sparse 和 Block（含 split Block BR）；classic 资源不提供 pair 工作区。默认值与预设不变，block 的安全成本与完整 DFR 尚未评估。
+通过 `CbsConfig.fourier_precision.blind_rotation` 选择 BR 精度；仅 PBS 的 context 使用 ordinary BR。Trace、SS 精度仍独立选择，可配合已有 split trace/SS 及相应投影策略。只分配选中的聚合频谱，split 转换复用外积 scratch。Context 构造时在准备变换表前拒绝 u32 Block。One-hot 的 `new_pair_workspace` 和 `with_pair` 支持 ordinary 和 split Block BR。Block 的安全成本与完整 DFR 尚未评估。
 
 ## One-hot CBS
 
@@ -143,13 +126,13 @@ cargo bench -p primus_tfhe_ntru_fourier --bench pbs
 
 | Target | 计时请求 |
 | --- | --- |
-| [pbs](benches/pbs.rs) | 一次完整 PBS；dense u32/u64、fixed-weight classic/sparse u64 |
+| [pbs](benches/pbs.rs) | 一次完整 dense Classic PBS，u32/u64 |
 | [many_lut](benches/many_lut.rs) | 一次双输出 grade/flag ManyLUT，u64 |
 | [mvb](benches/mvb.rs) | 一次 17 输出阈值 MVB，u64 |
 | [cbs](benches/cbs.rs) | 一次谓词 CBS、CMux 和单系数 LWE 返回，u64 |
 | [one_hot](benches/one_hot.rs) | 三个非零 selector 加四路 `cmux_k_to`，u64 |
 
-每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。只有 fixed-weight classic/sparse PBS 配对仅改变 BR 算法，dense 用例使用不同参数。见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
+每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
 
 仅测量 TFHE-FFT：
 
@@ -186,7 +169,7 @@ let config = CbsConfig {
 调用方无需提供 limb 缓冲或 scratch。若只实验 split trace，保留 `Separate`，仅设置
 `config.fourier_precision.trace`。
 
-Split 要求 native u64，split BR 支持 classic binary 和 block binary；普通 binary/ternary/sparse BR 及 u64 Block BR
+Split 要求 native u64，split BR 支持 classic binary 和 block binary；普通 Classic 和 Block BR
 可搭配 split trace 或 SS。`FusedLastStage` 和 `PairedTrace` 均要求 split trace、SS，
 两者位宽可以不同。这些策略只融合 NGSW 输出；NLEV/dual 保留独立 trace/SS，精度仍按配置。
 SS 输出供 CMux 使用的普通 Fourier 控制。见[支持矩阵及数值限制](../../guides/development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)。

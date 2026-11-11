@@ -89,7 +89,7 @@ where
 
 /// Reusable workspace for fixed-scale factorized MVB.
 ///
-/// Shares one classic or sparse blind rotation at step one. Each output then
+/// Shares one Classic or Block blind rotation at step one. Each output then
 /// multiplies by its public difference factor. BootstrapKeyswitch performs KS
 /// after each product; KeyswitchBootstrap switches the input once before BR.
 /// External secrets and dimensions are the same as for [`Evaluator`].
@@ -113,7 +113,7 @@ where
     /// Takes ownership of a prepared PBS evaluator and allocates one NTT GLWE
     /// for the shared rotation. Its existing input/BR and return buffers are
     /// moved without copying key material or preparing them again. Supports
-    /// classic/sparse keys and both orders.
+    /// Classic and Block keys and both orders.
     #[must_use]
     pub fn new(evaluator: Evaluator<'a, T, Table>) -> Self {
         let context = evaluator.resources.context;

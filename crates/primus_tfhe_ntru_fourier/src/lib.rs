@@ -24,7 +24,7 @@
 //!
 //! # Other operations
 //!
-//! [`experimental`] pairs sparse PBS, ManyLUT, MVB, CBS and one-hot with their
+//! [`experimental`] pairs PBS, ManyLUT, MVB, CBS and one-hot with their
 //! teaching message domains. Each example prepares its matching config once.
 //!
 //! - [`InterleavedLookupTable`]: several functions of one input using ordinary PBS workspace.
@@ -32,8 +32,6 @@
 //! - [`boolean`]: Boolean clients and gates with plaintext modulus four.
 //! - [`circuit_bootstrap`]: optional trace/scheme-switch material and
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
-//! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
-//!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
 //! - [`block`]: direct contiguous block-binary controls with exact native u64
 //!   coefficient key generation. The first block lifts through NLEV; later
 //!   NGSW blocks use the selected ordinary or split external-product kernel.
@@ -68,11 +66,11 @@
 //! `try_new`. [`ServerKey::into_parts`] moves out the bundle's components.
 //! [`CircuitBootstrapServerKey`] combines one [`ServerKey`] with required CBS material.
 //! CBS/one-hot evaluation borrows BR/CBS; downstream LWE returns reuse its KS key.
-//! Classic binary/ternary, sparse fixed-weight binary and u64 block BR support PBS, MVB,
+//! Classic binary/ternary and u64 block BR support PBS, MVB,
 //! CBS and one-hot. CBS/one-hot require trace and scheme-switch material.
 //! Encryption and key generation form complete native modular coefficient rows
-//! before any Fourier conversion. Sparse and block controls keep their coefficient
-//! representation until evaluation.
+//! before any Fourier conversion. Block controls keep their coefficient representation
+//! until evaluation.
 //! Only accumulator secrets undergo NTRU invertibility screening; external LWE secrets are independent.
 //! Keys and values must use the same FFT table instance; equal lengths do not prove identity.
 //! Native MVB requires an even Scaled output scale and an FFT error budget.
@@ -99,9 +97,9 @@ mod context;
 mod error;
 mod evaluator;
 pub mod factorized;
+mod grouped_rotation;
 pub mod key;
 mod lookup_table;
-pub mod sparse;
 
 pub use accumulator::AccumulatorClient;
 pub use boolean::{
@@ -110,8 +108,8 @@ pub use boolean::{
 pub use context::TfheContext;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
-    LookupTableError, SparseBootstrappingKeyError, TfheClientError, TfheContextError,
-    TfheEvaluationError, TfheKeyError, TfheParameterError,
+    LookupTableError, TfheClientError, TfheContextError, TfheEvaluationError, TfheKeyError,
+    TfheParameterError,
 };
 #[doc(inline)]
 pub use evaluator::Evaluator;

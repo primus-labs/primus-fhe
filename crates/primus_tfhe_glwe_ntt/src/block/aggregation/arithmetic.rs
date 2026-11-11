@@ -1,4 +1,4 @@
-//! Bounded unreduced accumulation of rotated sparse or block selectors.
+//! Bounded unreduced accumulation of rotated Block selectors.
 
 use primus_integer::FheUint;
 use primus_lattice::GadgetSize;
@@ -14,7 +14,7 @@ pub(super) fn tile_len<T>(poly_length: usize) -> usize {
 }
 
 /// Largest group satisfying (2m+1)q <= T::MAX. The caller selects a complete
-/// bucket or bounded batches according to the coefficient word width.
+/// group or bounded batches according to the coefficient word width.
 #[inline]
 pub(super) fn max_group_len<T: FheUint>(q: T) -> usize {
     let count: u128 = ((T::MAX / q - T::ONE) / T::TWO).as_into();
@@ -35,7 +35,7 @@ pub(super) struct AggregationLane<'a, T> {
 }
 
 /// Visit each source tile across all lanes before advancing through the key.
-/// Indexed sparse buckets and contiguous blocks supply one coordinate per selector.
+/// Each coordinate corresponds to a selector in the supplied group.
 /// Batch scheduling reuses the single-input arithmetic and reduction boundaries:
 /// bounded batches for u32, a whole-group bias or lazy pairs for u64.
 pub(super) fn aggregate_controls_many_assign<T: FheUint, const LANES: usize>(
@@ -176,9 +176,7 @@ fn add_rotated_group_many_assign<T: FheUint, const LANES: usize>(
 }
 
 /// Aggregates one already initialized control ciphertext using the single-input
-/// tile schedule. Sparse buckets pass an indexed exponent iterator; block keys
-/// pass contiguous exponents. No map or online allocation is needed, and the
-/// original word-width-specific grouping/reduction boundaries are preserved.
+/// tile schedule. The caller supplies exponents in selector order.
 #[inline]
 pub(crate) fn aggregate_controls_assign<T: FheUint>(
     exponents: impl ExactSizeIterator<Item = usize> + Clone,
@@ -278,8 +276,7 @@ pub(crate) fn aggregate_controls_assign<T: FheUint>(
     }
 }
 
-/// Consumes actual exponents in control order, so indexed sparse buckets and
-/// contiguous blocks share the coefficient kernel without an index-map buffer.
+/// Consumes actual exponents in selector order.
 /// The exact-size iterator and selections have one entry per control. Dispatch
 /// and address preparation remain outside the coefficient loops.
 ///
@@ -324,7 +321,7 @@ fn add_rotated_group_assign<T: FheUint>(
             &group[i * control_len + tile_start..i * control_len + tile_end]
         });
         if T::BITS == 64 {
-            // Single-tile u64 needs no bucket-wide preparation or retained plans.
+            // Single-tile u64 needs no group-wide preparation or retained plans.
             // Build only the current group's addressing and consume it immediately;
             // both u64 cases then use one shared coefficient loop.
             let immediate;
@@ -481,7 +478,7 @@ struct RotationSegment {
     negatives: u8,
 }
 
-/// Input-dependent addressing for four controls, reused across a bucket's tiles.
+/// Input-dependent addressing for four controls, reused across a group's tiles.
 /// Empty trailing segments represent coincident wrap points, including shift zero.
 #[derive(Clone, Default)]
 pub(crate) struct FourRotations {
@@ -771,7 +768,7 @@ mod tests {
     }
 
     // Independent lane/sign oracle for the new schedule, including multiple
-    // tiles, immediate/prepared descriptors and moduli without bucket headroom.
+    // tiles, immediate/prepared descriptors and moduli without four-source headroom.
     #[test]
     fn lane_tile_schedules_match_integer_oracle() {
         for q in [1_125_899_906_826_241u64, u64::MAX / 9] {

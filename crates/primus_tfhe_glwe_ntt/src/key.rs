@@ -17,19 +17,16 @@ use primus_tfhe_glwe::ClientKey;
 use crate::{
     BlindRotationMethod, KeyGenerationError, PbsParameters, TfheContext,
     block::BlockGlweBootstrappingKey, bootstrapping_key::NttGlweBootstrappingKey,
-    sparse::SparseGlweBootstrappingKey,
 };
 
 /// Blind-rotation key selected when generating a server key.
 ///
 /// Classic keys store NTT GGSWs; grouped keys store coefficient GGSWs
-/// with public bucket or block geometry. All target the same accumulator secret
+/// with public block geometry. Both target the same accumulator secret
 /// and use the small-LWE input.
 pub enum BlindRotationKey<T: FheUint> {
     /// One binary control or a ternary control pair per input coefficient.
     Classic(NttGlweBootstrappingKey<T>),
-    /// Bucketed selections for a fixed-weight binary input secret.
-    Sparse(SparseGlweBootstrappingKey<T, BarrettModulus<T>>),
     /// Contiguous block-binary controls, with dummies only for AtMostOne.
     Block(BlockGlweBootstrappingKey<T, BarrettModulus<T>>),
 }
@@ -38,7 +35,6 @@ pub enum BlindRotationKey<T: FheUint> {
 /// This temporary choice carries no control ciphertexts or private assignments.
 enum BlindRotationLayout {
     Classic,
-    Sparse(crate::sparse::SparseKeyLayout),
     Block(crate::block::BlockKeyLayout),
 }
 
@@ -51,16 +47,6 @@ impl BlindRotationLayout {
     ) -> Result<Self, KeyGenerationError> {
         Ok(match method {
             BlindRotationMethod::Classic => Self::Classic,
-            BlindRotationMethod::Sparse {
-                copy_count,
-                bucket_count,
-            } => Self::Sparse(crate::sparse::SparseKeyLayout::try_new(
-                dimension,
-                distribution,
-                parameters,
-                copy_count,
-                bucket_count,
-            )?),
             BlindRotationMethod::Block => Self::Block(crate::block::BlockKeyLayout::try_new(
                 dimension,
                 distribution,
@@ -74,18 +60,15 @@ impl<T: FheUint> BlindRotationKey<T> {
     /// Generates BR material independently of PBS return parameters.
     /// Input q and control distribution come from the owning LWE secret;
     /// `parameters` describes the independent target ring and GGSW rows.
-    /// Sparse generation preserves the fixed secret and retries at most eight maps.
     ///
     /// # Correctness
     /// The target secret must use `table`'s transform representation. Signed
     /// coefficients inherit [`NttGlweSecretKey::from_coeff_secret_key`]'s range
-    /// requirements. Sparse conditional-distribution/security requirements are
-    /// those of [`SparseGlweBootstrappingKey`].
+    /// requirements.
     ///
     /// # Errors
-    /// Rejects invalid sparse/block geometry or control distributions before
-    /// sampling. Block imports additionally check 0/1 and at-most-one per block.
-    /// Sparse support/matching errors return no partial key.
+    /// Rejects invalid block geometry or control distributions before sampling.
+    /// Block imports check binary coefficients and the declared occupancy.
     ///
     /// # Panics
     /// Panics on invalid classic secret coefficients/distribution, target key,
@@ -136,11 +119,6 @@ impl<T: FheUint> BlindRotationKey<T> {
             BlindRotationLayout::Classic => Self::Classic(NttGlweBootstrappingKey::generate_ntt(
                 input, output, parameters, table, rng, workspace,
             )),
-            BlindRotationLayout::Sparse(layout) => {
-                Self::Sparse(crate::sparse::generate_with_layout(
-                    input, layout, output, parameters, table, rng, workspace,
-                )?)
-            }
             BlindRotationLayout::Block(layout) => {
                 Self::Block(crate::block::generate_validated_with_layout(
                     input, layout, output, parameters, table, rng, workspace,
@@ -165,22 +143,6 @@ impl<T: FheUint> BlindRotationKey<T> {
                     key.size(),
                     key.basis(),
                     key.cipher_modulus(),
-                )
-            }
-            Self::Sparse(key) => {
-                if parameters.small_lwe().secret_key_distr()
-                    != (SecretKeyDistr::FixedHammingWeightBinary {
-                        hamming_weight: key.hamming_weight(),
-                    })
-                {
-                    return false;
-                }
-                (
-                    key.input_dimension(),
-                    key.controls().input_modulus_value(),
-                    key.controls().size(),
-                    key.controls().basis(),
-                    key.controls().cipher_modulus(),
                 )
             }
             Self::Block(key) => {
@@ -210,7 +172,7 @@ impl<T: FheUint> BlindRotationKey<T> {
     }
 }
 
-/// Classic, sparse or block evaluation keys used by a TFHE server.
+/// Classic or Block evaluation keys used by a TFHE server.
 ///
 /// Both PBS orders share these key materials. [`crate::PbsOrder`] only changes
 /// the order in which the evaluator applies them.
@@ -297,21 +259,14 @@ where
     }
 
     /// Generates only BR material using this context's configured method and gadgets.
-    /// No return or CBS key is generated. Sparse BR keeps the fixed-weight input
-    /// secret and retries at most eight public maps, without falling back to classic.
-    /// Each selector and dummy is encrypted independently after matching succeeds.
     ///
     /// # Correctness
     /// Independently generated components must share the actual secrets and this
     /// context's transform representation. Imported accumulator coefficients inherit
     /// [`NttGlweSecretKey::from_coeff_secret_key`]'s numerical requirements.
-    /// Sparse matching is not constant-time; see [`SparseGlweBootstrappingKey`]
-    /// for the conditional-distribution and security requirements.
     ///
     /// # Errors
-    /// Rejects incompatible secrets or invalid sparse geometry before consuming
-    /// randomness. Sparse matching failure consumes only map randomness and returns
-    /// no partial key.
+    /// Rejects incompatible secrets or invalid block geometry before consuming randomness.
     pub fn try_generate_blind_rotation_key<R: rand::Rng + rand::CryptoRng>(
         &mut self,
         client_key: &ClientKey<T>,
@@ -349,8 +304,7 @@ where
     }
 
     /// Generates the configured BR and KS pair.
-    /// Validates sparse geometry before sampling the client. Reuses prepared KS
-    /// state and retries only public maps, keeping the same client secrets.
+    /// Validates block geometry before sampling the client and reuses prepared KS state.
     ///
     /// # Correctness
     /// Inherits [`Self::try_generate_server_key`]'s noise and representation contracts.
@@ -469,7 +423,6 @@ where
     }
 
     /// Checks the selected public geometry before sampling secrets or key rows.
-    /// Sparse matching later retains the fixed client secret; Block uses no map.
     fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
         let parameters = self.context.parameters();
         BlindRotationLayout::try_new(

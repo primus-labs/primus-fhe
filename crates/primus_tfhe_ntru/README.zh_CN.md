@@ -36,13 +36,11 @@ BR 和 KS 分别使用 `GadgetEncryptionConfig { decomposition, noise_standard_d
 
 普通 PBS 顺序为 f,Q 下盲旋转 → 逐系数 Q→q 最近舍入 → 相位提取 → q 下 LWE KS 到 s。ManyLUT 共享 BR，再分别返回各输出；`context.allocate_lwe_ciphertext()` 使用 n。LUT 本身是公开的，但 NTRU 提升和 BR 控制会贡献加密噪声。参数构造不建立安全性或完整噪声预算。
 
-## Sparse 系数密钥
+## 盲旋转算法
 
-Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boolean、MVB、CBS 和 one-hot。Sparse 须通过 `config.method` 显式选择，`SparseTernary` 秘密分布本身不会选择桶聚合。外部固定重量可以为偶数，仍须满足[共享 sparse 限制](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
+Classic 接受 binary 和 ternary 外部秘密，包括固定重量 binary。Classic 与 Block 通过相同工厂支持 PBS、ManyLUT、Boolean 门、MVB、CBS 和 one-hot。
 
-两后端共享 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
-
-两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。选择 `BlockOccupancy::AtMostOne` 允许空块，或选择 `ExactlyOne` 要求每块恰有一个 `1`。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存全部 bit 控制；仅 `AtMostOne` 额外独立加密 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。两后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
+选择 `BlindRotationMethod::Block` 并使用 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。每块保存全部 bit 控制，`AtMostOne` 另有独立加密的 dummy。`ExactlyOne` 要求每块恰有一个 `1`。首块使用 NLEV 提升公开 LUT，即使旋转指数为零也会执行。后续块使用 NGSW。Fourier Block 要求 u64，通过精确 native 系数建钥支持 ordinary 和 split BR，trace 与 SS 精度可独立选择。见 [Block 材料契约](src/block.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
 ## 客户端与 LUT
 
@@ -70,7 +68,7 @@ NTT reverse trace 使用模逆元，Fourier 使用原生整数减半及额外 FF
 
 ## One-hot CBS
 
-`context.one_hot_evaluator(&server)?` 使用相同 CBS 组合，支持 classic binary/ternary、sparse fixed-weight binary 或直接 Block BR。要求 t=2M、M=2^tau 且 tau>=1，用 `encrypt_padded` 加密 `0..M`。输出有 L 层时，令 `W=next_power_of_two(L)`，要求 `2MW<=N`。
+`context.one_hot_evaluator(&server)?` 使用相同 CBS 组合，支持 Classic binary/ternary 或 Block BR。要求 t=2M、M=2^tau 且 tau>=1，用 `encrypt_padded` 加密 `0..M`。输出有 L 层时，令 `W=next_power_of_two(L)`，要求 `2MW<=N`。
 
 | 输出 | 分配 / 求值 |
 | --- | --- |
@@ -79,7 +77,7 @@ NTT reverse trace 使用模逆元，Fourier 使用原生整数减半及额外 FF
 | 仅非零 NGSW 分支 | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
 | 两种表示 | `one_hot_to`，或用 `one_hot_nlev_and_nonzero_ngsw_to` 生成完整 NLev 加非零 NGSW |
 
-对于 Sparse 和 Block BR，可将拥有工作区的 one-hot evaluator 通过 `into_parts` 拆开，
+对于 Block BR，可将拥有工作区的 one-hot evaluator 通过 `into_parts` 拆开，
 再调用 `new_pair_workspace(&resources)` 和 `with_pair`。额外的
 `bootstrap::BlindRotationPairWorkspace` 仅保存第二条输入的指数、系数 aggregate 和 accumulator；
 变换、外积 scratch 和 selector 缓冲串行复用。回调按输入 0、1 的顺序消费，须在下一条输入复用缓冲前完成。
@@ -87,7 +85,7 @@ NTT reverse trace 使用模逆元，Fourier 使用原生整数减半及额外 FF
 奇数条的最后一条也走单输入路径。Pair 输入仍共享密钥误差。
 
 公开查表多项式在没有 CMux 选表层执行首次提升时（`c=d`）需要 `NLEV[1]`。
-分组 BR 没有独立的 classic initializer，应通过
+Block BR 没有独立的 classic initializer，应通过
 `KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` 或
 `try_generate_public_lift_key` 请求独立材料，不从首组 bit/dummy 控制相加派生。
 Lift 保留自身生成参数，并引入自身的分解和加密误差；Fourier split BR 的公开提升仍使用 ordinary Fourier 材料。

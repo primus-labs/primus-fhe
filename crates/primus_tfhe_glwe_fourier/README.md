@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-GLWE-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
+GLWE-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with Classic binary/ternary or direct block-binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
 
 ## Quick start
 
@@ -40,11 +40,9 @@ All examples use u64 and prepare reusable state outside the request loop. Replac
 | --- | --- | --- |
 | Two successive PBS calls | `CLASSIC_PBS_U64` | [fourier_basic](examples/fourier_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`, messages 4→4 | [fourier_boolean](examples/fourier_boolean.rs) |
-| The same scoring workflow with sparse BR | `SPARSE_PBS_U64` | [fourier_sparse](examples/fourier_sparse.rs) |
 | ManyLUT grade/flag, then encrypted combination | `CLASSIC_MANY_LUT_U64` | [fourier_many_lut](examples/fourier_many_lut.rs) |
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [fourier_circuit_bootstrap](examples/fourier_circuit_bootstrap.rs) |
 | MSB Boolean NOT → encrypted service limits | `CLASSIC_CBS_U64`, MSB input | [fourier_msb_cbs](examples/fourier_msb_cbs.rs) |
-| The same CBS workflow with sparse BR | `SPARSE_CBS_U64` | [fourier_sparse_circuit_bootstrap](examples/fourier_sparse_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [fourier_mvb_thresholds](examples/fourier_mvb_thresholds.rs) |
 
 Ordinary PBS/ManyLUT and MVB use `context.try_generate_keys(rng)`. Bind the external secret from `client.external_lwe_secret_key()` to `context.encryptor`; decode PBS/ManyLUT with `pbs_decryptor`, and Scaled MVB output with `mvb_decryptor`. Public-key input uses `public_encryptor`. Clients need no LUT or manual codec.
@@ -71,9 +69,7 @@ Transformed keys, values and evaluators must use the **same FFT table instance**
 
 Factorized MVB requires an even actual Scaled output scale `round(2^BITS/t_out)`; an odd scale returns `LookupTableError::OddFactorizationScale`. Factors are transformed as signed integers without torus scaling. Budget their amplification and FFT error. See the [MVB contract](../primus_tfhe/README.md#fixed-scale-factorized-mvb).
 
-Sparse BR must be selected explicitly with `BlindRotationMethod::Sparse` in `config.method`; a fixed-weight secret alone still permits classic BR. Sparse requires binary weight `0<h<n`, `copy_count>=1` and `bucket_count>=max(copy_count,h)`. Both orders support PBS, ManyLUT, MVB and CBS. A working PBS configuration does not by itself establish CBS output precision or CMux noise margin.
-
-Direct block BR uses `config.method = BlindRotationMethod::Block` and `config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`. Complete consecutive blocks may be empty. Both PBS orders, ManyLUT, MVB and CBS keep the same factories. Each block stores its bit controls plus an independently encrypted dummy, generated in exact native coefficients, then aggregates them before the ordinary FFT. Trace precision remains independent; this does not add Split35 to BR or SS. Raw single-input BR uses `block::BlockGlweBlindRotationWorkspace::new(key)` and `blind_rotate_lookup_table_to`. Presets remain unchanged; block noise and security require their own assessment.
+Classic BR accepts fixed-weight binary secrets. Block BR requires `config.method = BlindRotationMethod::Block` and `config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }`. `AtMostOne` allows empty blocks and adds one independent dummy per block. `ExactlyOne` stores only bit controls. Both methods support PBS, ManyLUT, MVB and CBS in either order. Block aggregation is exact in native coefficients and uses ordinary FFT; CBS trace precision remains independent. For raw single-input BR, use `block::BlockGlweBlindRotationWorkspace::new(key)` and `blind_rotate_lookup_table_to`. See the [GLWE key guide](../primus_tfhe_glwe/README.md#blind-rotation-keys) for migration and parameter requirements.
 
 Keep the context, keys and compiled programs across requests. `_to` methods reuse evaluator scratch and caller outputs; concurrent requests need separate mutable evaluators. MVB programs stay bound to their context. `KeyGenerator::try_generate_blind_rotation_key(client, rng)` generates only BR material using the context's `config.method`; independent components must use the same actual secrets and transform representation. Advanced material composition and per-call borrowing contracts are documented on [KeyGenerator](src/key.rs), [Evaluator](src/evaluator.rs) and [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs). Context factories prepare the default workflow directly. For borrowed CBS, compile the program first, then bind it with the chosen gadget parameters and circuit key through `CircuitBootstrapEvaluator::try_new`.
 
@@ -102,14 +98,14 @@ cargo bench -p primus_tfhe_glwe_fourier --bench pbs
 
 | Target | Timed request |
 | --- | --- |
-| [pbs](benches/pbs.rs) | One complete PBS; dense u32/u64 and fixed-weight classic/sparse u64; opt-in Low/High comparison: [testing guide](../../guides/development/testing.md#tfhe-benchmarks) |
+| [pbs](benches/pbs.rs) | One complete PBS; dense Classic u32/u64; opt-in Low/High comparison: [testing guide](../../guides/development/testing.md#tfhe-benchmarks) |
 | [modulus_domains](benches/modulus_domains.rs) | Paired q=Q/q1024 complete PBS, either order; select `PRIMUS_DOMAIN_CASE=same/bk`, `split/bk`, `same/kb` or `split/kb`; requires `tfhe-fft` |
 | [many_lut](benches/many_lut.rs) | One two-output grade/flag ManyLUT, u64 |
 | [mvb](benches/mvb.rs) | One 17-output threshold MVB, u64 |
 | [cbs](benches/cbs.rs) | One predicate CBS, CMux and a coefficient returned as LWE, u64 |
 | [cbs_identity](benches/cbs_identity.rs) | Identity CBS → Fourier GGSW or CBS＋CMux, including input ring KS; derived CMUX2/CMUX3, ordinary/split35, padded/MSB, bit 0/1, u64 |
 
-Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
+Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
 Measure TFHE-FFT alone with:
 

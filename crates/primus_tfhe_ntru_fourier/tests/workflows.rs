@@ -17,11 +17,6 @@ use primus_tfhe_ntru_fourier::{
 };
 use rand::{SeedableRng, rngs::StdRng};
 
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 8,
-};
-
 fn decomposition() -> DecompositionConfig {
     DecompositionConfig {
         log_basis: DecompositionBaseLog::new(4),
@@ -30,7 +25,7 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse needs fixed-weight binary secrets; classic/block cases select their distributions below.
+/// The default uses fixed-weight binary secrets. Block fixtures supply their own distribution.
 fn config<T: TorusFftValue>(method: BlindRotationMethod) -> PbsConfig<T, PowOf2Modulus<T>> {
     let modulus = ModulusConfig::Native;
     // The independent external LWE secret may have even weight.
@@ -71,10 +66,6 @@ fn chained_pbs<T: TorusFftValue, Table: FftTable>(config: PbsConfig<T, PowOf2Mod
     let blind_rotation = generator
         .try_generate_blind_rotation_key(&client, &mut rng)
         .unwrap();
-    assert_eq!(
-        blind_rotation.sparse_bootstrapping_key().is_some(),
-        matches!(config.method, BlindRotationMethod::Sparse { .. }),
-    );
     assert_eq!(
         blind_rotation.block_bootstrapping_key().is_some(),
         config.method == BlindRotationMethod::Block,
@@ -683,22 +674,10 @@ fn rustfft_u32_classic_cbs() {
 
 #[cfg(feature = "tfhe-fft")]
 #[test]
-fn tfhe_fft_u64_sparse_chain() {
-    let config = config(SPARSE);
+fn tfhe_fft_u64_fixed_weight_classic_workflows() {
+    let config = config(BlindRotationMethod::Classic);
     chained_pbs::<u64, primus_fft::TfheFftTable>(config);
-}
-
-#[cfg(feature = "tfhe-fft")]
-#[test]
-fn tfhe_fft_u64_sparse_batches() {
-    let config = config(SPARSE);
     many_lut_and_mvb::<u64, primus_fft::TfheFftTable>(config);
-}
-
-#[cfg(feature = "tfhe-fft")]
-#[test]
-fn tfhe_fft_u64_sparse_cbs() {
-    let config = config(SPARSE);
     circuit_selection::<u64, primus_fft::TfheFftTable>(config);
 }
 
@@ -749,13 +728,11 @@ fn native_phase<T: TorusFftValue>(ciphertext: &[T], secret: &[T::SignedInteger])
 const NATIVE_TEST_N: usize = 64;
 const NATIVE_TEST_SUPPORT: [usize; 2] = [0, 4];
 
-fn native_control_fixture<T: TorusFftValue, Table: FftTable>(
-    method: BlindRotationMethod,
-) -> (
+fn native_control_fixture<T: TorusFftValue, Table: FftTable>() -> (
     TfheContext<T, Table, PowOf2Modulus<T>>,
     primus_tfhe_ntru_fourier::ClientKey<T>,
 ) {
-    let mut config = config::<T>(method);
+    let mut config = config::<T>(BlindRotationMethod::Classic);
     config.bsk_poly_length = PolyLength::new(NATIVE_TEST_N);
     config.bsk_secret_distr = SecretKeyDistr::Gaussian {
         standard_deviation: 1.0,
@@ -781,7 +758,7 @@ fn native_control_fixture<T: TorusFftValue, Table: FftTable>(
 }
 
 fn check_public_native_control_spectra<T: TorusFftValue, Table: FftTable>() {
-    let (context, client) = native_control_fixture::<T, Table>(BlindRotationMethod::Classic);
+    let (context, client) = native_control_fixture::<T, Table>();
     let parameters = context.parameters().blind_rotation();
     let n = NATIVE_TEST_N;
     let mut fft = context.new_fft_engine();
@@ -872,66 +849,6 @@ fn check_public_native_control_spectra<T: TorusFftValue, Table: FftTable>() {
     assert_spectra("public lift", lift.as_ref(), true, true, &mut reference_rng);
 }
 
-fn check_sparse_native_control_phases<T: TorusFftValue, Table: FftTable>() {
-    use primus_tfhe::sparse::BucketMap;
-
-    let (context, client) = native_control_fixture::<T, Table>(SPARSE);
-    let parameters = context.parameters().blind_rotation();
-    let mut generator = primus_tfhe_ntru_fourier::KeyGenerator::new(&context);
-    let mut rng = StdRng::seed_from_u64(0x5A2);
-    let mut reference_rng = StdRng::seed_from_u64(0x5A2);
-    let key = generator
-        .try_generate_blind_rotation_key(&client, &mut rng)
-        .unwrap();
-    let sparse = key.sparse_bootstrapping_key().unwrap();
-    let (map, selected) = BucketMap::try_generate(
-        client.external_lwe_dimension(),
-        sparse.copy_count(),
-        sparse.bucket_count(),
-        &NATIVE_TEST_SUPPORT,
-        &mut reference_rng,
-    )
-    .unwrap();
-    let f = client.accumulator_ntru_secret_key().as_slice();
-    for (bucket, &chosen) in selected.iter().enumerate() {
-        let (indices, controls) = sparse.bucket_data(bucket);
-        assert_eq!(
-            indices,
-            &map.input_indices()[map.bucket_offsets()[bucket]..map.bucket_offsets()[bucket + 1]]
-        );
-        assert_eq!(controls.len(), (indices.len() + 1) * parameters.nlev_len());
-        for (control, index) in controls
-            .chunks_exact(parameters.nlev_len())
-            .zip(indices.iter().copied().chain([BucketMap::UNASSIGNED]))
-        {
-            let (rows, tail) = control.as_chunks::<NATIVE_TEST_N>();
-            assert!(tail.is_empty());
-            for (row, scalar) in rows.iter().zip(parameters.basis().scalar_iter()) {
-                let mut expected = parameters
-                    .encryption_parameters()
-                    .noise_distribution()
-                    .sample_vec(NATIVE_TEST_N, &mut reference_rng);
-                if index == chosen {
-                    if bucket == 0 {
-                        expected[0] = expected[0].wrapping_add(scalar);
-                    } else {
-                        for (phase, &coefficient) in expected.iter_mut().zip(f) {
-                            *phase = phase.wrapping_add(
-                                scalar.wrapping_mul(T::cast_from_signed(coefficient)),
-                            );
-                        }
-                    }
-                }
-                assert_eq!(
-                    native_phase(row, f),
-                    expected,
-                    "bucket {bucket}, input {index}"
-                );
-            }
-        }
-    }
-}
-
 #[test]
 fn public_native_control_spectra() {
     #[cfg(feature = "rustfft")]
@@ -943,20 +860,6 @@ fn public_native_control_spectra() {
     {
         check_public_native_control_spectra::<u32, primus_fft::TfheFftTable>();
         check_public_native_control_spectra::<u64, primus_fft::TfheFftTable>();
-    }
-}
-
-#[test]
-fn sparse_native_control_phases() {
-    #[cfg(feature = "rustfft")]
-    {
-        check_sparse_native_control_phases::<u32, primus_fft::RustFftTable>();
-        check_sparse_native_control_phases::<u64, primus_fft::RustFftTable>();
-    }
-    #[cfg(feature = "tfhe-fft")]
-    {
-        check_sparse_native_control_phases::<u32, primus_fft::TfheFftTable>();
-        check_sparse_native_control_phases::<u64, primus_fft::TfheFftTable>();
     }
 }
 
@@ -1032,7 +935,7 @@ fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
             .try_generate_blind_rotation_key(&client, &mut rng)
             .unwrap();
         let block = key.block_bootstrapping_key().unwrap();
-        assert!(key.sparse_bootstrapping_key().is_none());
+        assert!(key.classic_controls().is_none());
         assert_eq!(block.block_count(), 2);
         for block_index in 0..2 {
             let (range, coefficients) = block.block_data(block_index);
@@ -1167,23 +1070,14 @@ fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
         Err(TfheEvaluationError::IncompatibleBlindRotationKey)
     ));
 
-    // Supporting direct binary blocks does not broaden the unrelated sparse
-    // and classic ternary algorithms' split capabilities.
-    for (method, secret_key_distr) in [
-        (
-            SPARSE,
-            SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 2 },
-        ),
-        (BlindRotationMethod::Classic, SecretKeyDistr::UniformTernary),
-    ] {
-        let mut unsupported = split_br;
-        unsupported.pbs.method = method;
-        unsupported.pbs.external_lwe.secret_key_distr = secret_key_distr;
-        assert!(matches!(
-            TfheContext::<u64, Table, _>::try_from_cbs_config(unsupported),
-            Err(primus_tfhe_ntru_fourier::TfheContextError::UnsupportedSplitBlindRotation)
-        ));
-    }
+    // Split BR requires binary controls. Classic ternary uses ordinary BR.
+    let mut unsupported = split_br;
+    unsupported.pbs.method = BlindRotationMethod::Classic;
+    unsupported.pbs.external_lwe.secret_key_distr = SecretKeyDistr::UniformTernary;
+    assert!(matches!(
+        TfheContext::<u64, Table, _>::try_from_cbs_config(unsupported),
+        Err(primus_tfhe_ntru_fourier::TfheContextError::UnsupportedSplitBlindRotation)
+    ));
 }
 
 #[test]
@@ -1248,7 +1142,7 @@ fn check_key_generation_boundaries<Table: FftTable>() {
     use primus_tfhe_ntru_fourier::{ClientKey, KeyGenerationError, KeyGenerator, TfheKeyError};
     use rand::Rng;
 
-    let mut config = config::<u32>(SPARSE);
+    let mut config = config::<u32>(BlindRotationMethod::Classic);
     config.bsk_poly_length = PolyLength::new(64);
     let context = TfheContext::<u32, Table, _>::try_from_pbs_config(config)
         .unwrap()
@@ -1361,37 +1255,6 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         ))
     ));
 
-    // Sparse preflight must also precede client generation in both complete paths.
-    let mut invalid_config = config;
-    invalid_config.method = BlindRotationMethod::Sparse {
-        copy_count: 0,
-        bucket_count: 8,
-    };
-    let invalid =
-        TfheContext::<u32, Table, _>::try_from_cbs_config(primus_tfhe_ntru_fourier::CbsConfig {
-            projection: primus_tfhe_ntru::NtruProjectionMethod::Separate,
-            fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
-            pbs: invalid_config,
-            gadget: CbsGadgetConfig {
-                trace: decomposition(),
-                scheme_switch: decomposition(),
-                output: decomposition(),
-            },
-        })
-        .unwrap();
-    let mut invalid_generator = KeyGenerator::new(&invalid);
-    assert!(matches!(
-        invalid_generator.try_generate_blind_rotation_key(&imported(8, 1), &mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        invalid_generator.try_generate(&mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        invalid_generator.try_generate_circuit_bootstrap_keys(&mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
     assert_eq!(rng.next_u64(), untouched.next_u64());
 
     // An invertible f outside return q is still valid for standalone BR.

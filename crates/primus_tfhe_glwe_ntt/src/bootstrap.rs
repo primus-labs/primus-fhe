@@ -17,7 +17,6 @@ use crate::{
     block::{BlockGlweBlindRotationWorkspace, BlockGlweBootstrappingKey},
     bootstrapping_key::NttGlweBootstrappingKey,
     key::BlindRotationKey,
-    sparse::{SparseGlweBlindRotationWorkspace, SparseGlweBootstrappingKey},
 };
 
 /// Borrowed ring key-switch key with owned scratch and switched output.
@@ -85,10 +84,6 @@ enum BlindRotationResources<'a, T: FheUint> {
     Classic {
         key: &'a NttGlweBootstrappingKey<T>,
         scratch: NttGlweBlindRotationWorkspace<T>,
-    },
-    Sparse {
-        key: &'a SparseGlweBootstrappingKey<T, BarrettModulus<T>>,
-        scratch: SparseGlweBlindRotationWorkspace<T>,
     },
     Block {
         key: &'a BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
@@ -185,10 +180,6 @@ where
                     key,
                     scratch: NttGlweBlindRotationWorkspace::new(key),
                 },
-                BlindRotationKey::Sparse(key) => BlindRotationResources::Sparse {
-                    key,
-                    scratch: SparseGlweBlindRotationWorkspace::new(key.controls()),
-                },
                 BlindRotationKey::Block(key) => BlindRotationResources::Block {
                     key,
                     scratch: BlockGlweBlindRotationWorkspace::new(key),
@@ -238,9 +229,6 @@ where
     ) -> R {
         match &mut self.blind_rotation {
             BlindRotationResources::Classic { scratch, .. } => {
-                scratch.with_external_product(size, operation)
-            }
-            BlindRotationResources::Sparse { scratch, .. } => {
                 scratch.with_external_product(size, operation)
             }
             BlindRotationResources::Block { scratch, .. } => {
@@ -293,15 +281,6 @@ where
                     parameters.blind_rotation_params().cipher_modulus(),
                     self.context.table(),
                     scratch,
-                ),
-            BlindRotationResources::Sparse { key, scratch } => scratch
-                .blind_rotate_interleaved_lookup_table_kernel_to(
-                    key,
-                    small_lwe,
-                    lookup_table.as_view(),
-                    &modulus_switch,
-                    self.accumulator.as_mut_view(),
-                    self.context.table(),
                 ),
             BlindRotationResources::Block { key, scratch } => scratch
                 .blind_rotate_interleaved_lookup_table_kernel_to(

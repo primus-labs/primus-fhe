@@ -9,7 +9,7 @@ use primus_reduce::RingContext;
 
 use crate::{BlockBootstrappingKeyError, NtruBlindRotationControls};
 
-/// Coefficient controls for complete logical blocks, without a bucket map.
+/// Coefficient controls for complete logical blocks.
 ///
 /// Each block stores its `w` binary controls. `AtMostOne` additionally stores an
 /// independently encrypted dummy `d = 1 - sum(s_i)`; `ExactlyOne` has no dummy.

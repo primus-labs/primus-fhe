@@ -59,7 +59,7 @@ mod workloads {
         config: PbsConfig<Word>,
     ) {
         let context = TfheContext::<Word, Table>::try_from_pbs_config(config).unwrap();
-        // Client: reset both seeds per case so fixed classic/sparse use matching inputs.
+        // Client: fixed seeds keep setup and inputs reproducible.
         let mut key_rng = StdRng::seed_from_u64(42);
         let (client, server) = context.try_generate_keys(&mut key_rng).unwrap();
         let secret = client.external_lwe_secret_key();
@@ -106,9 +106,6 @@ mod workloads {
     }
 
     fn benchmark<Table: FftTable>(c: &mut Criterion, engine: &str) {
-        // Only the algorithm changes in this fixed-weight comparison; dense uses a different profile.
-        let mut fixed = experimental::SPARSE_PBS_U64;
-        fixed.method = BlindRotationMethod::Classic;
         measure::<u32, Table>(c, engine, "classic_dense/u32", dense_u32());
         measure::<u64, Table>(
             c,
@@ -116,8 +113,6 @@ mod workloads {
             "classic_dense/u64",
             experimental::CLASSIC_PBS_U64,
         );
-        measure::<u64, Table>(c, engine, "classic_fixed/u64", fixed);
-        measure::<u64, Table>(c, engine, "sparse_fixed/u64", experimental::SPARSE_PBS_U64);
     }
 
     /// Frozen comparison card: independent n1024/h128 and k1/N4096 secrets.

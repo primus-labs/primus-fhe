@@ -43,7 +43,7 @@ where
     /// # Correctness
     /// The circuit key must share the context's intended accumulator secret and
     /// NTT representation; compatibility checks do not establish these identities.
-    /// Switching between classic and sparse resources must preserve both secrets.
+    /// Switching between Classic and Block resources must preserve both secrets.
     pub fn try_new<LM: primus_reduce::RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         circuit_key: &'a CircuitBootstrapKey<T>,
@@ -67,7 +67,7 @@ where
     /// Binds a precompiled integer CBS program without cloning or recompilation.
     /// Checks its N, external q, accumulator Q and exact output gadget basis
     /// against the circuit key before allocating projection storage.
-    /// Both classic and sparse BR use this same path.
+    /// Both Classic and Block BR use this same path.
     ///
     /// # Correctness
     /// Inherits [`Self::try_new`]'s secret and representation requirements. Noise

@@ -44,14 +44,6 @@ name = "fourier_many_lut"
 required-features = ["rustfft"]
 
 [[example]]
-name = "fourier_sparse"
-required-features = ["rustfft"]
-
-[[example]]
-name = "fourier_sparse_circuit_bootstrap"
-required-features = ["rustfft"]
-
-[[example]]
 name = "fourier_msb_cbs"
 required-features = ["rustfft"]
 

@@ -1,4 +1,4 @@
-//! Coefficient controls and common numerical layout for grouped blind rotation.
+//! Coefficient controls and numerical layout for block blind rotation.
 
 use std::alloc::Layout;
 
@@ -8,8 +8,7 @@ use primus_integer::FheUint;
 use primus_lattice::{GadgetSize, LweDimension};
 use primus_reduce::{Modulus, RingContext};
 
-/// Allocation/layout failures shared by coefficient control owners. Owners map
-/// these into their public error so block material does not expose bucket terms.
+/// Allocation and layout failures mapped to the block key's public error.
 pub(crate) enum BlindRotationControlsError {
     RotationDomainTooLarge,
     StorageSizeOverflow,
@@ -18,8 +17,7 @@ pub(crate) enum BlindRotationControlsError {
 
 /// Coefficient-domain GGSW controls and their common blind-rotation layout.
 ///
-/// The owning key determines how selectors and any independent dummy controls are
-/// grouped. This storage retains no public bucket map or secret assignment.
+/// The owning key determines block geometry and placement of any independent dummies.
 /// NTT uses explicit canonical residues and Fourier uses exact native-torus
 /// coefficients; their representations are not interchangeable.
 pub struct GlweBlindRotationControls<T: FheUint, M: RingContext<T>> {

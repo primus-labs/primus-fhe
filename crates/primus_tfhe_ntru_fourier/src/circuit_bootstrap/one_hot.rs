@@ -19,7 +19,7 @@ pub use pair::OneHotProjection;
 mod selectors;
 pub use selectors::FourierNgswSelectors;
 
-/// One-hot extension of CBS for classic, sparse and block BR.
+/// One-hot extension of CBS for classic and block BR.
 ///
 /// Input uses unsigned Rounded encoding with t=2*M, M=2^tau, tau>=1.
 /// Full-output methods materialize all M selectors, including r=0;

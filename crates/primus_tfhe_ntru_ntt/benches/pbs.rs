@@ -54,7 +54,7 @@ fn measure<Word: FheUint, Table: MonomialNttTable<ValueT = Word>>(
     config: PbsConfig<Word, PowOf2Modulus<Word>>,
 ) {
     let context = TfheContext::<Word, Table, _>::try_from_pbs_config(config).unwrap();
-    // Client: reset both seeds per case so fixed classic/sparse use matching inputs.
+    // Client: prepare deterministic keys and input for this case.
     let mut key_rng = StdRng::seed_from_u64(42);
     let (client, server) = context.try_generate_keys(&mut key_rng).unwrap();
     let secret = client.external_lwe_secret_key();
@@ -101,13 +101,8 @@ fn measure<Word: FheUint, Table: MonomialNttTable<ValueT = Word>>(
 }
 
 fn benchmarks(c: &mut Criterion) {
-    // Only the algorithm changes in this fixed-weight comparison; dense uses a different profile.
-    let mut fixed = experimental::SPARSE_PBS_U64;
-    fixed.method = BlindRotationMethod::Classic;
     measure::<u32, U32NttTable>(c, "ntt", "classic_dense/u32", dense_u32());
     measure::<u64, U64NttTable>(c, "ntt", "classic_dense/u64", experimental::CLASSIC_PBS_U64);
-    measure::<u64, U64NttTable>(c, "ntt", "classic_fixed/u64", fixed);
-    measure::<u64, U64NttTable>(c, "ntt", "sparse_fixed/u64", experimental::SPARSE_PBS_U64);
 }
 
 criterion::criterion_group! {

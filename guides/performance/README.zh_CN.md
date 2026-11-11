@@ -22,7 +22,7 @@ A/B 对照固定算法、输入、参数、编译器、feature、CPU 和实际�
 
 比较相同输出终点。普通 PBS 基准包含配置的返回路径。GLWE 的 `cbs_identity` 对照以可消费的变换域 GSW 为终点，准备阶段用真实的深度一 CMux 检查输入 0 和 1。如果负载需要 CMux 和 LWE 返回，应将它们明确计入。LightFHE G1 和 CMUX2 的派生 profile 是基准用例，输入和消费契约与教学预设不同。历史跨库 PBS、CBS 和 EBS 参数各异，适合作为功能参考。 [对照命令](../development/testing.md#glwe-functional-comparison-benchmarks) · [当前基准参数](../development/tfhe-parameters.md#current-backend-benchmarks)
 
-单输入和批量盲旋转分开测量。保留的 sparse 调度沿用加密 selector、dummy 和算术边界，收益取决于实际几何和工作负载。即使 scheme switching 局部提速或平方密钥 payload 变小，含 CMux 与返回的 CBS 仍需完整测量。 [自举契约](../development/bootstrapping-contracts.md)
+分别测量 Block 的单输入和批量盲旋转。性能取决于分块几何、占用规则和工作负载。即使 scheme switching 局部提速或平方密钥 payload 变小，含 CMux 与返回的 CBS 仍需完整测量。 [自举契约](../development/bootstrapping-contracts.md)
 
 <a id="fourier-key-generation"></a>
 

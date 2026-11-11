@@ -31,7 +31,7 @@ The example selects an `experimental` operation config, builds a context and pai
 
 GLWE supports both PBS orders. NTRU uses independent external LWE and ring secrets, with a return path from ring modulus Q to external modulus q. Invertibility applies to the ring secret; external binary/ternary secrets have no odd-weight requirement. Fourier rings currently support only `NativeModulus`, with RustFFT or TFHE-FFT; NTRU's external q is independently configurable.
 
-See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabilities) for classic and sparse coverage. Operation configs bind message moduli and key domains; contexts prepare the corresponding clients and LUT compilers. Raw ciphertexts do not carry encoding or key identity.
+See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabilities) for Classic and Block coverage. Operation configs bind message moduli and key domains; contexts prepare the corresponding clients and LUT compilers. Raw ciphertexts do not carry encoding or key identity.
 
 ## BFV and BGV
 

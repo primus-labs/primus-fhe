@@ -69,11 +69,11 @@ where
 {
     /// Generates a client and complete CBS material, including the ordinary KS key.
     /// Shares the accepted ring representation between BR and CBS, then releases
-    /// it before preparing KS. Sparse matching retries only the public map.
+    /// it before preparing KS.
     ///
     /// # Errors
-    /// Missing CBS state and invalid sparse choices precede secret sampling.
-    /// Propagates secret-generation, return-domain and matching failures.
+    /// Missing CBS state and invalid block geometry precede secret sampling.
+    /// Propagates secret-generation and return-domain failures.
     ///
     /// # Correctness
     /// Inherits [`Self::try_generate`]'s BR/KS contracts, the noise requirements of
@@ -95,7 +95,7 @@ where
     }
 
     /// Generates configured CBS/return keys and optional independent `NLEV[1]`.
-    /// Sparse or Block lookup requests this lift when all input chunks select coefficients;
+    /// Block lookup requests this lift when all input chunks select coefficients;
     /// ordinary classic reuses its initializer, while split classic also needs this
     /// independent ordinary lift. Lift metadata is checked before sampling.
     /// Reuses the accepted ring transform and inverse across all generated material.
@@ -157,7 +157,7 @@ where
     }
 
     /// The context owns this complete CBS operation; client compatibility, the
-    /// external-q magnitude bound and sparse geometry are already established.
+    /// external-q magnitude bound and block geometry are already established.
     /// Share the accepted transform and inverse across BR/CBS, then release them
     /// before allocating coefficient-domain Q→q return-key rows.
     fn generate_circuit_server_with_main<R: rand::Rng + rand::CryptoRng>(

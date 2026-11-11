@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-GLWE-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with classic binary/ternary or sparse fixed-weight binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
+GLWE-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates and CBS with Classic binary/ternary or Block binary blind rotation, in both PBS orders. See the [operation and encoding guide](../primus_tfhe/README.md#choosing-an-operation) and [GLWE parameter/key domains](../primus_tfhe_glwe/README.md).
 
 ## Quick start
 
@@ -42,12 +42,10 @@ All examples use u64 and prepare reusable state outside the request loop. Replac
 | --- | --- | --- |
 | Two successive PBS calls | `CLASSIC_PBS_U64` | [ntt_basic](examples/ntt_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`, messages 4→4 | [ntt_boolean](examples/ntt_boolean.rs) |
-| The same scoring workflow with sparse BR | `SPARSE_PBS_U64` | [ntt_sparse](examples/ntt_sparse.rs) |
 | ManyLUT grade/flag, then encrypted combination | `CLASSIC_MANY_LUT_U64` | [ntt_many_lut](examples/ntt_many_lut.rs) |
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [ntt_circuit_bootstrap](examples/ntt_circuit_bootstrap.rs) |
 | MSB Boolean NOT → encrypted service limits | `CLASSIC_CBS_U64`, MSB input | [ntt_msb_cbs](examples/ntt_msb_cbs.rs) |
 | Independent q/Q with both PBS orders | Inline demonstration config | [ntt_two_moduli](examples/ntt_two_moduli.rs) |
-| The same CBS workflow with sparse BR | `SPARSE_CBS_U64` | [ntt_sparse_circuit_bootstrap](examples/ntt_sparse_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [mvb_thresholds](examples/mvb_thresholds.rs) |
 
 Ordinary PBS/ManyLUT and MVB use `context.try_generate_keys(rng)`. Bind the external secret from `client.external_lwe_secret_key()` to `context.encryptor`; decode PBS/ManyLUT with `pbs_decryptor`, and Scaled MVB output with `mvb_decryptor`. Public-key input uses `public_encryptor`. Clients need no LUT or manual codec.
@@ -70,11 +68,9 @@ Custom tables must implement `MonomialNttTable`. Context construction checks len
 
 Factorized MVB requires an odd coefficient modulus. Its prepared integer factors remain in NTT form; factor norms amplify BR noise.
 
-Sparse BR must be selected explicitly with `BlindRotationMethod::Sparse` in `config.method`; a fixed-weight secret alone still permits classic BR. Sparse requires binary weight `0<h<n`, `copy_count>=1` and `bucket_count>=max(copy_count,h)`. Both orders support PBS, ManyLUT, MVB and CBS. A working PBS configuration does not by itself establish CBS output precision or CMux noise margin.
-
 Direct block BR uses `BlindRotationMethod::Block` together with `SecretKeyDistr::BlockBinary { block_size, occupancy }`; the logical LWE dimension must be divisible by that positive block width. Empty blocks are supported. Ordinary PBS, ManyLUT, MVB and CBS keep their usual factories in either PBS order. For raw single-input BR, use `block::BlockGlweBlindRotationWorkspace::new(key)` and its `blind_rotate_lookup_table_to` method; for a batch use `block::BlockGlweBlindRotationBatchWorkspace::<T>::new(key)` and `blind_rotate_lookup_table_many_to`. The default capacity is four; `::<T, 16>` shares key tiles across up to sixteen independent inputs with a larger reusable workspace. Both capacities preserve each input's arithmetic and handle short tails. The key contains no map or private occupancy information; scratch caches at most `block_size / 4` rotation descriptors. The original Classic presets remain unchanged.
 
-For independent u32 or u64 inputs sharing one key and LUT, the default-capacity block batch workspace above and `sparse::SparseGlweBlindRotationBatchWorkspace::new(key.controls())` prepare four disjoint workspaces. `blind_rotate_lookup_table_many_to` writes a paired slice of caller-owned coefficient GLWE outputs without allocation. It interleaves groups of four on one thread, then handles a pair and a final single input as needed; single inputs retain the ordinary kernel. Inputs retain their order and individual ciphertext results; the caller decides whether to add the ring outputs or return them separately. This raw operation performs no KS/extraction. Single-input applications keep their single-input workspace.
+For independent u32 or u64 inputs sharing one key and LUT, the default-capacity Block batch workspace prepares four disjoint workspaces. `blind_rotate_lookup_table_many_to` writes a paired slice of caller-owned coefficient GLWE outputs without allocation. It interleaves groups of four on one thread, then handles a pair and a final single input as needed; single inputs retain the ordinary kernel. Inputs retain their order and individual ciphertext results; the caller decides whether to add the ring outputs or return them separately. This raw operation performs no KS/extraction. Single-input applications keep their single-input workspace.
 
 Keep the context, keys and compiled programs across requests. `_to` methods reuse evaluator scratch and caller outputs; concurrent requests need separate mutable evaluators. MVB programs stay bound to their context. `KeyGenerator::try_generate_blind_rotation_key(client, rng)` generates only BR material using the context's `config.method`; independent components must use the same actual secrets and transform representation. Advanced material composition and per-call borrowing contracts are documented on [KeyGenerator](src/key.rs), [Evaluator](src/evaluator.rs) and [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs). Context factories prepare the default workflow directly. For borrowed CBS, compile the program first, then bind it with the chosen gadget parameters and circuit key through `CircuitBootstrapEvaluator::try_new`.
 
@@ -92,14 +88,14 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 
 | Target | Timed request |
 | --- | --- |
-| [pbs](benches/pbs.rs) | One complete PBS; dense u32/u64 and fixed-weight classic/sparse u64; opt-in Low/High comparison: [testing guide](../../guides/development/testing.md#tfhe-benchmarks) |
+| [pbs](benches/pbs.rs) | One complete PBS; dense Classic u32/u64; opt-in Low/High comparison: [testing guide](../../guides/development/testing.md#tfhe-benchmarks) |
 | [modulus_domains](benches/modulus_domains.rs) | Paired q=Q/q1024 complete PBS, either order; select `PRIMUS_DOMAIN_CASE=same/bk`, `split/bk`, `same/kb` or `split/kb` |
 | [many_lut](benches/many_lut.rs) | One two-output grade/flag ManyLUT, u64 |
 | [mvb](benches/mvb.rs) | One 17-output threshold MVB, u64 |
 | [cbs](benches/cbs.rs) | One predicate CBS, CMux and a coefficient returned as LWE, u64 |
 | [cbs_identity](benches/cbs_identity.rs) | Identity CBS → NTT GGSW or CBS＋CMux, bit 0/1; derived G1 Q54, padded/MSB input |
 
-Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and workflow decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
+Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and workflow decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
 `cbs_identity` uses a benchmark-local derived comparison configuration, not a teaching preset or an exact reproduction of the author protocol. It checks both bits with real depth-one CMux consumption before measurement; a failure aborts the run. These finite fixtures do not establish security, failure probability or deeper-tree precision; see the [parameter mapping and validation scope](../../guides/performance/README.md#tfhe-comparisons).
 

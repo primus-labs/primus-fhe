@@ -1,4 +1,4 @@
-//! Shared coefficient aggregation and reusable sparse blind-rotation workspace.
+//! Coefficient aggregation and blind rotation for grouped NTRU controls.
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
@@ -13,10 +13,9 @@ use primus_poly::Polynomial;
 use primus_reduce::ReduceOnceSlice;
 use primus_tfhe_ntru::NtruBlindRotationControls;
 
-use super::SparseNtruBootstrappingKey;
 use crate::bootstrap::BlindRotationPairWorkspace;
 
-/// Reusable aggregate and product scratch, independent of bucket geometry.
+/// Reusable aggregate and product scratch, independent of group geometry.
 pub(crate) struct AggregationWorkspace<T: FheUint> {
     pub(crate) exponents: Vec<usize>,
     aggregate: Vec<T>,
@@ -36,31 +35,11 @@ impl<T: FheUint> AggregationWorkspace<T> {
     }
 }
 
-/// The evaluator established key/workspace/table compatibility and quantized every mask.
-/// Every bucket is processed, including empty ones and zero exponents; its encrypted
-/// dummy and zero selections still contribute noise. `scratch` initially holds the
-/// public rotated LUT. Bucket zero lifts it with NLEV controls; later buckets use
-/// NGSW controls. Final output stays in `current`, even with just one bucket.
-pub(crate) fn rotate_buckets<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
-    key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut AggregationWorkspace<T>,
-    current: &mut Ntru<Vec<T>>,
-    scratch: &mut Ntru<Vec<T>>,
-    basis: &ApproxSignedBasis<T>,
-    modulus: BarrettModulus<T>,
-    ntt: &Table,
-) {
-    let groups = (0..key.bucket_count()).map(|bucket| {
-        let (indices, data) = key.bucket_data(bucket);
-        (indices.iter().copied(), data)
-    });
-    rotate_groups(groups, workspace, current, scratch, basis, modulus, ntt);
-}
-
 /// The first group's NLEV aggregate lifts public P; later groups actually hold
 /// `NGSW[H] = NLEV[f*H]` and act on ciphertexts. Their product arithmetic agrees,
-/// so bucket and direct-block layouts share this loop without a first-group
-/// branch. Every group is consumed, including encrypted zero/dummy controls.
+/// so the same loop consumes every block, including encrypted zeros and any
+/// dummy. On entry, `scratch` holds the public rotated LUT. The final
+/// coefficient-domain result stays in `current`.
 pub(crate) fn rotate_groups<'a, T, Table, I>(
     groups: impl Iterator<Item = (I, &'a [T])>,
     workspace: &mut AggregationWorkspace<T>,
@@ -98,25 +77,6 @@ pub(crate) fn rotate_groups<'a, T, Table, I>(
         );
         core::mem::swap(current, scratch);
     }
-}
-
-/// Both current buffers hold their independently rotated public LUT on entry.
-/// Each source-control group is consumed for both inputs before advancing;
-/// transforms and external products then reuse the original shared scratch.
-pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
-    key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut AggregationWorkspace<T>,
-    second: &mut BlindRotationPairWorkspace<T>,
-    buffers: [&mut Ntru<Vec<T>>; 2],
-    basis: &ApproxSignedBasis<T>,
-    modulus: BarrettModulus<T>,
-    ntt: &Table,
-) {
-    let groups = (0..key.bucket_count()).map(|bucket| {
-        let (indices, data) = key.bucket_data(bucket);
-        (indices.iter().copied(), data)
-    });
-    rotate_groups_pair(groups, workspace, second, buffers, basis, modulus, ntt);
 }
 
 /// Aggregates each group's controls for both inputs before advancing, preserving
@@ -176,13 +136,13 @@ pub(crate) fn rotate_groups_pair<'a, T, Table, I>(
 }
 
 /// Starts from the encrypted dummy when present, otherwise clears the aggregate,
-/// then adds every selector in key order. The iterator selects coordinates from each input's complete exponent slice;
-/// sparse buckets supply public indices and direct blocks supply a range. Pairing
-/// shares an accumulator traversal without skipping zero exponents or encrypted
-/// zeros; an odd final selector uses the single-product kernel. For u64, pairs
-/// retain [0,2q) residues until one final normalization before NTT; other widths
-/// retain canonical updates. The key and workspace establish complete, equally
-/// sized controls and canonical source residues.
+/// then adds every selector in key order. The iterator selects coordinates
+/// from each input's exponent slice. Pairing shares an accumulator traversal
+/// and includes zero exponents and encrypted zeros. An odd final selector uses
+/// the single-product kernel. For u64, pairs retain [0,2q) residues until one
+/// final normalization before NTT. Other widths retain canonical updates.
+/// The key and workspace establish complete, equally sized controls and
+/// canonical source residues.
 /// Instantiated only for one input or the fixed two-input window.
 #[inline]
 fn aggregate_controls<T: FheUint, const INPUTS: usize>(

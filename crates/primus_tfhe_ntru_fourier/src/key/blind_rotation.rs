@@ -1,4 +1,4 @@
-//! Independent ownership and compatibility of classic, sparse or block BR controls.
+//! Independent ownership and compatibility of classic and block BR controls.
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{Complex64, TorusFftValue};
@@ -6,13 +6,13 @@ use primus_lattice::nlev::FourierNlev;
 use primus_ntru::SecretKeyDistr;
 
 use super::ClassicControls;
-use crate::{PbsParameters, block::BlockNtruBootstrappingKey, sparse::SparseNtruBootstrappingKey};
+use crate::{PbsParameters, block::BlockNtruBootstrappingKey};
 
 /// Owning Fourier blind-rotation material, independent of LWE return and CBS keys.
 /// The classic initializer and controls share the stored blind-rotation basis.
 /// Classic coordinate zero holds NLEV bit controls for fused lifting; later
 /// coordinates hold NGSW controls (positive/negative pairs for ternary).
-/// Grouped keys lift with their first bucket or block and carry no initializer.
+/// Block keys lift with their first group and carry no initializer.
 pub struct BlindRotationKey<T: TorusFftValue> {
     pub(super) blind_rotation_basis: ApproxSignedBasis<T>,
     pub(super) controls: Controls<T>,
@@ -26,7 +26,6 @@ pub(super) enum Controls<T: TorusFftValue> {
         initializer: FourierNlev<Vec<Complex64>>,
         data: Vec<Complex64>,
     },
-    Sparse(SparseNtruBootstrappingKey<T>),
     // The same exact coefficient controls serve either online transform mode.
     Block {
         key: BlockNtruBootstrappingKey<T>,
@@ -38,7 +37,6 @@ pub(super) enum Controls<T: TorusFftValue> {
 // Select a borrowed algorithm once, together with the material it requires.
 pub(crate) enum BootstrappingControls<'a, T: TorusFftValue> {
     Classic(ClassicControls<'a>),
-    Sparse(&'a SparseNtruBootstrappingKey<T>),
     Block {
         key: &'a BlockNtruBootstrappingKey<T>,
         precision: crate::FourierPrecision,
@@ -59,33 +57,22 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
             _ => crate::FourierPrecision::Ordinary,
         }
     }
-    /// Returns coefficient-domain bucket selections for sparse BR material.
-    #[must_use]
-    pub fn sparse_bootstrapping_key(&self) -> Option<&SparseNtruBootstrappingKey<T>> {
-        match &self.controls {
-            Controls::Classic { .. } | Controls::Block { .. } | Controls::Split(_) => None,
-            Controls::Sparse(key) => Some(key),
-        }
-    }
-
     /// Returns contiguous exact coefficient controls for direct block BR.
     #[must_use]
     pub fn block_bootstrapping_key(&self) -> Option<&BlockNtruBootstrappingKey<T>> {
         match &self.controls {
             Controls::Block { key, .. } => Some(key),
-            Controls::Classic { .. } | Controls::Sparse(_) | Controls::Split(_) => None,
+            Controls::Classic { .. } | Controls::Split(_) => None,
         }
     }
 
     /// Borrows the classic initializer and binary/ternary control layout.
-    /// Returns `None` for grouped or split keys; neither exposes ordinary classic views.
+    /// Returns `None` for Block and split Classic keys.
     #[must_use]
     pub fn classic_controls(&self) -> Option<ClassicControls<'_>> {
         match self.bootstrapping_controls() {
             BootstrappingControls::Classic(controls) => Some(controls),
-            BootstrappingControls::Sparse(_)
-            | BootstrappingControls::Block { .. }
-            | BootstrappingControls::Split(_) => None,
+            BootstrappingControls::Block { .. } | BootstrappingControls::Split(_) => None,
         }
     }
 
@@ -95,24 +82,11 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
             Controls::Classic { initializer, data } => BootstrappingControls::Classic(
                 ClassicControls::new(initializer, data, self.input_distribution.is_binary()),
             ),
-            Controls::Sparse(key) => BootstrappingControls::Sparse(key),
             Controls::Block { key, precision } => BootstrappingControls::Block {
                 key,
                 precision: *precision,
             },
             Controls::Split(key) => BootstrappingControls::Split(key),
-        }
-    }
-
-    /// Moves independently generated bucket controls into their BR domain.
-    pub(crate) fn from_sparse<LM: primus_reduce::RingContext<T>>(
-        parameters: &PbsParameters<T, LM>,
-        controls: SparseNtruBootstrappingKey<T>,
-    ) -> Self {
-        Self {
-            blind_rotation_basis: parameters.blind_rotation().basis().clone(),
-            controls: Controls::Sparse(controls),
-            input_distribution: parameters.external_lwe().secret_key_distr(),
         }
     }
 
@@ -176,10 +150,6 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                                 occupancy: key.occupancy(),
                             }
                         && key.controls().input_dimension() == parameters.external_lwe_dimension()
-                        && key.controls().control_len() == parameters.blind_rotation().nlev_len()
-                }
-                Controls::Sparse(key) => {
-                    key.input_dimension() == parameters.external_lwe_dimension()
                         && key.controls().control_len() == parameters.blind_rotation().nlev_len()
                 }
             }

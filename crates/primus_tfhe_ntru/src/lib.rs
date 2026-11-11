@@ -10,9 +10,8 @@
 //! It also provides a [`LookupTableCompiler`] for Rounded LUTs. [`ClientKey`] owns the
 //! complete setup secrets; [`Encryptor`] and [`Decryptor`] borrow only the external
 //! message secret and bind its codec. Choose the NTT/Fourier
-//! backend for transform tables, key generation and evaluators. Shared grouped
-//! coefficient storage is provided by [`NtruBlindRotationControls`];
-//! [`SparseNtruBootstrappingKey`] adds the sparse bucket map and public weight.
+//! backend for transform tables, key generation and evaluators.
+//! [`NtruBlindRotationControls`] provides the shared Block coefficient storage.
 //! Concrete backends provide experimental u64 operation/message configurations.
 //! This family supplies the shared numerical configuration types and sampling state.
 //! [`KeyGenerationError`] and [`TfheClientError`] report key generation and family
@@ -66,7 +65,6 @@ mod key;
 mod lookup_table;
 mod one_hot;
 mod parameters;
-mod sparse;
 
 pub use block::BlockNtruBootstrappingKey;
 pub use circuit_bootstrap::CbsGadgetParameters;
@@ -74,14 +72,13 @@ pub use config::{CbsConfig, PbsConfig};
 pub use controls::NtruBlindRotationControls;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
-    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
+    TfheClientError, TfheKeyError, TfheParameterError,
 };
 pub use key::ClientKey;
 pub use one_hot::{NlevSelectors, OneHotBootstrapError, OneHotLookupTable};
 pub use parameters::{CbsParameters, PbsParameters};
 pub use primus_lwe::LweKeySwitchingParameters;
 pub use primus_tfhe::{LweConfig, ModulusConfig, ModulusConfigError};
-pub use sparse::SparseNtruBootstrappingKey;
 
 pub use primus_ntru::{
     LweReturnBatchWorkspace, LweReturnEvaluator, NlevParameters, NtruParameters,

@@ -34,10 +34,8 @@ ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotat
 | Blind-rotation mode | PBS / ManyLUT | CBS | Factorized MVB | One-hot CBS |
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | Both PBS orders | Yes | Yes | Not provided |
-| GLWE sparse fixed-weight binary | Both PBS orders | Yes | Yes | Not provided |
 | GLWE block binary | Both PBS orders | Yes | Yes | Not provided |
 | NTRU classic binary/ternary | Yes | Yes | Yes | Yes |
-| NTRU sparse fixed-weight binary | Yes | Yes | Yes | Yes |
 | NTRU NTT block binary | Yes | Yes | Yes | Yes |
 | NTRU Fourier block binary (u64) | Yes | Yes | Yes | Yes |
 
@@ -45,9 +43,11 @@ All four backends provide secret-key and LWE public-key clients. Fourier support
 
 ## Selecting blind rotation
 
-All backends re-export `BlindRotationMethod` and select it in `config.method`; changing a secret distribution alone does not select a different algorithm. `Classic` supports binary/ternary, including fixed-weight distributions. Explicit `Sparse { copy_count, bucket_count }` requires fixed-weight binary with `0<h<n`; sparse ternary is unsupported. Matching failure returns an error after retrying the public map, without changing the client secret or falling back to classic.
+All backends re-export `BlindRotationMethod` and select it in `config.method`; changing a secret distribution alone does not select a different algorithm. `Classic` supports binary/ternary, including fixed-weight distributions.
 
 `SecretKeyDistr::BlockBinary { block_size, occupancy }` samples consecutive independent blocks. `BlockOccupancy::AtMostOne` uniformly selects the zero block or one of its single-`1` states; `ExactlyOne` selects only the single-`1` states. The logical key length must be a nonzero multiple of the block size. `Classic` can use either distribution; `Block` selects direct block aggregation on all four backends. Every bit control is processed, including encrypted zeros. Only `AtMostOne` adds an independently encrypted empty-block dummy; `ExactlyOne` neither stores nor samples it. NTRU Fourier requires u64 and supports ordinary or split BR; trace and SS precision remain independent. Block secrets need their own noise and security assessment. GLWE ring-KS retains the logical LWE prefix followed by public zeros; the padded ring length need not be divisible by the block size.
+
+For a former bucketed Sparse configuration, select `Classic` to retain the fixed-weight binary distribution. Regenerate evaluation keys and recheck the noise budget. Using `Block` requires a block-binary secret and a separate parameter assessment.
 
 For ordinary PBS, construct `TfheContext::try_from_pbs_config(config)` and call `context.try_generate_keys(rng)` for `(ClientKey, ServerKey)`. For CBS or NTRU one-hot, use the CBS factory:
 
@@ -166,7 +166,7 @@ Reuse a packed LWE and output; `pack_to` forms `lhs+B*rhs`. Inputs must share th
 
 All outputs share one step-one BR, followed by separate public polynomial products. Output count is positive and unpadded, without reducing input resolution. Integer factor norms amplify BR noise; NTRU factors also amplify encrypted initialization error, and Fourier needs an FFT error budget. Scaled outputs require `mvb_decryptor`; feeding a Rounded-input PBS needs a separate encoding/noise check. Odd full-domain MVB and CBS outputs are not provided.
 
-All four backends support classic and sparse modes, with both GLWE orders. The [GLWE](../primus_tfhe_glwe_ntt/examples/mvb_thresholds.rs) and [NTRU](../primus_tfhe_ntru_ntt/examples/ntru_ntt_mvb_thresholds.rs) examples produce 17 threshold flags. Prefer ManyLUT when its capacity and rotation margin suffice; consider MVB for more outputs with small factor norms. Algebra and noise conditions are in [FactorizedLookupTable](src/lookup_table/factorized.rs) and the [MVB design](../../guides/development/bootstrapping-contracts.md#factorized-mvb).
+All four backends support Classic and Block, with both GLWE orders. The [GLWE](../primus_tfhe_glwe_ntt/examples/mvb_thresholds.rs) and [NTRU](../primus_tfhe_ntru_ntt/examples/ntru_ntt_mvb_thresholds.rs) examples produce 17 threshold flags. Prefer ManyLUT when its capacity and rotation margin suffice; consider MVB for more outputs with small factor norms. Algebra and noise conditions are in [FactorizedLookupTable](src/lookup_table/factorized.rs) and the [MVB design](../../guides/development/bootstrapping-contracts.md#factorized-mvb).
 
 ## Error boundaries
 

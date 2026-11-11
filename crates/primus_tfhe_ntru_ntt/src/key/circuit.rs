@@ -70,7 +70,7 @@ where
 {
     /// Generates a client and complete CBS material, including the ordinary KS key.
     /// Shares the accepted ring representation between BR and CBS, then releases
-    /// it before preparing KS. Sparse matching retries only the public map.
+    /// it before preparing KS.
     ///
     /// # Errors
     /// Missing CBS state and invalid grouping geometry precede secret sampling.
@@ -96,7 +96,7 @@ where
     }
 
     /// Generates configured CBS/return keys and optional independent `NLEV[1]`.
-    /// Sparse or Block lookup requests this lift when all input chunks select coefficients;
+    /// Block lookup requests this lift when all input chunks select coefficients;
     /// classic reuses its initializer. Lift metadata is checked before sampling.
     /// Reuses the accepted ring transform and inverse across all generated material.
     ///

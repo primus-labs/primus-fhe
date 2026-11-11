@@ -20,25 +20,13 @@ pub struct GadgetEncryptionConfig<D = DecompositionConfig> {
 
 /// Blind-rotation algorithm used for fresh paired keys or an existing client.
 ///
-/// This choice does not change the secret distribution in TFHE parameters. Classic
-/// accepts binary and ternary distributions; sparse requires fixed-weight binary,
-/// and block requires a block-binary secret. An unsupported distribution or backend
-/// capability is an error, never a request to resample or fall back to classic.
-/// Backend key generation validates bucket geometry against the actual secret and ciphertext
-/// layout. This algorithm choice carries no encryption parameters, keys, return policy,
-/// CBS material or runtime scratch.
+/// Classic accepts binary and ternary secrets, including fixed-weight binary.
+/// Block requires a block-binary distribution. Key generation checks block
+/// geometry before allocating control rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlindRotationMethod {
     /// Per-coordinate binary or ternary CMux controls, including fixed-weight distributions.
     Classic,
-    /// Bucketed controls for a fixed-weight binary secret with weight `0 < h < n`.
-    /// Matching retries the public map while keeping the client secret fixed.
-    Sparse {
-        /// Number of distinct buckets containing each input index; must be at least one.
-        copy_count: usize,
-        /// Number of buckets; must be at least `max(copy_count, h)`.
-        bucket_count: usize,
-    },
     /// Contiguous equal-sized blocks with at most one `1` per block.
     /// The block width is owned by the input secret distribution; all-zero
     /// blocks are valid. Backend key generation must support this method.

@@ -91,7 +91,7 @@ impl<'a, T: TorusFftValue, Table: FftTable> FourierFactorizedLookupTable<'a, T, 
     }
 }
 
-/// Reusable workspace for Native even-scale MVB with classic binary/ternary or sparse binary BR.
+/// Reusable workspace for native even-scale MVB with Classic or Block BR.
 ///
 /// Both PBS orders retain their usual external secrets and dimensions. BK does
 /// KS after each product; KB switches the input once before the shared BR.
@@ -110,7 +110,7 @@ impl<'a, T: TorusFftValue, Table: FftTable> FactorizedEvaluator<'a, T, Table> {
     /// Takes ownership of a prepared PBS evaluator and allocates the shared
     /// Fourier GLWE and one component-sized product. Its existing input/BR/FFT
     /// and return buffers are moved without copying key material or preparing
-    /// them again. Supports classic/sparse keys and both orders.
+    /// them again. Supports Classic and Block keys in both orders.
     #[must_use]
     pub fn new(evaluator: Evaluator<'a, T, Table>) -> Self {
         let context = evaluator.resources.context;
@@ -152,8 +152,8 @@ impl<'a, T: TorusFftValue, Table: FftTable> FactorizedEvaluator<'a, T, Table> {
     /// encoding, with a message in `0..lookup_table.input_domain_len()`. Input
     /// noise, pre-BR KS (for KB), and coefficient-wise quantization must keep
     /// the rotation in that message's LUT interval. Each integer factor W
-    /// amplifies BR noise, including encrypted-zero/dummy aggregation for sparse
-    /// keys. Public FFT multiplication adds phase error
+    /// amplifies BR noise, including aggregation of all Block selectors and any
+    /// dummies. Public FFT multiplication adds phase error
     /// `delta_b - sum(delta_a[j]*s[j])`, followed by output KS and Q→q rounding
     /// for BK. Budget these together: at the returned modulus r, the Scaled
     /// recovery condition is `abs((t*delta-r)*y + t*e) < r/2`, where delta is

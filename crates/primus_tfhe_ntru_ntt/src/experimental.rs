@@ -20,10 +20,6 @@ use crate::{
 const Q50: u64 = 1_125_899_906_826_241;
 const EXTERNAL_Q: u64 = 1 << 24;
 const ALPHA: f64 = 2.046_151_696_979_124e-6;
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 64,
-};
 
 /// Classic NTT PBS, n866/N2048, padded four-bit input, t_in=t_out=32.
 pub const CLASSIC_PBS_U64: PbsConfig<u64, PowOf2Modulus<u64>> = pbs(
@@ -33,30 +29,17 @@ pub const CLASSIC_PBS_U64: PbsConfig<u64, PowOf2Modulus<u64>> = pbs(
         2048,
         SecretKeyDistr::UniformBinary,
         ALPHA * EXTERNAL_Q as f64,
-        BlindRotationMethod::Classic,
     ),
     PbsMessageConfig::new(32),
 );
 
-/// Sparse NTT PBS, n728/h32/N1024, three copies/64 buckets, t_in=t_out=32.
-pub const SPARSE_PBS_U64: PbsConfig<u64, PowOf2Modulus<u64>> =
-    fixed(ModulusConfig::Explicit(Q50), SPARSE, 32, 32);
-
 /// Classic NTT ManyLUT, n728/h32/N1024, t_in=16/t_out=8, two lanes/stride two.
-pub const CLASSIC_MANY_LUT_U64: PbsConfig<u64, PowOf2Modulus<u64>> = fixed(
-    ModulusConfig::Explicit(Q50),
-    BlindRotationMethod::Classic,
-    16,
-    8,
-);
+pub const CLASSIC_MANY_LUT_U64: PbsConfig<u64, PowOf2Modulus<u64>> =
+    fixed(ModulusConfig::Explicit(Q50), 16, 8);
 
 /// Classic NTT threshold MVB, n728/h32/N1024, Rounded t_in=128/Scaled t_out=2, D64/k17.
-pub const CLASSIC_THRESHOLD_MVB_U64: PbsConfig<u64, PowOf2Modulus<u64>> = fixed(
-    ModulusConfig::Explicit(Q50),
-    BlindRotationMethod::Classic,
-    128,
-    2,
-);
+pub const CLASSIC_THRESHOLD_MVB_U64: PbsConfig<u64, PowOf2Modulus<u64>> =
+    fixed(ModulusConfig::Explicit(Q50), 128, 2);
 
 /// Classic NTT CBS, n800/N1024, selector t=8 and three base-256 output levels.
 /// Ring CMux candidates have their own message modulus; return KS is retained for downstream use.
@@ -93,14 +76,13 @@ const fn pbs(
     }
 }
 
-/// Raw q/Q and return-KS choices are shared by PBS, CBS and lookup.
+/// Raw Classic q/Q and return-KS choices are shared by PBS, CBS and lookup.
 const fn blind_rotation(
     modulus: ModulusConfig<BarrettModulus<u64>>,
     n: usize,
     length: usize,
     secret: SecretKeyDistr,
     noise: f64,
-    method: BlindRotationMethod,
 ) -> PbsConfig<u64, PowOf2Modulus<u64>> {
     PbsConfig {
         external_lwe: LweConfig {
@@ -116,7 +98,7 @@ const fn blind_rotation(
             decomposition: decomposition(8),
             noise_standard_deviation: 0.7,
         },
-        method,
+        method: BlindRotationMethod::Classic,
         key_switching: GadgetEncryptionConfig {
             decomposition: decomposition(3),
             noise_standard_deviation: 3.2,
@@ -125,10 +107,9 @@ const fn blind_rotation(
     }
 }
 
-/// The diagnostic fixed-weight profile has different fresh noise from the one-hot teaching profile.
+/// The fixed-weight profile has different fresh noise from the one-hot teaching profile.
 const fn fixed(
     modulus: ModulusConfig<BarrettModulus<u64>>,
-    method: BlindRotationMethod,
     input: u64,
     output: u64,
 ) -> PbsConfig<u64, PowOf2Modulus<u64>> {
@@ -139,7 +120,6 @@ const fn fixed(
             1024,
             SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 32 },
             3.2 * EXTERNAL_Q as f64 / 16384.0,
-            method,
         ),
         PbsMessageConfig::new(input).with_output_modulus(output),
     )
@@ -167,14 +147,7 @@ const fn circuit(
                 decomposition: decomposition(3),
                 noise_standard_deviation: 3.2,
             },
-            ..blind_rotation(
-                modulus,
-                800,
-                1024,
-                secret,
-                ALPHA * EXTERNAL_Q as f64,
-                BlindRotationMethod::Classic,
-            )
+            ..blind_rotation(modulus, 800, 1024, secret, ALPHA * EXTERNAL_Q as f64)
         },
     }
 }

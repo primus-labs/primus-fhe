@@ -4,7 +4,7 @@ use primus_lattice::{
     nlev::NttNlev,
 };
 
-/// Borrowed classic NTRU blind-rotation material, unavailable for sparse keys.
+/// Borrowed Classic NTRU blind-rotation initializer and bit controls.
 ///
 /// The initializer encrypts one. Coordinate zero uses NLEV bit controls for
 /// fused lifting; the remaining coordinates use NGSW bit controls. Binary

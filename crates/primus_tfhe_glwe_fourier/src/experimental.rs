@@ -19,30 +19,15 @@ use crate::{
 const NATIVE_Q: f64 = (1u128 << 64) as f64;
 const ALPHA: f64 = 2.046_151_696_979_124e-6;
 const BETA: f64 = 2.845_267_479_601_915e-15;
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 64,
-};
 
 /// Classic Fourier PBS, n866/N2048, BR→KS, padded four-bit input and t_in=t_out=32.
 pub const CLASSIC_PBS_U64: PbsConfig<u64> = dense(ModulusConfig::Native, NATIVE_Q);
-
-/// Sparse Fourier PBS, n728/h32/N1024, three copies/64 buckets, t_in=t_out=32.
-pub const SPARSE_PBS_U64: PbsConfig<u64> = fixed(
-    ModulusConfig::Native,
-    NATIVE_Q,
-    SPARSE,
-    32,
-    32,
-    PbsOrder::BootstrapKeyswitch,
-);
 
 /// Classic Fourier interleaved ManyLUT, n728/h32/N1024, t_in=16/t_out=8.
 /// Teaching geometry is two lanes, stride two, F=(floor(x/2), [x>=5]).
 pub const CLASSIC_MANY_LUT_U64: PbsConfig<u64> = fixed(
     ModulusConfig::Native,
     NATIVE_Q,
-    BlindRotationMethod::Classic,
     16,
     8,
     PbsOrder::BootstrapKeyswitch,
@@ -53,7 +38,6 @@ pub const CLASSIC_MANY_LUT_U64: PbsConfig<u64> = fixed(
 pub const CLASSIC_THRESHOLD_MVB_U64: PbsConfig<u64> = fixed(
     ModulusConfig::Native,
     NATIVE_Q,
-    BlindRotationMethod::Classic,
     128,
     2,
     PbsOrder::KeyswitchBootstrap,
@@ -61,10 +45,7 @@ pub const CLASSIC_THRESHOLD_MVB_U64: PbsConfig<u64> = fixed(
 
 /// Classic Fourier CBS, n800/N1024, direct small-LWE input t=8, two output levels.
 /// Teaching F=[m>=2] controls CMux; the consumer chooses its ring message modulus.
-pub const CLASSIC_CBS_U64: CbsConfig<u64> = circuit(ModulusConfig::Native, NATIVE_Q, false);
-
-/// Sparse Fourier CBS, n728/h32/N1024, input t=8, direct small-LWE input and retained return KS.
-pub const SPARSE_CBS_U64: CbsConfig<u64> = circuit(ModulusConfig::Native, NATIVE_Q, true);
+pub const CLASSIC_CBS_U64: CbsConfig<u64> = circuit(ModulusConfig::Native, NATIVE_Q);
 
 /// None keeps the maximum supported levels; the decomposition can still discard low bits.
 const fn decomposition(base_log: u32) -> DecompositionConfig {
@@ -108,11 +89,10 @@ const fn dense(modulus: ModulusConfig<NativeModulus<u64>>, q: f64) -> PbsConfig<
     }
 }
 
-/// Fixed-weight numeric profile shared by the sparse, lane and factor teaching workloads.
+/// Classic fixed-weight profile for the lane and factor teaching workloads.
 const fn fixed(
     modulus: ModulusConfig<NativeModulus<u64>>,
     q: f64,
-    algorithm: BlindRotationMethod,
     input: u64,
     output: u64,
     order: PbsOrder,
@@ -133,7 +113,7 @@ const fn fixed(
         bsk_poly_length: PolyLength::new(1024),
         bsk_secret_distr: SecretKeyDistr::SparseTernary,
         bsk_gadget: gadget,
-        method: algorithm,
+        method: BlindRotationMethod::Classic,
         key_switching: gadget,
         order,
         messages: PbsMessageConfig::new(input).with_output_modulus(output),
@@ -141,37 +121,29 @@ const fn fixed(
 }
 
 /// CBS adds trace/scheme-switch gadgets to the shared BR/KS domain.
-const fn circuit(
-    modulus: ModulusConfig<NativeModulus<u64>>,
-    q: f64,
-    sparse: bool,
-) -> CbsConfig<u64> {
-    let blind_rotation = if sparse {
-        fixed(modulus, q, SPARSE, 8, 8, PbsOrder::BootstrapKeyswitch)
-    } else {
-        PbsConfig {
-            small_lwe: LweConfig {
-                dimension: LweDimension::new(800),
-                cipher_modulus: modulus,
-                secret_key_distr: SecretKeyDistr::UniformBinary,
-                noise_standard_deviation: ALPHA * q,
-            },
-            ring_modulus: modulus,
-            bsk_dimension: GlweDimension::new(1),
-            bsk_poly_length: PolyLength::new(1024),
-            bsk_secret_distr: SecretKeyDistr::UniformTernary,
-            bsk_gadget: GadgetEncryptionConfig {
-                decomposition: decomposition(8),
-                noise_standard_deviation: 6.4,
-            },
-            method: BlindRotationMethod::Classic,
-            key_switching: GadgetEncryptionConfig {
-                decomposition: decomposition(8),
-                noise_standard_deviation: 6.4,
-            },
-            messages: primus_tfhe::PbsMessageConfig::new(2),
-            order: PbsOrder::BootstrapKeyswitch,
-        }
+const fn circuit(modulus: ModulusConfig<NativeModulus<u64>>, q: f64) -> CbsConfig<u64> {
+    let pbs = PbsConfig {
+        small_lwe: LweConfig {
+            dimension: LweDimension::new(800),
+            cipher_modulus: modulus,
+            secret_key_distr: SecretKeyDistr::UniformBinary,
+            noise_standard_deviation: ALPHA * q,
+        },
+        ring_modulus: modulus,
+        bsk_dimension: GlweDimension::new(1),
+        bsk_poly_length: PolyLength::new(1024),
+        bsk_secret_distr: SecretKeyDistr::UniformTernary,
+        bsk_gadget: GadgetEncryptionConfig {
+            decomposition: decomposition(8),
+            noise_standard_deviation: 6.4,
+        },
+        method: BlindRotationMethod::Classic,
+        key_switching: GadgetEncryptionConfig {
+            decomposition: decomposition(8),
+            noise_standard_deviation: 6.4,
+        },
+        messages: PbsMessageConfig::new(8),
+        order: PbsOrder::BootstrapKeyswitch,
     };
     CbsConfig {
         fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
@@ -184,10 +156,6 @@ const fn circuit(
                 level_count: Some(DecompositionLevelCount::new(2)),
             },
         },
-        pbs: PbsConfig {
-            messages: primus_tfhe::PbsMessageConfig::new(8),
-            order: PbsOrder::BootstrapKeyswitch,
-            ..blind_rotation
-        },
+        pbs,
     }
 }

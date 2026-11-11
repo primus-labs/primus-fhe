@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-NTRU-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation. External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
+NTRU-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with Classic binary/ternary (including fixed-weight binary) and direct Block blind rotation. External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
 
 ## Quick start
 
@@ -38,7 +38,6 @@ All examples use u64 and prepare reusable state outside the request loop. Replac
 | --- | --- | --- |
 | Two successive PBS calls | `CLASSIC_PBS_U64` | [ntru_ntt_basic](examples/ntru_ntt_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`, messages 4→4 | [ntru_ntt_boolean](examples/ntru_ntt_boolean.rs) |
-| The same scoring workflow with sparse BR | `SPARSE_PBS_U64` | [ntru_ntt_sparse](examples/ntru_ntt_sparse.rs) |
 | ManyLUT grade/flag, then encrypted combination | `CLASSIC_MANY_LUT_U64` | [ntru_ntt_many_lut](examples/ntru_ntt_many_lut.rs) |
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [ntru_ntt_circuit_bootstrap](examples/ntru_ntt_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_ntt_mvb_thresholds](examples/ntru_ntt_mvb_thresholds.rs) |
@@ -90,25 +89,9 @@ The CBS example transfers its buffers with `cbs.into_parts()` and `Evaluator::tr
 
 CBS/one-hot operations and prepared MVB tables require their original context binding, even when another context has equal numerical parameters. For serial reuse, CBS/one-hot operations borrow `BootstrapResources` when executed. To recover ordinary PBS through `Evaluator::try_from_resources`, pass the original context and `server.server_key()`.
 
-## Sparse blind rotation
-
-Select `BlindRotationMethod::Sparse` in `config.method` (or `config.pbs.method` for CBS). It requires a fixed-weight binary external secret with `0<h<n`, `copy_count>=1` and `bucket_count>=max(copy_count,h)`. Changing the secret distribution alone does not select sparse; classic also supports fixed-weight secrets.
-
-PBS, ManyLUT, MVB, CBS and one-hot support this mode. For sparse CBS/one-hot, start from `CLASSIC_ONE_HOT_U64`, whose external secret is n800/h32 fixed-weight binary. The dense `CLASSIC_CBS_U64` cannot become sparse by changing only its algorithm:
-
-```rust,ignore
-use primus_tfhe_ntru_ntt::BlindRotationMethod;
-
-let mut config = experimental::CLASSIC_ONE_HOT_U64;
-config.pbs.method = BlindRotationMethod::Sparse { copy_count: 3, bucket_count: 64 };
-let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
-```
-
-Generate the complete CBS bundle through `try_generate_circuit_bootstrap_keys` and use the same CBS/one-hot evaluator factories. A working PBS configuration alone does not establish CBS output precision or CMux noise margin.
-
 ## Block blind rotation
 
-Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }` (under `config.pbs` for CBS). The logical LWE dimension must be a nonzero multiple of the positive block width. `AtMostOne` allows empty blocks and adds an encrypted dummy; `ExactlyOne` has one `1` per block and no dummy. Neither mode uses matching or repeated controls. Generate keys and evaluate PBS, ManyLUT, MVB, CBS and one-hot through the same context factories. Each block encrypts every bit plus any mode-required dummy; the first block lifts through NLEV even when all exponents are zero, and later blocks use NGSW with the same external-product arithmetic. The shared single-input workspace allocates once and retains no occupancy information. One-hot `new_pair_workspace` / `with_pair` share grouped BR traversal for Sparse and Block; classic resources return no pair workspace and retain single-input calls. Presets remain unchanged; block noise and security need their own assessment.
+Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }` (under `config.pbs` for CBS). The logical LWE dimension must be a nonzero multiple of the positive block width. `AtMostOne` allows empty blocks and adds an encrypted dummy; `ExactlyOne` has one `1` per block and no dummy. Generate keys and evaluate PBS, ManyLUT, MVB, CBS and one-hot through the same context factories. Each block encrypts every bit plus any mode-required dummy; the first block lifts through NLEV even when all exponents are zero, and later blocks use NGSW with the same external-product arithmetic. The shared single-input workspace allocates once and retains no occupancy information. One-hot `new_pair_workspace` / `with_pair` share Block BR traversal; classic resources return no pair workspace and retain single-input calls. Assess the noise and security of the Block configuration separately.
 
 ## One-hot CBS
 
@@ -142,13 +125,13 @@ cargo bench -p primus_tfhe_ntru_ntt --bench pbs
 
 | Target | Timed request |
 | --- | --- |
-| [pbs](benches/pbs.rs) | One complete PBS; dense u32/u64 and fixed-weight classic/sparse u64 |
+| [pbs](benches/pbs.rs) | One complete PBS; dense Classic u32/u64 |
 | [many_lut](benches/many_lut.rs) | One two-output grade/flag ManyLUT, u64 |
 | [mvb](benches/mvb.rs) | One 17-output threshold MVB, u64 |
 | [cbs](benches/cbs.rs) | One predicate CBS, CMux and a coefficient returned as LWE, u64 |
 | [one_hot](benches/one_hot.rs) | Three nonzero selectors plus four-way `cmux_k_to`, u64 |
 
-Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. ManyLUT/CBS benchmarks exclude the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. See the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
+Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. ManyLUT/CBS benchmarks exclude the examples' subsequent ciphertext arithmetic. The u32 and u64 PBS cases use different parameters. See the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
 ## Further reading
 

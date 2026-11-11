@@ -44,57 +44,39 @@ Returning a phase rescales its existing centers; it does not recreate the output
 
 All configured noise standard deviations use coefficient units, including Fourier configurations. GLWE ring-KS rows use Q coefficient units and equal q/Q skips MS. BR and KS noise are independent choices; NTRU return KS uses q while BR uses Q. CBS trace/scheme-switch rows inherit accumulator encryption noise but have separate decompositions and error propagation. In GLWE KS→BR, fresh external LWE encryption uses the ring/BR noise setting, not KS-key noise. These sampler deviations describe fresh private-key encryption or individual key rows; public-key encryption includes additional public-key and combination errors. The [GLWE](../../crates/primus_tfhe_glwe/README.md#parameters-and-external-key-domain) and [NTRU](../../crates/primus_tfhe_ntru/README.md) family guides identify the configuration fields.
 
-## Ternary and sparse rotation
+## Classic ternary and Block rotation
 
 Classic ternary represents a secret coordinate by mutually exclusive bits s_plus and s_minus. For its quantized mask exponent a, combine gadget controls as `G=Enc(s_plus)-X^(-a)*Enc(s_minus)`. Adding the external product of G with `(X^a-1)*ACC` implements rotation by `X^(a*(s_plus-s_minus))`. This saves an external product but retains both control ciphertexts' errors. NTT combination is exact in the field; Fourier adds its transform/conversion error.
 
-Sparse BR uses a public map with c distinct bucket choices per input position and a private matching with at most one selected position per bucket. For bucket C_j,
+For a contiguous block J with quantized mask exponents a_i and at most one
+selected bit, aggregate its coefficient controls as
 
 ```text
-G_j = Dummy_j + sum_{i in C_j} X^a_i * Selector_(j,i).
+G_J = Dummy_J + sum_{i in J} X^a_i * Selector_i.
 ```
 
-The independently encrypted dummy represents one minus the sum of that bucket's selector bits. An unused bucket therefore targets the identity monomial, not zero. Encrypted zero selectors and the dummy still contribute noise. Under independent centered row errors of variance sigma², each coefficient of the aggregate row has variance `(|C_j|+1)*sigma²`; differing bucket sizes require an appropriate bound, not just their average. This local variance calculation does not establish the full BR tail distribution. Mapping and matching are defined in [sparse.rs](../../crates/primus_tfhe/src/sparse.rs).
+In AtMostOne, the independent dummy encrypts `1-sum_i s_i`, so an empty block
+selects the identity monomial. ExactlyOne has one selected bit in every block
+and omits the dummy. All encrypted selectors contribute error. If row errors
+are independent, centered and have common variance sigma², each coefficient of
+the aggregate row has variance `(|J|+d)*sigma²`, where d=1 for AtMostOne and d=0
+for ExactlyOne. This is a local row estimate. The full BR budget also depends
+on the digits, residuals and reuse of evaluation material.
 
-Retrying the public map until matching succeeds conditions the published map on the fixed secret admitting a matching. It reduces generation failure without removing that correlation. Only the independent NTRU ring secret is conditioned on invertibility and, for Fourier, inverse stability; the external fixed-weight secret may have even weight. Conditioned secret/map distributions and evaluation-key KDM/circular-security assumptions require separate analysis. Matching, rejection sampling and inverse preparation have no constant-time guarantee.
+For GLWE phase `phi_S(a,b)=b-a*S`, selected monomial H and residual
+`R=C-Reconstruct(D)`, the external-product update is
+`phi_S(C_next)=H*phi_S(C)-H*phi_S(R)+sum D*E`, with aggregate row errors E.
+Account for the signed residuals, the actual sampler's mean and any shared
+key error across inputs before making a tail estimate.
 
-GLWE NTT raw sparse and block BR also accept independent input batches. Their
-four-lane workspaces share read-only key tiles on one thread; each lane retains
-its own exponents, aggregate, accumulator and external-product scratch. Groups
-of four and two use the same per-chain control order and arithmetic as single
-calls; a one-input tail runs the original single kernel. Complete batch layouts
-are checked before any output write, and evaluation allocates no memory. Outputs
-remain separate coefficient-domain GLWE ciphertexts: summing, KS and extraction
-belong to the caller. Shared physical key errors remain correlated between lanes.
-See the [block workspace](../../crates/primus_tfhe_glwe_ntt/src/block/blind_rotation.rs)
-and [sparse workspace](../../crates/primus_tfhe_glwe_ntt/src/sparse/blind_rotation.rs).
-
-### Matching and error dependencies
-
-For an independent initial map H, fixed-weight support S and matching event A,
-ideal symmetric sampling gives `P(H|S,accepted)=P(H) 1[A(S,H)]/p`, with p
-support-invariant. The marginal support stays uniform, but the accepted map and
-support are correlated. The retry cap changes generation failure, not this
-conditional law; measured log₂(1/p) is not a certified security loss.
-
-For GLWE phase `phi_S(a,b)=b-a*S`, bucket monomial M and residual
-`R=C-Reconstruct(D)`, the exact update is
-`phi_S(C_next)=M*phi_S(C)-M*phi_S(R)+sum D*E`.
-All encrypted-zero selectors and dummies contribute E. With secret norm S1,
-residual bounds epsilon and row bound Emax, a conservative BR error bound is
-`B*epsilon_BR*(1+S1)+(r*n+B)*Emax*(k+1)*L_BR*N*beta_BR/2`;
-ring KS adds `epsilon_KS*S1+Emax*k*L_KS*N*beta_KS/2`.
-These support bounds are generally too loose to choose practical parameters.
-
-A fresh-row conditional MGF argument needs an input independent of evaluation-key
-errors, predictable digits, and the actual sampler's mean/support. With independent
-ideal RNG words, centered rows and rho=q/Q, Hoeffding's variance proxy is
-`rho²*Emax²*((r*n+B)*(k+1)*L_BR*N*(beta_BR/2)²+k*L_KS*N*(beta_KS/2)²)`.
-Subtract any digit-weighted sampler drift from the usable radius; shared sign/magnitude
-words need not give an exactly zero mean. This does not prove fixed-key,
-adaptive/feedback-request tails, accepted-map security or CBS consumption.
-Historical PBS-success/CBS-failure cases show why the output gadget and subsequent
-CMux need their own budget; fewer BR rows alone are not a usable CBS preset.
+GLWE NTT Block BR accepts batches of independent inputs. The lanes share
+read-only key tiles on one thread and own their exponents, aggregate,
+accumulator and external-product scratch. Two- and four-input groups
+preserve the per-chain control order and arithmetic. A one-input tail uses
+the single-input kernel. Complete layouts are checked before output writes
+and evaluation allocates no memory. The caller receives separate coefficient
+GLWE ciphertexts and chooses any summation, KS or extraction. See the
+[Block workspace](../../crates/primus_tfhe_glwe_ntt/src/block/blind_rotation.rs).
 
 ## NTRU first lifting
 
@@ -113,7 +95,11 @@ C = sum_l D_l(P)*K_l.
 
 I is NLEV[1], the B controls are NLEV secret bits, and binary omits B_minus. K targets `H=X^(a*secret_0)`, so the phase is `P*H - epsilon(P)*H + sum_l D_l(P)*e_l(K)`. Only P is approximately decomposed: a small monomial difference is not discarded by that decomposition. If a=0, K=I still performs the required lift.
 
-Sparse and Block BR use their first whole group's NLEV aggregate K_0 instead. The same phase formula holds with H equal to the selected monomial, or one for an unoccupied bucket. Even an empty first group lifts through its encrypted dummy. Later coordinates/buckets use NGSW on encrypted accumulators; NGSW's extra f factor prevents substituting it for this public-polynomial lift. MVB, CBS and one-hot use the same BR initialization. See the [NTRU family](../../crates/primus_tfhe_ntru/README.md#sparse-coefficient-keys).
+Block BR uses the first block's NLEV aggregate K_0. The phase formula holds
+with H equal to the selected monomial, or one for an empty AtMostOne block.
+The first block always lifts, including an empty block with its encrypted
+dummy. Later controls use NGSW on encrypted accumulators. MVB, CBS and one-hot
+share this initialization. See the [NTRU family](../../crates/primus_tfhe_ntru/README.md#blind-rotation-methods).
 
 ## Ordinary CBS and consumption
 
@@ -204,22 +190,22 @@ NTRU NTT teaching CBS/one-hot presets explicitly select `PairedTrace`. Fourier
 backend teaching presets retain `Separate` and ordinary precision.
 
 The matrix describes production NTRU CBS and one-hot support. Binary includes
-fixed-weight binary; sparse BR requires a fixed-weight binary input secret.
+fixed-weight binary.
 Both RustFFT and TFHE-FFT have the same supported combinations.
 
 | Backend / ring word | BR algorithm | BR precision | Trace / SS precision | Projection | Outputs |
 | --- | --- | --- | --- | --- | --- |
-| NTT, u32/u64 | Classic binary/ternary, sparse binary, block binary | `Ordinary` config marker | `Ordinary` config markers | All four strategies | NLEV, NGSW, dual |
-| Fourier, native u32 | Classic binary/ternary, sparse binary | Ordinary | Ordinary / Ordinary | Separate | NLEV, NGSW, dual |
-| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
+| NTT, u32/u64 | Classic binary/ternary, block binary | `Ordinary` config marker | `Ordinary` config markers | All four strategies | NLEV, NGSW, dual |
+| Fourier, native u32 | Classic binary/ternary | Ordinary | Ordinary / Ordinary | Separate | NLEV, NGSW, dual |
+| Fourier, native u64 | Classic binary/ternary, block binary | Ordinary | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
 | Fourier, native u64 | Classic binary, block binary | Split | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
-| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
+| Fourier, native u64 | Classic binary/ternary, block binary | Ordinary | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
 | Fourier, native u64 | Classic binary, block binary | Split | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
 
 The four NTT strategies are `Separate`, `FusedLastStage`, `FusedLastThreeStages`
 and `PairedTrace`. NTT arithmetic does not use FFT precision; its context rejects
 non-Ordinary markers. Fourier rejects `FusedLastThreeStages`, fusion without
-split trace and SS, split u32, and split ternary/sparse BR. It does not silently
+split trace and SS, split u32, and split ternary BR. It does not silently
 fall back. Fourier ring Q is native; the external LWE modulus is independently chosen.
 Each row still requires the usual shape, secret-distribution, gadget and input
 guard contracts. NLEV-only and dual outputs always execute separate trace/SS,
@@ -235,12 +221,12 @@ full-request decryption-failure bound. Small-ring unequal-width tests are not
 large-parameter recommendations.
 
 Both ordinary and split key generation form exact native coefficient rows.
-Ordinary material transforms complete rows once. Sparse and block BR retain
+Ordinary material transforms complete rows once. Block BR retains
 coefficient rows and aggregate them in the native ring before the selected
 transform. Split Block BR extracts canonical limbs after aggregation, including
 negacyclic signs and wrapping carries. Its workspace holds only the selected
 aggregate spectra and reuses product scratch for limb conversion. Block and
-split require u64. Ordinary classic and sparse BR support u32 and u64.
+split require u64. Ordinary Classic BR supports u32 and u64.
 Only the selected representation is stored. Conversion precision still
 determines the represented error. SS reconstructs coefficients before returning ordinary
 Fourier NGSW controls; BR-internal CMux follows the BR precision. Consumer

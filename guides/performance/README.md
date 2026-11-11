@@ -44,11 +44,10 @@ fixtures with different input and consumer contracts from the teaching presets.
 Historical cross-library PBS, CBS and EBS used different parameter profiles
 and provide functional reference points. [Comparison commands](../development/testing.md#glwe-functional-comparison-benchmarks) · [Current benchmark parameters](../development/tfhe-parameters.md#current-backend-benchmarks)
 
-Measure single-input and batched blind rotation separately. Retained sparse
-schedules keep the encrypted selectors, dummy and arithmetic boundaries. Their
-observed gains depend on geometry and workload. CBS with CMux and return needs
-a complete measurement even when a scheme-switching kernel is faster or its
-key payload is smaller. [Bootstrapping contracts](../development/bootstrapping-contracts.md)
+Measure single-input and batched Block blind rotation separately. Their
+performance depends on block geometry, occupancy and workload. Measure the
+complete CBS, CMux and return path even when a scheme-switching kernel is faster
+or its key payload is smaller. [Bootstrapping contracts](../development/bootstrapping-contracts.md)
 
 ## Fourier key generation
 

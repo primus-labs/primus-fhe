@@ -1,4 +1,4 @@
-//! Bucket aggregation and reusable sparse blind-rotation workspace.
+//! Native coefficient aggregation and Fourier products for grouped blind rotation.
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
@@ -14,10 +14,11 @@ use primus_ntru::{
 use primus_poly::Polynomial;
 use primus_tfhe_ntru::NtruBlindRotationControls;
 
-use super::SparseNtruBootstrappingKey;
 use crate::bootstrap::BlindRotationPairWorkspace;
 
-/// Reusable aggregate and product scratch, independent of bucket geometry.
+mod aggregation;
+
+/// Reusable aggregate and product scratch, independent of group geometry.
 pub(crate) struct AggregationWorkspace<T: TorusFftValue, Transformed = Vec<Complex64>> {
     pub(crate) exponents: Vec<usize>,
     aggregate: Vec<T>,
@@ -72,33 +73,13 @@ impl<T: TorusFftValue, Transformed> AggregationWorkspace<T, Transformed> {
     }
 }
 
-/// Split payload for direct-block rotation; sparse controls retain ordinary FFT.
+/// Split payload for grouped rotation using a two-limb Fourier product.
 pub(crate) type SplitAggregationWorkspace<T> = AggregationWorkspace<T, FourierNtruSplitGadget<T>>;
 
-/// The evaluator established key/workspace/table compatibility and quantized every mask.
-/// Every bucket is processed, including empty ones and zero exponents; its encrypted
-/// dummy and zero selections still contribute noise. `scratch` initially holds the
-/// public rotated LUT. Bucket zero lifts it with NLEV controls; later buckets use
-/// NGSW controls. Final output stays in `current`, even with just one bucket.
-pub(crate) fn rotate_buckets<T: TorusFftValue, Table: FftTable>(
-    key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut AggregationWorkspace<T>,
-    current: &mut Ntru<Vec<T>>,
-    scratch: &mut Ntru<Vec<T>>,
-    basis: &ApproxSignedBasis<T>,
-    fft: &mut FftEngine<'_, Table>,
-) {
-    let groups = (0..key.bucket_count()).map(|bucket| {
-        let (indices, data) = key.bucket_data(bucket);
-        (indices.iter().copied(), data)
-    });
-    rotate_groups(groups, workspace, current, scratch, basis, fft);
-}
-
-/// The first group's NLEV aggregate lifts public P; subsequent groups hold
-/// `NGSW[H] = NLEV[f*H]` and act on ciphertexts. Their product arithmetic agrees,
-/// so sparse buckets and direct blocks share this loop without a first-group
-/// branch. Every encrypted selector and dummy contributes, including zeros.
+/// `scratch` holds the rotated public LUT on entry. The first group's NLEV
+/// aggregate lifts it, then later `NGSW[H] = NLEV[f*H]` aggregates act on
+/// ciphertexts with the same product arithmetic. Every encrypted selector
+/// and dummy contributes, including zeros. The result stays in `current`.
 pub(crate) fn rotate_groups<'a, T, Table, I>(
     groups: impl Iterator<Item = (I, &'a [T])>,
     workspace: &mut AggregationWorkspace<T>,
@@ -181,24 +162,6 @@ pub(crate) fn rotate_groups_split<'a, T, Table, I>(
         );
         core::mem::swap(current, scratch);
     }
-}
-
-/// Both current buffers hold their independently rotated public LUT on entry.
-/// Each source-control group is consumed for both inputs before advancing;
-/// transforms and external products then reuse the original shared scratch.
-pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
-    key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut AggregationWorkspace<T>,
-    second: &mut BlindRotationPairWorkspace<T>,
-    buffers: [&mut Ntru<Vec<T>>; 2],
-    basis: &ApproxSignedBasis<T>,
-    fft: &mut FftEngine<'_, Table>,
-) {
-    let groups = (0..key.bucket_count()).map(|bucket| {
-        let (indices, data) = key.bucket_data(bucket);
-        (indices.iter().copied(), data)
-    });
-    rotate_groups_pair(groups, workspace, second, buffers, basis, fft);
 }
 
 /// Aggregates a control group for both inputs before advancing, preserving
@@ -312,9 +275,9 @@ pub(crate) fn rotate_groups_split_pair<'a, T, Table, I>(
 }
 
 /// Starts from the encrypted dummy when present, otherwise clears the aggregate,
-/// then adds every selector in key order. The iterator selects coordinates from each input's complete exponent slice;
-/// sparse buckets supply public indices and direct blocks supply a range. For
-/// u64, four controls share a coefficient traversal; u32 retains the pair path.
+/// then adds every selector in key order. The iterator selects coordinates from
+/// each input's complete exponent slice. For u64, four controls share a
+/// coefficient traversal; u32 retains the pair path.
 /// Remaining controls use pairs and a possible single tail. No zero exponent
 /// or encrypted zero is skipped. The key/workspace establish complete, equally
 /// sized controls, and native wrapping preserves the coefficient representation.
@@ -347,7 +310,7 @@ fn aggregate_controls<T: TorusFftValue, const INPUTS: usize>(
             let sources: [Nlev<&[T]>; 4] =
                 core::array::from_fn(|_| controls.next().expect("complete grouped controls"));
             for (exponents, aggregate) in &mut inputs {
-                super::aggregation::add_four_rotations_assign(
+                aggregation::add_four_rotations_assign(
                     aggregate.as_mut(),
                     sources.each_ref().map(|control| control.as_ref()),
                     indices.map(|i| exponents[i]),

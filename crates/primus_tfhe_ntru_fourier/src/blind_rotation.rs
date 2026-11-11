@@ -5,6 +5,7 @@ use primus_poly::Polynomial;
 
 use crate::{
     context::EvaluationContext,
+    grouped_rotation::{AggregationWorkspace, SplitAggregationWorkspace},
     key::{BlindRotationKey, BootstrappingControls, ClassicControls},
 };
 
@@ -39,24 +40,17 @@ impl<'a, T: TorusFftValue> BlindRotationResources<'a, T> {
                     combined: controls.initializer.zero_like(),
                     product: primus_ntru::FourierNtruExternalProductWorkspace::new(poly_length),
                 },
-                BootstrappingControls::Sparse(key) => RotationState::Sparse {
-                    key,
-                    scratch: crate::sparse::AggregationWorkspace::new(
-                        parameters.blind_rotation(),
-                        key.controls(),
-                    ),
-                },
                 BootstrappingControls::Block { key, precision } => match precision {
                     crate::FourierPrecision::Ordinary => RotationState::Block {
                         key,
-                        scratch: crate::sparse::AggregationWorkspace::new(
+                        scratch: AggregationWorkspace::new(
                             parameters.blind_rotation(),
                             key.controls(),
                         ),
                     },
                     crate::FourierPrecision::Split { low_bits } => RotationState::BlockSplit {
                         key,
-                        scratch: crate::sparse::AggregationWorkspace::new_split(
+                        scratch: AggregationWorkspace::new_split(
                             parameters.blind_rotation(),
                             key.controls(),
                             low_bits,
@@ -87,17 +81,13 @@ pub(crate) enum RotationState<'a, T: TorusFftValue> {
         combined: primus_ntru::FourierNtruSplitGadget<T>,
         product: primus_ntru::FourierNtruExternalProductWorkspace<T>,
     },
-    Sparse {
-        key: &'a crate::sparse::SparseNtruBootstrappingKey<T>,
-        scratch: crate::sparse::AggregationWorkspace<T>,
-    },
     Block {
         key: &'a crate::block::BlockNtruBootstrappingKey<T>,
-        scratch: crate::sparse::AggregationWorkspace<T>,
+        scratch: AggregationWorkspace<T>,
     },
     BlockSplit {
         key: &'a crate::block::BlockNtruBootstrappingKey<T>,
-        scratch: crate::sparse::SplitAggregationWorkspace<T>,
+        scratch: SplitAggregationWorkspace<T>,
     },
     Binary {
         controls: ClassicControls<'a>,
@@ -115,9 +105,7 @@ impl<'a, T: TorusFftValue> RotationState<'a, T> {
     ) -> &mut primus_ntru::FourierNtruExternalProductWorkspace<T> {
         match self {
             Self::Split { product, .. } => product,
-            Self::Sparse { scratch, .. } | Self::Block { scratch, .. } => {
-                &mut scratch.external_product
-            }
+            Self::Block { scratch, .. } => &mut scratch.external_product,
             Self::BlockSplit { scratch, .. } => &mut scratch.external_product,
             Self::Binary { scratch, .. } => scratch.external_product_workspace(),
             Self::Ternary { scratch, .. } => scratch.external_product_workspace(),
@@ -212,17 +200,6 @@ pub(crate) fn blind_rotate_lookup_table_to<T, Table>(
                     extension,
                 );
             }
-        }
-        RotationState::Sparse { key, scratch } => {
-            modulus_switch.exponent_slice_to(input.a(), &mut scratch.exponents);
-            crate::sparse::rotate_buckets(
-                key,
-                scratch,
-                &mut resources.current,
-                &mut resources.scratch,
-                basis,
-                fft,
-            );
         }
         RotationState::Block { key, scratch } => {
             modulus_switch.exponent_slice_to(input.a(), &mut scratch.exponents);

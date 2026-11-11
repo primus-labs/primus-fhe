@@ -21,7 +21,7 @@
 //!
 //! # Other operations
 //!
-//! [`experimental`] pairs sparse PBS, ManyLUT, MVB, CBS and one-hot with their
+//! [`experimental`] pairs PBS, ManyLUT, MVB, CBS and one-hot with their
 //! teaching message domains. Each example prepares its matching config once.
 //!
 //! - [`InterleavedLookupTable`]: several functions of one input using ordinary PBS workspace.
@@ -29,8 +29,6 @@
 //! - [`boolean`]: Boolean clients and gates with plaintext modulus four.
 //! - [`circuit_bootstrap`]: optional trace/scheme-switch material and
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
-//! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
-//!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
 //! - [`block`]: direct contiguous block-binary controls, including an independent
 //!   empty-block dummy. The first block lifts the public LUT with NLEV controls;
 //!   later blocks apply NGSW controls through the same external-product kernel.
@@ -65,7 +63,7 @@
 //! `try_new`. [`ServerKey::into_parts`] moves out the bundle's components.
 //! [`CircuitBootstrapServerKey`] combines one [`ServerKey`] with required CBS material.
 //! CBS/one-hot evaluation borrows BR/CBS; downstream LWE returns reuse its KS key.
-//! Classic binary/ternary, sparse fixed-weight binary and direct block-binary BR support PBS, MVB,
+//! Classic binary/ternary, including fixed-weight binary, and Block BR support PBS, MVB,
 //! CBS and one-hot. CBS/one-hot require trace and scheme-switch material.
 //! Only accumulator secrets undergo NTRU invertibility screening; external LWE secrets are independent.
 //! Keys and values must use this context's NTT root and ordering convention.
@@ -92,9 +90,9 @@ mod context;
 mod error;
 mod evaluator;
 pub mod factorized;
+mod grouped_rotation;
 pub mod key;
 mod lookup_table;
-pub mod sparse;
 
 pub use accumulator::AccumulatorClient;
 pub use boolean::{
@@ -103,8 +101,8 @@ pub use boolean::{
 pub use context::TfheContext;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
-    LookupTableError, SparseBootstrappingKeyError, TfheClientError, TfheContextError,
-    TfheEvaluationError, TfheKeyError, TfheParameterError,
+    LookupTableError, TfheClientError, TfheContextError, TfheEvaluationError, TfheKeyError,
+    TfheParameterError,
 };
 #[doc(inline)]
 pub use evaluator::Evaluator;

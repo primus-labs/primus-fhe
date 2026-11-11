@@ -212,14 +212,14 @@ cargo bench -p 'primus_tfhe_*_ntt' -p 'primus_tfhe_*_fourier' --bench pbs -- 'cl
 
 | target | 一次迭代的负载 |
 | --- | --- |
-| `pbs` | 一次完整 LWE→LWE PBS；提供 dense classic u32/u64 与 fixed-weight classic/sparse u64 |
+| `pbs` | 一次完整 LWE→LWE PBS；提供 dense Classic u32/u64 |
 | `many_lut` | 一次盲旋转及多项 LWE 返回 |
 | `mvb` | 一次完整 factorized MVB，返回多项阈值结果 |
 | `cbs` | 自定义谓词的 CBS → 实际 CMux → 单系数 LWE 返回（`predicate_cmux_return`） |
 | `cbs_identity`（GLWE） | G1 NTT、G2 Fourier CMUX2/CMUX3 派生参数，bit 0/1；分别测 CBS→GSW 和 CBS＋CMux，显式选择 padded/MSB |
 | `one_hot`（仅 NTRU） | 生成非零 NGSW selectors，再执行多路 CMux |
 
-Fourier 引擎按前面的 feature 规则选择；GLWE `cbs_identity` 仅在 `split-trace` 启用时注册 Split35 用例；关闭默认 feature 后若不选引擎，Fourier bench 会报错。具体函数、消息空间和参数见[当前基准配置](tfhe-parameters.md#current-backend-benchmarks)及各文件。固定重量 classic/sparse 在同一后端使用相同参数，仅更换算法；dense classic 属于另一参数组，不能把两组时间差解释成算法加速。跨后端的噪声、分解和返回路径也不同。
+Fourier 引擎按前面的 feature 规则选择；GLWE `cbs_identity` 仅在 `split-trace` 启用时注册 Split35 用例；关闭默认 feature 后若不选引擎，Fourier bench 会报错。具体函数、消息空间和参数见[当前基准配置](tfhe-parameters.md#current-backend-benchmarks)及各文件。跨后端的噪声、分解和返回路径也不同。
 
 密钥生成、公开程序编译、加密、工作区/输出分配和解密校验均在计时之外。每次迭代处理一个完整请求，throughput 不按输出数放大；单条基准测固定输入的延迟；批量吞吐中的每条平均成本不能当作尾延迟。Criterion 过滤器只控制采样，**不会跳过 `bench_function` 外的准备和校验**。
 

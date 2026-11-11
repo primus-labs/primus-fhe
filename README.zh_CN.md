@@ -31,7 +31,7 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 
 GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
 
-Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
+Classic 与 Block 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
 
 ## BFV 与 BGV
 

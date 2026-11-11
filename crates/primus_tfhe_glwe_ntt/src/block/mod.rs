@@ -1,8 +1,9 @@
 //! Direct blind rotation for contiguous block-binary LWE secrets.
 //!
 //! Each block contributes its bit controls, with an independent dummy only for
-//! AtMostOne, followed by one external product. No bucket map or matching is used.
+//! AtMostOne, followed by one external product.
 
+mod aggregation;
 mod blind_rotation;
 mod key;
 

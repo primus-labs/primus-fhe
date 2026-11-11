@@ -22,7 +22,6 @@ pub use classic::ClassicControls;
 /// Public setup geometry checked before sampling or key allocation.
 enum BlindRotationLayout {
     Classic,
-    Sparse(crate::sparse::SparseKeyLayout),
     Block(crate::block::BlockKeyLayout),
 }
 
@@ -49,7 +48,7 @@ impl<T: TorusFftValue> ServerKey<T> {
         }
     }
 
-    /// Borrows the selected classic, sparse or block blind-rotation material.
+    /// Borrows the selected classic or block blind-rotation material.
     #[must_use]
     #[inline]
     pub fn blind_rotation_key(&self) -> &BlindRotationKey<T> {
@@ -144,8 +143,8 @@ where
     }
 
     /// Generates the configured BR and KS pair.
-    /// Validates grouping geometry before sampling the client. Keeps the accepted
-    /// accumulator transform and inverse; sparse matching retries only public maps.
+    /// Validates block geometry before sampling the client and reuses the accepted
+    /// accumulator transform and inverse.
     ///
     /// # Correctness
     /// Inherits [`Self::try_generate_server_key`]'s noise and representation contracts.
@@ -212,13 +211,6 @@ where
                     accumulator_fourier,
                     rng,
                 ),
-            BlindRotationLayout::Sparse(layout) => self
-                .generate_sparse_blind_rotation_key_with_main(
-                    client_key,
-                    accumulator_fourier,
-                    layout,
-                    rng,
-                )?,
             BlindRotationLayout::Block(layout) => self
                 .generate_block_blind_rotation_key_with_main(
                     client_key,
@@ -291,11 +283,8 @@ where
     }
 
     /// Generates only BR material using this context's configured method and gadgets.
-    /// No return or CBS key is generated. Sparse BR keeps the fixed-weight input
-    /// secret and retries at most eight public maps, without falling back to classic.
-    /// Each selector and dummy is encrypted independently after matching succeeds.
-    ///
-    /// Checks both secret roles but does not require f to fit external q.
+    /// Checks both secret roles without requiring f to fit external q. Return
+    /// and CBS material are generated separately.
     ///
     /// # Correctness
     /// Independently generated components must share the actual secrets and this
@@ -303,13 +292,9 @@ where
     /// [`FourierNtruSecretKey::try_from_coeff_secret_key`]'s numerical requirements.
     /// Budget first-group lifting, later group errors and input quantization,
     /// including coarser ManyLUT rotations.
-    /// Sparse matching is not constant-time; see [`crate::sparse::SparseNtruBootstrappingKey`]
-    /// for the conditional-distribution and security requirements.
     ///
     /// # Errors
-    /// Rejects incompatible secrets or invalid sparse geometry before consuming
-    /// randomness. Sparse matching failure consumes only map randomness and returns
-    /// no partial key.
+    /// Rejects incompatible secrets or invalid block geometry before consuming randomness.
     /// Propagates accumulator conversion/invertibility failures before sampling.
     pub fn try_generate_blind_rotation_key<R: rand::Rng + rand::CryptoRng>(
         &mut self,
@@ -500,10 +485,6 @@ where
                     self.context.parameters().blind_rotation(),
                 )?)
             }
-            BlindRotationMethod::Sparse {
-                copy_count,
-                bucket_count,
-            } => BlindRotationLayout::Sparse(self.prepare_sparse_layout(copy_count, bucket_count)?),
         })
     }
 }

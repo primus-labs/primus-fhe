@@ -186,9 +186,6 @@ pub enum CircuitBootstrapParameterError {
 /// Failure to generate ordinary or circuit-bootstrap keys for this TFHE family.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KeyGenerationError {
-    /// The selected blind-rotation method is not supported by this backend.
-    #[error("unsupported blind-rotation method: {0:?}")]
-    UnsupportedBlindRotationMethod(primus_tfhe::BlindRotationMethod),
     /// The context has no complete ring-output CBS configuration.
     #[error("context has no circuit-bootstrap parameters")]
     MissingCircuitBootstrapParameters,
@@ -199,9 +196,6 @@ pub enum KeyGenerationError {
     /// The supplied client secrets do not match the TFHE parameters.
     #[error(transparent)]
     ClientKey(#[from] TfheKeyError),
-    /// Sparse blind-rotation key generation failed.
-    #[error(transparent)]
-    SparseBootstrapping(#[from] SparseBootstrappingKeyError),
     /// Direct block-binary control generation failed.
     #[error(transparent)]
     BlockBootstrapping(#[from] BlockBootstrappingKeyError),
@@ -237,37 +231,6 @@ pub enum BlockBootstrappingKeyError {
     #[error("block coefficient storage length mismatch: expected {expected}, got {actual}")]
     StorageLengthMismatch {
         /// Required coefficient count, including dummies when the law requires them.
-        expected: usize,
-        /// Supplied coefficient count.
-        actual: usize,
-    },
-}
-
-/// Failure to construct an experimental sparse bootstrapping key.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum SparseBootstrappingKeyError {
-    /// The prepared rotation modulus switch requires 2N to fit T.
-    #[error("rotation domain must fit the input coefficient type")]
-    RotationDomainTooLarge,
-    /// Sparse generation requires a fixed-weight binary small-LWE distribution.
-    #[error("sparse bootstrapping requires a fixed-weight binary small-LWE secret")]
-    UnsupportedSecretDistribution,
-    /// The public weight must be positive and strictly less than the input dimension.
-    #[error("sparse Hamming weight must satisfy 0 < h < n")]
-    InvalidHammingWeight,
-    /// Public bucket-map validation or private matching failed.
-    #[error(transparent)]
-    BucketMap(#[from] primus_tfhe::sparse::BucketMapError),
-    /// Actual secret coefficients are not binary or do not have the declared weight.
-    #[error("small-LWE coefficients do not match the declared binary Hamming weight")]
-    InvalidSecretCoefficients,
-    /// GGSW ciphertext storage lengths exceed addressable allocation sizes.
-    #[error("sparse GGSW storage size overflow")]
-    StorageSizeOverflow,
-    /// Coefficient storage must contain every public selection and one dummy per bucket.
-    #[error("sparse coefficient storage length mismatch: expected {expected}, got {actual}")]
-    StorageLengthMismatch {
-        /// Required coefficient count, including all dummy controls.
         expected: usize,
         /// Supplied coefficient count.
         actual: usize,

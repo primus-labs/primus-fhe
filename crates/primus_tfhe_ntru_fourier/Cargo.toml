@@ -49,10 +49,6 @@ required-features = ["rustfft"]
 name = "ntru_fourier_many_lut"
 required-features = ["rustfft"]
 
-[[example]]
-name = "ntru_fourier_sparse"
-required-features = ["rustfft"]
-
 [dev-dependencies]
 criterion = { workspace = true }
 
