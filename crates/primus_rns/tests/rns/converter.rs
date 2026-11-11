@@ -1,23 +1,18 @@
-use primus_modulus::BarrettModulus;
-use primus_rns::Residues;
-use primus_rns::{BaseConverter, RNSBase};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-type Value = u64;
-type Modulus = BarrettModulus<Value>;
-type Base = RNSBase<Value, Modulus>;
+use primus_rns::{BaseConverter, Residues};
 
-fn base(moduli: &[Value]) -> Base {
-    let moduli: Vec<_> = moduli.iter().copied().map(Modulus::new).collect();
-    Base::new(&moduli).unwrap()
-}
+use super::{make_base as base, residues, small_crt_lifts};
+
+type Value = u64;
 
 #[test]
 fn fast_conversion_matches_independent_crt_sum() {
     let source_moduli = [17, 19, 23];
     let input_base = base(&source_moduli);
     // Adjusted source residues can exceed both destination moduli.
-    let output_base = base(&[5, 7]);
+    let target_moduli = [5, 7];
+    let output_base = base(&target_moduli);
     let converter = BaseConverter::new(&input_base, &output_base);
     let input = [
         0, 1, 16, 7, // mod 17
@@ -25,29 +20,8 @@ fn fast_conversion_matches_independent_crt_sum() {
         0, 3, 22, 13, // mod 23
     ];
     let value_count = input.len() / input_base.moduli_count();
-    // An independent small-integer CRT sum: Q fits in u64, and inverses are
-    // found by enumeration rather than using the converter's prepared factors.
-    let q: u64 = source_moduli.iter().product();
-    let lifts: Vec<u64> = (0..value_count)
-        .map(|value_index| {
-            source_moduli
-                .iter()
-                .enumerate()
-                .map(|(i, &qi)| {
-                    let punctured = q / qi;
-                    let inverse = (1..qi)
-                        .find(|&candidate| candidate * punctured % qi == 1)
-                        .unwrap();
-                    let adjusted = input[i * value_count + value_index] * inverse % qi;
-                    adjusted * punctured
-                })
-                .sum()
-        })
-        .collect();
-    let expected: Vec<_> = [5, 7]
-        .iter()
-        .flat_map(|&p| lifts.iter().map(move |&lift| lift % p))
-        .collect();
+    let lifts = small_crt_lifts(&input, &source_moduli);
+    let expected = residues(&lifts, &target_moduli);
 
     for value_index in 0..value_count {
         let value_residues = [
@@ -75,7 +49,11 @@ fn fast_conversion_matches_independent_crt_sum() {
     let paired: Vec<_> = converter
         .fast_convert_array_to_pair_iter(&input, value_count, &mut scratch)
         .collect();
-    let expected_pairs: Vec<_> = lifts.iter().map(|&lift| (lift % 5, lift % 7)).collect();
+    let expected_pairs: Vec<_> = expected[..value_count]
+        .iter()
+        .copied()
+        .zip(expected[value_count..].iter().copied())
+        .collect();
     assert_eq!(paired, expected_pairs);
     assert_eq!(&scratch[required_scratch_len..], &[Value::MAX; 3]);
 }
@@ -178,26 +156,24 @@ fn single_input_array_conversion_matches_exact_reduction_at_modulus_boundaries()
 
 #[test]
 fn corrected_array_conversion_uses_centered_values_and_reuses_workspace() {
-    // 7428 = 17*19*23 - 1 represents -1, hence 4 modulo the destination 5.
-    // Each source modulus exceeds the destination in this corrected path too.
+    // Include both sides of the centered interval. Each source modulus
+    // exceeds the destination.
     let input_moduli = [17, 19, 23];
+    let output_moduli = [5];
     let input_base = base(&input_moduli);
-    let output_base = base(&[5]);
+    let output_base = base(&output_moduli);
     let converter = BaseConverter::new(&input_base, &output_base);
-    let values = [0, 1, 2, 7, 16, 3_714, 3_715, 7_428];
-    let input: Vec<_> = input_moduli
-        .iter()
-        .flat_map(|&modulus| values.iter().map(move |&value| value % modulus))
-        .collect();
+    let values = [0, 1, 2, 7, 16, 3_714, -3_714, -1];
+    let input = residues(&values, &input_moduli);
+    let expected = residues(&values, &output_moduli);
     let mut output = vec![Value::MAX; values.len()];
     let mut workspace = converter.corrected_conversion_workspace(values.len());
 
-    converter.corrected_convert_array(&input, &mut output, values.len(), &mut workspace);
-    assert_eq!(output, [0, 1, 2, 2, 1, 4, 1, 4]);
-
-    output.fill(Value::MAX);
-    converter.corrected_convert_array(&input, &mut output, values.len(), &mut workspace);
-    assert_eq!(output, [0, 1, 2, 2, 1, 4, 1, 4]);
+    for _ in 0..2 {
+        output.fill(Value::MAX);
+        converter.corrected_convert_array(&input, &mut output, values.len(), &mut workspace);
+        assert_eq!(output, expected);
+    }
 }
 
 #[test]

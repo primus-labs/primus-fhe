@@ -36,6 +36,24 @@ pub(super) fn check_message<T: FheUint>(message: T, plaintext_modulus: T) {
     );
 }
 
+/// Checks the complete batch before either codec writes its output.
+#[inline]
+pub(super) fn validate_message_slice<T: FheUint>(
+    messages: &[T],
+    output_len: usize,
+    plaintext_modulus: T,
+) {
+    assert_eq!(messages.len(), output_len, "encoding slice length mismatch");
+    assert!(
+        messages
+            .iter()
+            .copied()
+            .max()
+            .is_none_or(|m| m < plaintext_modulus),
+        "message outside plaintext domain"
+    );
+}
+
 /// Validates the encoding domain before preparing either modulus conversion.
 pub(super) fn validate_moduli<T, M>(
     plaintext_modulus: T,

@@ -161,7 +161,6 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
         }
 
         let required_scratch_len = self.fast_convert_scratch_len();
-        assert!(scratch.len() >= required_scratch_len);
         let scratch = &mut scratch[..required_scratch_len];
 
         izip!(
@@ -200,7 +199,6 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
         let input_moduli_count = self.input_moduli_count();
         debug_assert!(!self.uses_single_input_kernel());
         debug_assert_eq!(input.len(), input_moduli_count * value_count);
-        assert!(scratch.len() >= input.len());
         let scratch = &mut scratch[..input.len()];
         if value_count == 0 {
             return scratch;
@@ -333,8 +331,8 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
     }
 
     /// Converts full input/output layouts already validated by ordinary
-    /// conversion or ModDown, including their length products. Scratch is still
-    /// checked when preparing the limbs, before scratch or output writes.
+    /// conversion, centered expansion or ModDown, including their length
+    /// products. Scratch is checked when preparing the limbs, before writes.
     pub(crate) fn fast_convert_array_kernel(
         &self,
         input: &[T],

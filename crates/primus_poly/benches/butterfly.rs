@@ -1,6 +1,10 @@
+//! DCRT factor butterfly on modulus-major data.
+//! cargo bench -p primus_poly --bench butterfly
+//! cargo +nightly bench -p primus_poly --bench butterfly --features simd
+
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use itertools::izip;
 use primus_factor::ShoupFactor;
 use primus_poly::DcrtPolynomial;
@@ -21,56 +25,48 @@ fn bench_butterfly(c: &mut Criterion) {
     ];
 
     let poly_length = 4096;
+    let mut group = c.benchmark_group("butterfly_mul_factor");
 
     for &(label, moduli) in cases {
         let moduli_count = moduli.len();
         let total_len = moduli_count * poly_length;
 
-        // Generate random data per modulus chunk.
-        let mut lhs_base = vec![0u64; total_len];
-        let mut rhs_base = vec![0u64; total_len];
-        let mut w_base = vec![ShoupFactor::default(); total_len];
+        let [mut lhs, mut rhs, mut result] =
+            std::array::from_fn(|_| DcrtPolynomial::<Vec<ValueT>>::zero(total_len));
+        let mut factors = vec![ShoupFactor::default(); total_len];
 
-        izip!(
-            lhs_base.chunks_exact_mut(poly_length),
-            rhs_base.chunks_exact_mut(poly_length),
-            w_base.chunks_exact_mut(poly_length),
+        // Fill both operands and their factors in modulus order before timing.
+        for (lhs, rhs, factors, &q) in izip!(
+            lhs.iter_each_modulus_mut(poly_length),
+            rhs.iter_each_modulus_mut(poly_length),
+            factors.chunks_exact_mut(poly_length),
             moduli
-        )
-        .for_each(|(l, r, w, &m)| {
-            let distr = Uniform::new(0, m).unwrap();
-            l.iter_mut()
-                .zip(distr.sample_iter(&mut rng))
-                .for_each(|(a, b)| *a = b);
-            r.iter_mut()
-                .zip(distr.sample_iter(&mut rng))
-                .for_each(|(a, b)| *a = b);
-            w.iter_mut()
-                .zip(distr.sample_iter(&mut rng))
-                .for_each(|(a, b)| a.set(b, m));
+        ) {
+            let mut samples = Uniform::new(0, q).unwrap().sample_iter(&mut rng);
+            for (value, sample) in lhs.iter_mut().chain(rhs).zip(&mut samples) {
+                *value = sample;
+            }
+            for (factor, sample) in factors.iter_mut().zip(samples) {
+                factor.set(sample, q);
+            }
+        }
+
+        group.throughput(Throughput::Elements(total_len as u64));
+        group.bench_function(format!("{label}/n={poly_length}"), |b| {
+            b.iter(|| {
+                lhs.butterfly_mul_factor_to(
+                    black_box(&rhs),
+                    black_box(&factors),
+                    black_box(&mut result),
+                    black_box(poly_length),
+                    black_box(moduli),
+                );
+                black_box(lhs.as_slice());
+                black_box(result.as_slice());
+            });
         });
-
-        let mut lhs = DcrtPolynomial(lhs_base);
-        let rhs = DcrtPolynomial(rhs_base);
-        let mut result = DcrtPolynomial(vec![0; total_len]);
-
-        c.bench_function(
-            &format!("butterfly_mul_factor/{label}/n={poly_length}"),
-            |b| {
-                b.iter(|| {
-                    lhs.butterfly_mul_factor_to(
-                        black_box(&rhs),
-                        black_box(&w_base),
-                        black_box(&mut result),
-                        black_box(poly_length),
-                        black_box(moduli),
-                    );
-                    black_box(lhs.as_slice());
-                    black_box(result.as_slice());
-                });
-            },
-        );
     }
+    group.finish();
 }
 
 criterion_group!(benches, bench_butterfly);

@@ -214,15 +214,14 @@ pub fn simd_reduce_dot_product<T: SimdUnsignedInteger, M>(modulus: M, a: &[T], b
 where
     M: Copy + Into<SimdBarrettModulus<T>> + ReduceAdd<T, Output = T> + Reduce<[T; 2], Output = T>,
 {
-    assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
-
     let outer = compact::DOT_PRODUCT_INNER_CHUNK * T::LANE_COUNT;
 
-    // Below one complete SIMD accumulator chunk, setup and horizontal
-    // reduction cost more than the scalar kernel.
+    // Below one complete SIMD accumulator chunk, the scalar entry validates
+    // the lengths and avoids SIMD setup and horizontal reduction.
     if a.len() < outer {
         return compact::slice::reduce_dot_product(modulus, a, b);
     }
+    assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
 
     let sm: SimdBarrettModulus<T> = modulus.into();
     let mv = sm.value;

@@ -1,6 +1,6 @@
-use std::{f64::consts::PI, sync::Arc};
+use std::sync::Arc;
 
-use aligned_vec::{ABox, AVec, CACHELINE_ALIGN, avec};
+use aligned_vec::{ABox, avec};
 use num_complex::Complex64;
 use primus_shape::PolyLength;
 use rustfft::{Fft, FftPlanner};
@@ -83,23 +83,13 @@ impl FftTable for RustFftTable {
     type Workspace = RustFftWorkspace;
 
     fn new(poly_length: PolyLength) -> Self {
-        let n = poly_length.get();
         let h = poly_length.fourier_poly_len();
 
         let mut planner = FftPlanner::new();
         let forward = planner.plan_fft_forward(h);
         let inverse = planner.plan_fft_inverse(h);
 
-        let twist = AVec::from_iter(
-            CACHELINE_ALIGN,
-            (0..h).map(|j| Complex64::cis(PI * j as f64 / n as f64)),
-        )
-        .into_boxed_slice();
-        let inverse_twist_scaled = AVec::from_iter(
-            CACHELINE_ALIGN,
-            (0..h).map(|j| Complex64::cis(-PI * j as f64 / n as f64) / h as f64),
-        )
-        .into_boxed_slice();
+        let (twist, inverse_twist_scaled) = super::negacyclic_twists(poly_length);
 
         Self {
             poly_length,

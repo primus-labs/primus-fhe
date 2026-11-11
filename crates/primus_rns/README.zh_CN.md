@@ -63,6 +63,8 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 `RNSBase::new` 从非空、模数两两互素的 slice 构造基；`from_owned_moduli` 接收模数 vector 的所有权。非法基的构造与扩展返回 `RnsError`。
 
+自定义 `FieldContext<T>` 的模数须满足 `1 < q_i < 2^(T::BITS - 1)`，以便构造内部 Shoup 因子。见 [RNS 基契约](src/base/mod.rs)。
+
 克隆 `RNSBase` 共享不可变预计算，不复制缓冲区；`extend` / `extend_with` 创建新基，原基保持不变。应复用已准备的基，避免独立重复构造相同基。
 
 `prefix(count)` 从非空有序前缀派生，不重做继承的互素检查。较短前缀准备其不同的
@@ -83,7 +85,7 @@ CRT 常量；完整前缀共享原 owner。数量为零或超出原基时 panic�
 不同转换入口具有不同的数学契约：
 
 - `fast_convert` 和 `fast_convert_array` 执行 SEAL 风格的 approximate CRT lift。输入基包含多个模数时，结果表示某个整数 `x + kQ`，通常不等于规范的 `x mod p_j`。只有外层算法会消去或允许这个 `Q` 倍数项时才能使用。单模数输入 使用精确的直接约简。
-- `corrected_convert_array` 应用商修正，将输入解释为 `[-Q/2, Q/2)` 中的居中代表元，要求输出基恰好包含一个模数。多模数输入的修正使用 `f64`，靠近居中边界时仍可能相差一个 `Q` 的倍数，需要在此边界精确转换的应用须采用更高精度方法。完整契约见[修正转换 API](src/converter/corrected.rs)。
+- `corrected_convert_array` 应用商修正来选择 `[-Q/2, Q/2)` 内的居中代表元，要求输出基恰好包含一个模数。多模数输入在半区边界附近的 `f64` 修正可能相差一个 `Q` 的倍数。对于受支持的奇数 u64 基，可以使用 `CenteredBaseConverter` 精确转换。见[修正转换 API](src/converter/corrected.rs)。
 
 - `CenteredBaseConverter::try_new(&input,&output)` 为小于 2^62 的奇 u64 bases 准备精确 centered 转换，也支持多个输出模数。`workspace(value_count)` 与 `convert_to` 复用全部存储：保守浮点区间认证快速 CRT 商，临界半界转精确多字组合。HPS 和 native Hybrid correction 共享该原语，不为转换器准备无关 HPS scaling 资源。
 

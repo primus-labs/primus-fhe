@@ -84,6 +84,8 @@ cargo test -p primus_fft --features rustfft,tfhe-fft
 cargo bench -p primus_fft --bench fft --features rustfft,tfhe-fft
 ```
 
+The transform benchmark compares both engines at N=1024 and N=4096 for u32 and u64. Forward and inverse share the prepared table. Planning and buffer allocation are outside timing.
+
 ## License
 
 Licensed under either the [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) or the [MIT License](../../LICENSE-MIT), at your option.

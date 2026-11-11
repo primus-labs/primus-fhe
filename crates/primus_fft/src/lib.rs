@@ -10,6 +10,7 @@ mod automorphism;
 mod table;
 mod torus;
 
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 mod backend;
 
 pub use num_complex::Complex64;

@@ -1,9 +1,10 @@
-use super::helpers;
-use super::helpers::{check_message, lift_centered_from_raw};
-use crate::{MessageDecoder, PlaintextEmbedding};
 use primus_integer::FheUint;
 use primus_modulus::UintModulus;
 use primus_reduce::{Modulus, ModulusSwitch, PrepareModulusSwitch, ReduceAdd};
+
+use crate::{MessageDecoder, PlaintextEmbedding};
+
+use super::helpers::{self, check_message, lift_centered_from_raw, validate_message_slice};
 
 /// Per-message rounding: `round(lift(m) * q / t) mod q`, returned in `[0,q)`,
 /// with ties away from zero before modular reduction.
@@ -142,7 +143,7 @@ where
     /// plaintext domain `[0,t)`.
     #[inline]
     pub fn encode_slice_to(&self, messages: &[T], output: &mut [T], embedding: PlaintextEmbedding) {
-        self.validate(messages, output.len());
+        validate_message_slice(messages, output.len(), self.plaintext_modulus());
         self.encode::<false, _>(output.iter_mut().zip(messages.iter().copied()), embedding);
     }
 
@@ -154,7 +155,7 @@ where
     /// Panics if a value lies outside the plaintext domain `[0,t)`.
     #[inline]
     pub fn encode_slice_assign(&self, values: &mut [T], embedding: PlaintextEmbedding) {
-        self.validate(values, values.len());
+        validate_message_slice(values, values.len(), self.plaintext_modulus());
         self.encode::<false, _>(
             values.iter_mut().map(|out| {
                 let message = *out;
@@ -209,7 +210,7 @@ where
         messages: &[T],
         embedding: PlaintextEmbedding,
     ) {
-        self.validate(messages, accumulator.len());
+        validate_message_slice(messages, accumulator.len(), self.plaintext_modulus());
         self.encode::<true, _>(
             accumulator.iter_mut().zip(messages.iter().copied()),
             embedding,
@@ -222,18 +223,6 @@ where
     T: FheUint,
     M: Modulus<ValueT = T> + ReduceAdd<T, Output = T>,
 {
-    fn validate(&self, messages: &[T], output_len: usize) {
-        assert_eq!(messages.len(), output_len, "encoding slice length mismatch");
-        assert!(
-            messages
-                .iter()
-                .copied()
-                .max()
-                .is_none_or(|m| m < self.plaintext_modulus()),
-            "message outside plaintext domain"
-        );
-    }
-
     /// The caller validates messages and, for ADD, supplies canonical accumulators.
     /// A negative lift has nonzero magnitude; q > t makes its encoding nonzero.
     /// Carrying sign/output through switch_map keeps arithmetic dispatch outside

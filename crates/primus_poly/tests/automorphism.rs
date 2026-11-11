@@ -1,34 +1,37 @@
-use primus_modulus::{BarrettModulus, NativeModulus};
+use primus_modulus::{CompactModulus, NativeModulus};
 use primus_poly::CoeffAutomorphismPermutation;
 use primus_shape::PolyLength;
 
 #[test]
 fn coefficient_permutation_matches_monomial_substitution() {
     const Q: u32 = 257;
-    let modulus = BarrettModulus::new(Q);
+    let modulus = CompactModulus::new(Q);
     // Exhaust all odd degrees, including identity and the N+1 sign-only path,
     // at the minimum size and with an additional index bit.
     for n in [32, 64] {
+        let poly_length = PolyLength::new(n);
         let input: Vec<i32> = (0..n).map(|i| i as i32 - n as i32 / 2).collect();
         let residues: Vec<u32> = input
             .iter()
             .map(|&x| x.rem_euclid(Q as i32) as u32)
             .collect();
+        let mut expected = vec![0i32; n];
+        let mut signed = vec![0i32; n];
+        let mut output = vec![0u32; n];
         for degree in (1..2 * n).step_by(2) {
-            let permutation = CoeffAutomorphismPermutation::new(degree, PolyLength::new(n));
+            let permutation = CoeffAutomorphismPermutation::new(degree, poly_length);
             assert_eq!(permutation.poly_length().get(), n);
-            let mut expected = vec![0i32; n];
             // Independent scatter oracle in the coefficient ring.
             for (i, &value) in input.iter().enumerate() {
                 let power = i * degree;
                 expected[power % n] = if power / n % 2 == 0 { value } else { -value };
             }
-            let mut signed = vec![i32::MAX; n];
+            signed.fill(i32::MAX);
             permutation.apply_signed_to::<u32>(&input, &mut signed);
             assert_eq!(signed, expected);
-            let mut output = vec![u32::MAX; n];
+            output.fill(u32::MAX);
             permutation.apply_to(&residues, &mut output, modulus);
-            for (actual, expected) in output.into_iter().zip(expected) {
+            for (&actual, &expected) in output.iter().zip(&expected) {
                 assert_eq!(actual, expected.rem_euclid(Q as i32) as u32);
             }
         }

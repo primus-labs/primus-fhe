@@ -115,7 +115,7 @@ impl HpsRns {
     /// Panics if a complete array length overflows `usize`.
     #[must_use]
     pub fn workspace(&self, value_count: usize) -> HpsRnsWorkspace {
-        let max_moduli = self.q().moduli_count().max(self.p().moduli_count());
+        let max_moduli = self.q().moduli_count().max(self.base_p().moduli_count());
         HpsRnsWorkspace {
             value_count,
             max_moduli,
@@ -132,7 +132,7 @@ impl HpsRns {
             },
             scaled_p: vec![
                 0;
-                self.p()
+                self.base_p()
                     .moduli_count()
                     .checked_mul(value_count)
                     .expect("HPS workspace length overflow")
@@ -217,7 +217,7 @@ impl HpsRns {
         for ((chunk, matrix), p) in output
             .chunks_exact_mut(value_count)
             .zip(self.q_inverse_mod_p.chunks_exact(count_q))
-            .zip(self.p().moduli())
+            .zip(self.base_p().moduli())
         {
             for (out, residues) in chunk.iter_mut().zip(adjusted.chunks_exact(count_q)) {
                 *out = p.reduce_dot_product(residues, matrix);
@@ -253,7 +253,7 @@ impl HpsRns {
             .chunks_exact(value_count)
             .zip(scaled_p.chunks_exact_mut(value_count))
             .zip(&self.t_mod_p)
-            .zip(self.p().moduli_values())
+            .zip(self.base_p().moduli_values())
         {
             for (out, &value) in output.iter_mut().zip(input) {
                 *out = factor.factor_mul_modulo(value, p);
@@ -280,14 +280,11 @@ impl HpsRns {
     /// Borrows the ordered computation-only P basis.
     #[must_use]
     pub fn base_p(&self) -> &Base {
-        self.p()
+        self.q_to_p.output_base()
     }
 
     fn q(&self) -> &Base {
         self.q_to_p.input_base()
-    }
-    fn p(&self) -> &Base {
-        self.q_to_p.output_base()
     }
 
     fn validate(
@@ -299,9 +296,9 @@ impl HpsRns {
         q_to_p: bool,
     ) {
         let (input_count, output_count) = if q_to_p {
-            (self.q().moduli_count(), self.p().moduli_count())
+            (self.q().moduli_count(), self.base_p().moduli_count())
         } else {
-            (self.p().moduli_count(), self.q().moduli_count())
+            (self.base_p().moduli_count(), self.q().moduli_count())
         };
         assert_eq!(
             input_len,
@@ -325,7 +322,7 @@ impl HpsRns {
         );
         assert_eq!(
             workspace.scaled_p.len(),
-            self.p().moduli_count() * n,
+            self.base_p().moduli_count() * n,
             "HPS workspace P shape mismatch"
         );
     }

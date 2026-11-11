@@ -92,6 +92,8 @@ This matches `CrtPolynomial` and `DcrtPolynomial` in [`primus_poly`](../primus_p
 
 `DcrtTable` provides full-polynomial forward/inverse transforms and `transform_coeff_one_monomial` for all limbs. Use `iter()` or `ntt_tables()` to access component tables for their lazy and general monomial operations.
 
+For an active modulus prefix, use `transform_prefix_slice` or `inverse_transform_prefix_slice`. Pass complete limbs in the original modulus order. Both methods reject empty, partial-limb and overlong slices before writing, including in release builds.
+
 ## SIMD backends and build target
 
 Default features are empty. Specialized x86-64 tables select available scalar or SIMD kernels at runtime; these kernels do not require the optional `simd` feature. Other architectures use scalar implementations. The `simd` feature enables portable-SIMD support in dependencies and requires nightly Rust.
@@ -115,6 +117,12 @@ The repository [build configuration](../../.cargo/config.toml) uses `target-cpu=
 cargo test -p primus_ntt
 cargo bench -p primus_ntt --bench bench_ntt
 ```
+
+The benchmark compares specialized and generic forward/inverse transforms for
+both word widths. Lazy transforms, table construction and monomial operations
+use one representative profile per width. The optional `parallel` feature adds
+a DCRT prefix comparison at N=4096 with four active limbs and prepared pools of
+one or four workers. Both measurements include entry to the pool.
 
 ## License
 

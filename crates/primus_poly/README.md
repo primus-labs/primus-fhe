@@ -12,13 +12,13 @@ English | [简体中文](README.zh_CN.md)
 | Type | Representation and layout | Main operations |
 | --- | --- | --- |
 | `Polynomial<S>` | `N` coefficients in ascending-power order under one modulus | Add, subtract, negate, scalar/factor multiplication, negacyclic monomials, naive multiplication, evaluation, and sampling |
-| `NttPolynomial<S>` | `N` point values under one modulus; ordering is defined by the NTT context | Point-wise arithmetic, fused multiply-add, and inverse |
+| `NttPolynomial<S>` | `N` point values under one modulus; ordering is defined by the NTT context | Pointwise arithmetic, fused multiply-add, and modular inversion |
 | `CrtPolynomial<S>` | Modulus-major coefficient data: one contiguous `N`-coefficient polynomial per modulus | Component-wise arithmetic, scalar/factor operations, and negacyclic monomials |
-| `DcrtPolynomial<S>` | Modulus-major NTT data: one contiguous `N`-value transform per modulus | Point-wise arithmetic, fused multiply-add, inverse, and factor butterfly kernels |
+| `DcrtPolynomial<S>` | Modulus-major NTT data: one contiguous `N`-value transform per modulus | Pointwise arithmetic, fused multiply-add, modular inversion, and factor butterfly kernels |
 | `BigUintPolynomial<S>` | Coefficient-major data: each coefficient is a fixed-width little-endian limb chunk | Multi-limb modular add, subtract, and negate |
 | `FourierPolynomial<S>` | Independent complex evaluations; ordering is defined by the Fourier backend | Point-wise add, subtract, negate, multiply, fused multiply-add, and scalar multiplication |
 
-`primus_poly` stores values and implements arithmetic; it does not own transform tables or perform representation selection. [`primus_ntt`](../primus_ntt) converts between coefficient and NTT/CRT and DCRT representations, while [`primus_fft`](../primus_fft) supplies Fourier transforms.
+`primus_poly` stores values and implements arithmetic. [`primus_ntt`](../primus_ntt) transforms coefficients to and from NTT values under one modulus. It transforms CRT to and from DCRT by applying an NTT or inverse NTT to each modulus limb. [`primus_rns`](../primus_rns) provides CRT reconstruction and basis conversion, and [`primus_fft`](../primus_fft) provides Fourier transforms.
 
 For flat scalar buffers, use slices and the `Reduce*Slice` traits from
 [`primus_reduce`](../primus_reduce/README.md), such as

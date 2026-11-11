@@ -1,27 +1,25 @@
 use core::range::Range;
-
-use primus_modulus::BarrettModulus;
-use primus_rns::{HybridRNS, HybridRNSPartitioning, RnsError};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
+use primus_rns::{HybridRNS, HybridRNSPartitioning, RnsError};
+
+use super::{Modulus, moduli, residues, small_crt_lifts, small_inverse};
+
 type ValueT = u64;
-type ModulusT = BarrettModulus<ValueT>;
 
 fn make_hybrid(
     q: &[ValueT],
     p: &[ValueT],
     decomposition_count: usize,
-) -> HybridRNS<ValueT, ModulusT> {
-    let q_moduli: Vec<_> = q.iter().copied().map(ModulusT::new).collect();
-    let p_moduli: Vec<_> = p.iter().copied().map(ModulusT::new).collect();
-    HybridRNS::new(&q_moduli, &p_moduli, decomposition_count).unwrap()
+) -> HybridRNS<ValueT, Modulus> {
+    HybridRNS::new(&moduli(q), &moduli(p), decomposition_count).unwrap()
 }
 
 #[test]
 fn construction_uses_fixed_partitioning_and_precomputes_p() {
     // Dropping active Q limbs must not repartition surviving key-switch digits.
-    let q_moduli = [17, 41, 73, 89, 97].map(ModulusT::new);
-    let p_moduli = [101, 103].map(ModulusT::new);
+    let q_moduli = [17, 41, 73, 89, 97].map(Modulus::new);
+    let p_moduli = [101, 103].map(Modulus::new);
     let hybrid = HybridRNS::new(&q_moduli, &p_moduli, 3).unwrap();
     let ranges: Vec<_> = hybrid
         .partitions()
@@ -88,37 +86,26 @@ fn single_partition_mod_up_preserves_q_and_extends_into_p() {
 
 #[test]
 fn mod_up_full_and_streaming_outputs_match() {
-    let hybrid = make_hybrid(&[17, 41, 73], &[89, 97], 2);
+    let q_moduli = [17, 41, 73];
+    let p_moduli = [89, 97];
+    let hybrid = make_hybrid(&q_moduli, &p_moduli, 2);
+    let qp_moduli: Vec<_> = q_moduli.into_iter().chain(p_moduli).collect();
     let poly_length = 4;
     let polynomial_q = [
         1, 2, 3, 4, // q_0
         11, 12, 13, 14, // q_1
         21, 22, 23, 24, // q_2
     ];
-    // For each partition, lift a_i with sum((a_i * (Q/q_i)^-1 mod q_i) * Q/q_i)
-    // without reducing modulo the partition product Q. For the first column
-    // in partition 0 this is 5*41 + 32*17 = 749; partition 1 lifts 21 directly.
-    let expected_digits: [[ValueT; 20]; 2] = [
-        [
-            1, 2, 3, 4, // q_0: copied
-            11, 12, 13, 14, // q_1: copied
-            19, 20, 21, 22, // q_2: converted
-            37, 38, 39, 40, // p_0: converted
-            70, 71, 72, 73, // p_1: converted
-        ],
-        [
-            4, 5, 6, 7, // q_0: converted
-            21, 22, 23, 24, // q_1: converted
-            21, 22, 23, 24, // q_2: copied
-            21, 22, 23, 24, // p_0: converted
-            21, 22, 23, 24, // p_1: converted
-        ],
-    ];
-
-    for (partition, expected) in hybrid.partitions().zip(&expected_digits) {
-        let q_range = partition.q_range();
+    assert_eq!(hybrid.partition_count(), 2);
+    for (partition, q_range) in hybrid.partitions().zip([0..2, 2..3].map(Range::from)) {
+        assert_eq!(partition.q_range(), q_range);
         let partition_elements =
             Range::from(q_range.start * poly_length..q_range.end * poly_length);
+        // ModUp copies the partition's Q limbs and reduces its unreduced CRT
+        // sum under each complementary modulus. The copied limbs have the
+        // same residues under that sum.
+        let lifts = small_crt_lifts(&polynomial_q[partition_elements], &q_moduli[q_range]);
+        let expected = residues(&lifts, &qp_moduli);
 
         let mut digit_qp = vec![0; hybrid.qp_moduli_count() * poly_length];
         let mut scratch = vec![0; partition.mod_up_scratch_len(poly_length)];
@@ -248,12 +235,9 @@ fn mod_down_matches_expected_output() {
             .collect();
         let mut weighted_q = original[..q_len].to_vec();
         hybrid.approx_mod_down_from_correction_q_assign(&mut weighted_q, &weighted, poly_length);
+        let p: u64 = p_moduli.iter().product();
         for (modulus_index, qi) in [17, 41, 73].into_iter().enumerate() {
-            // Enumerate P^-1 as an independent small-integer oracle.
-            let p: u64 = p_moduli.iter().product();
-            let inverse = (1..qi)
-                .find(|&candidate| candidate * (p % qi) % qi == 1)
-                .unwrap();
+            let inverse = small_inverse(p, qi);
             for coefficient in 0..poly_length {
                 let index = modulus_index * poly_length + coefficient;
                 let expected = ((original[index] + qi - weighted[index]) * inverse) % qi;

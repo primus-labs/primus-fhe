@@ -1,11 +1,13 @@
-use super::{
-    helpers::{check_message, lift_centered_from_raw, validate_moduli},
-    integer_scale::IntegerScale,
-};
-use crate::{CodecError, MessageDecoder, PlaintextEmbedding};
 use primus_integer::FheUint;
 use primus_modulus::UintModulus;
 use primus_reduce::{Modulus, PrepareModulusSwitch, ReduceAdd};
+
+use crate::{CodecError, MessageDecoder, PlaintextEmbedding};
+
+use super::{
+    helpers::{check_message, lift_centered_from_raw, validate_message_slice, validate_moduli},
+    integer_scale::IntegerScale,
+};
 
 /// Fixed rounded scaling: `lift(m) * delta mod q`, returned in `[0,q)`, where
 /// `delta = round(q/t)` with ties upward.
@@ -55,7 +57,7 @@ where
         validate_moduli(plaintext_modulus, ciphertext_modulus)?;
         validate_scale_recovery(plaintext_modulus, ciphertext_modulus)?;
         let plaintext_modulus_context = UintModulus(plaintext_modulus);
-        // Preparing from UintModulus validates both moduli before calling M's implementation.
+        // Switching the residue one from t to q gives the ties-up scale round(q/t).
         let delta = plaintext_modulus_context
             .prepare_switch_to(ciphertext_modulus)
             .switch(T::ONE);
@@ -121,7 +123,7 @@ where
     /// Panics on a length mismatch or messages outside `[0,t)`.
     #[inline]
     pub fn encode_slice_to(&self, messages: &[T], output: &mut [T], embedding: PlaintextEmbedding) {
-        self.validate(messages, output.len());
+        validate_message_slice(messages, output.len(), self.plaintext_modulus());
         self.scale.apply::<false, _, _>(
             output.iter_mut().zip(messages.iter().copied()),
             self.plaintext_modulus(),
@@ -138,7 +140,7 @@ where
     /// Panics on messages outside `[0,t)`.
     #[inline]
     pub fn encode_slice_assign(&self, values: &mut [T], embedding: PlaintextEmbedding) {
-        self.validate(values, values.len());
+        validate_message_slice(values, values.len(), self.plaintext_modulus());
         self.scale.apply::<false, _, _>(
             values.iter_mut().map(|out| {
                 let m = *out;
@@ -168,25 +170,12 @@ where
         messages: &[T],
         embedding: PlaintextEmbedding,
     ) {
-        self.validate(messages, accumulator.len());
+        validate_message_slice(messages, accumulator.len(), self.plaintext_modulus());
         self.scale.apply::<true, _, _>(
             accumulator.iter_mut().zip(messages.iter().copied()),
             self.plaintext_modulus(),
             embedding,
             self.ciphertext_modulus(),
-        );
-    }
-
-    #[inline]
-    fn validate(&self, messages: &[T], output_len: usize) {
-        assert_eq!(messages.len(), output_len, "encoding slice length mismatch");
-        assert!(
-            messages
-                .iter()
-                .copied()
-                .max()
-                .is_none_or(|m| m < self.plaintext_modulus()),
-            "message outside plaintext domain"
         );
     }
 

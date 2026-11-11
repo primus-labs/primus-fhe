@@ -3,14 +3,9 @@ use primus_integer::{BigUint, FheUint};
 use primus_modulus::BarrettModulus;
 use primus_rns::{RNSBase, ResidueFactors, Residues, RnsError};
 
-type Value = u64;
-type Modulus = BarrettModulus<Value>;
-type Base = RNSBase<Value, Modulus>;
+use super::{Base, Modulus, make_base as base};
 
-fn base(moduli: &[Value]) -> Base {
-    let moduli: Vec<_> = moduli.iter().copied().map(Modulus::new).collect();
-    Base::new(&moduli).unwrap()
-}
+type Value = u64;
 
 #[test]
 fn construction_rejects_invalid_bases() {
@@ -112,6 +107,25 @@ fn compose_and_decompose_preserve_the_modulus_major_layout() {
         &mut scratch,
     );
     assert_eq!(recomposed, values);
+}
+
+#[test]
+fn compose_and_decompose_reject_overflowing_batch_lengths() {
+    let base = base(&[1_125_899_906_826_241, 1_125_899_906_629_633]);
+    // Both length products would wrap to zero without checked multiplication.
+    let value_count = 1usize << (usize::BITS - 1);
+    assert!(
+        std::panic::catch_unwind(|| {
+            base.compose_big_uint_values_to(&[], &mut [], value_count, &mut [0; 2]);
+        })
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| {
+            base.decompose_big_uint_values_to(&[], &mut [], value_count);
+        })
+        .is_err()
+    );
 }
 
 #[test]

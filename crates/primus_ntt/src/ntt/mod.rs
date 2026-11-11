@@ -235,7 +235,9 @@ pub trait MonomialNttTable: NttTable {
             group_log,
             |group_index| {
                 let evaluation_index = reverse_lsbs(group_index, log_n - group_log);
-                let exponent = ((2 * evaluation_index + 1) * degree) & exponent_mask;
+                // Only the low bits modulo 2N are needed, even if the product
+                // exceeds usize on a 32-bit target.
+                let exponent = (2 * evaluation_index + 1).wrapping_mul(degree) & exponent_mask;
                 let power_index = reverse_lsbs(exponent & power_mask, log_n);
                 (power_index, exponent & n != 0)
             },

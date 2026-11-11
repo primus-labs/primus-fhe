@@ -20,11 +20,12 @@ use primus_reduce::{ReduceAdd, ReduceSub};
 /// lengths containing complete length-`N` polynomials in the same order; an empty
 /// batch is allowed. Both exponents must be in `[0, 2N)`. Inputs and the initialized
 /// accumulator must be canonical for `modulus`; output remains canonical.
+/// Debug builds check the length, batch layout and exponent ranges.
 ///
 /// # Panics
 ///
-/// Panics if `poly_length` is zero. Debug builds also check lengths and exponent
-/// ranges. Violating the contract can panic after partial writes in release builds.
+/// Invalid lengths can panic during slicing or chunking, possibly after partial
+/// writes in release builds.
 #[inline]
 pub fn add_mul_monomial_pair_assign<T, M>(
     acc: &mut [T],
@@ -39,7 +40,6 @@ pub fn add_mul_monomial_pair_assign<T, M>(
     M: Copy + ReduceAdd<T, Output = T> + ReduceSub<T, Output = T>,
 {
     let n = poly_length;
-    assert_ne!(n, 0, "polynomial length must be nonzero");
     debug_assert!(n.is_power_of_two(), "invalid polynomial length");
     debug_assert_eq!(acc.len(), first.len(), "coefficient batch length mismatch");
     debug_assert_eq!(acc.len(), second.len(), "coefficient batch length mismatch");
@@ -50,8 +50,8 @@ pub fn add_mul_monomial_pair_assign<T, M>(
     );
     let shifts = [first_exponent & (n - 1), second_exponent & (n - 1)];
     let negatives = [first_exponent >= n, second_exponent >= n];
-    // Earlier Sparse PBS measurements favored interval-major traversal for u64
-    // and polynomial locality for u32.
+    // For u64, share the sign dispatch for each interval across the batch.
+    // Other widths visit all intervals of one polynomial at a time.
     if T::BITS == 64 {
         add_pair_by_segments(acc, first, second, shifts, negatives, n, modulus);
     } else {

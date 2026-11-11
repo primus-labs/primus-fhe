@@ -63,6 +63,8 @@ Batched big integers use the opposite grouping: each value occupies one contiguo
 
 `RNSBase::new` constructs a base from a nonempty slice of pairwise-coprime moduli; `from_owned_moduli` takes ownership of their vector. Construction and extension return `RnsError` for invalid bases.
 
+Custom `FieldContext<T>` implementations must supply moduli in `1 < q_i < 2^(T::BITS - 1)` for the internal Shoup factors. See the [basis contract](src/base/mod.rs).
+
 Cloning an `RNSBase` shares immutable precomputations without copying buffers. `extend` / `extend_with` create a new base and leave the original unchanged. Reuse a prepared base rather than independently constructing the same basis.
 
 `prefix(count)` derives a nonempty ordered prefix without repeating inherited
@@ -84,7 +86,7 @@ Conversion is intended for runtime or derived Barrett contexts. Multi-modulus co
 Conversion operations have different mathematical contracts:
 
 - `fast_convert` and `fast_convert_array` compute a SEAL-style approximate CRT lift. With a multi-modulus input basis, the result represents `x + kQ` for some integer `k`; it is not generally the canonical `x mod p_j`. This is suitable only when the surrounding algorithm cancels or accepts the multiple-of-`Q` term. A single-modulus input uses exact direct reduction.
-- `corrected_convert_array` applies a quotient correction, interprets the input through its centered representative in `[-Q/2, Q/2)`, and requires exactly one output modulus. For multi-modulus inputs, correction uses `f64`, so values near the centered boundary may differ by one multiple of `Q` modulo the output modulus; applications requiring exactness there need a higher-precision method. See the [corrected-conversion API](src/converter/corrected.rs).
+- `corrected_convert_array` applies a quotient correction for a centered representative in `[-Q/2, Q/2)` and requires one output modulus. For multi-modulus inputs, `f64` correction near a half boundary can differ by one multiple of `Q`. Use `CenteredBaseConverter` for exact conversion with the supported odd u64 bases. See the [corrected-conversion API](src/converter/corrected.rs).
 
 - `CenteredBaseConverter::try_new(&input,&output)` prepares exact centered conversion for odd u64 bases below 2^62, including multiple output moduli. `workspace(value_count)` and `convert_to` reuse all storage. A conservative floating interval certifies the fast CRT quotient; uncertain half boundaries use exact multiword composition. This is shared by HPS and native Hybrid correction, without preparing unrelated HPS scaling resources.
 

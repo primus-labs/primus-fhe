@@ -31,5 +31,9 @@ fn fourier(c: &mut Criterion) {
         group.finish();
     }
 }
-criterion_group! { name = benches; config = Criterion::default().sample_size(20).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(5)); targets = fourier }
+criterion_group! {
+    name = benches;
+    config = Criterion::default().sample_size(20).warm_up_time(Duration::from_secs(1));
+    targets = fourier
+}
 criterion_main!(benches);

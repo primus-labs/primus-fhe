@@ -1,32 +1,9 @@
-use dashu_int::IBig;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use primus_modulus::BarrettModulus;
-use primus_rns::{HpsRns, RNSBase, RnsError};
+use dashu_int::IBig;
+use primus_rns::{HpsRns, RnsError};
 
-type Base = RNSBase<u64, BarrettModulus<u64>>;
-
-fn base(moduli: &[u64]) -> Base {
-    Base::new(
-        &moduli
-            .iter()
-            .copied()
-            .map(BarrettModulus::new)
-            .collect::<Vec<_>>(),
-    )
-    .unwrap()
-}
-
-fn residues(values: &[i128], moduli: &[u64]) -> Vec<u64> {
-    moduli
-        .iter()
-        .flat_map(|&modulus| {
-            values
-                .iter()
-                .map(move |&value| value.rem_euclid(modulus as i128) as u64)
-        })
-        .collect()
-}
+use super::{make_base as base, residues};
 
 fn inverse(value: i128, modulus: i128) -> i128 {
     // Extended Euclid, independent of the production modular precomputation.
@@ -105,8 +82,10 @@ fn hps_scale_and_round_matches_signed_integer_oracle_at_every_p_remainder() {
         .collect();
     let input_q = residues(&values, &q_moduli);
     let input_p = residues(&values, &p_moduli);
+    let q_base = base(&q_moduli);
+    let p_base = base(&p_moduli);
     for t in [1, 2, 17, 67, u64::MAX] {
-        let hps = HpsRns::try_new(&base(&q_moduli), &base(&p_moduli), t).unwrap();
+        let hps = HpsRns::try_new(&q_base, &p_base, t).unwrap();
         let mut workspace = hps.workspace(values.len());
         let mut output = vec![0; input_q.len()];
         hps.scale_and_round(
@@ -202,12 +181,14 @@ fn exact_expansion_handles_wide_centered_half_boundaries() {
         .collect();
     let input = big_residues(&values, &WIDE_Q);
     let expected = big_residues(&centered, &target);
-    let hps = HpsRns::try_new(&base(&WIDE_Q), &base(&target), 65_537).unwrap();
+    let q_base = base(&WIDE_Q);
+    let target_base = base(&target);
+    let hps = HpsRns::try_new(&q_base, &target_base, 65_537).unwrap();
     let mut workspace = hps.workspace(values.len());
     let mut output = vec![0; expected.len()];
     hps.expand_q_to_p(&input, &mut output, values.len(), &mut workspace);
     assert_eq!(output, expected);
-    let reverse = HpsRns::try_new(&base(&target), &base(&WIDE_Q), 65_537).unwrap();
+    let reverse = HpsRns::try_new(&target_base, &q_base, 65_537).unwrap();
     let mut reverse_workspace = reverse.workspace(values.len());
     reverse.expand_p_to_q(&input, &mut output, values.len(), &mut reverse_workspace);
     assert_eq!(output, expected);
@@ -298,6 +279,7 @@ fn hps_rejects_invalid_parameters_and_shapes_before_writes() {
 fn scale_and_round_resolves_wide_and_single_limb_p_half_boundaries() {
     // Covers both >u128 P and a single P just below the u64 NTT limit;
     // low bits above the f64 mantissa remain significant in the exact oracle.
+    let q_base = base(&WIDE_Q);
     for p_moduli in [&WIDE_P[..], &[(1_u64 << 62) - 57][..]] {
         let p = big_product(p_moduli);
         let half = &p / 2_u8;
@@ -311,8 +293,9 @@ fn scale_and_round_resolves_wide_and_single_limb_p_half_boundaries() {
             .collect();
         let input_q = big_residues(&values, &WIDE_Q);
         let input_p = big_residues(&values, p_moduli);
+        let p_base = base(p_moduli);
         for t in [1_u64, 2, 65_537, u64::MAX] {
-            let hps = HpsRns::try_new(&base(&WIDE_Q), &base(p_moduli), t).unwrap();
+            let hps = HpsRns::try_new(&q_base, &p_base, t).unwrap();
             let mut workspace = hps.workspace(values.len());
             let mut output = vec![0; input_q.len()];
             hps.scale_and_round(

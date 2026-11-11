@@ -142,8 +142,8 @@ impl BatchingEncoder {
     /// and scratch entry. Coefficients remain unchanged.
     ///
     /// # Panics
-    /// Panics before writing unless all three slices have length `n`, or if
-    /// any coefficient is not canonical modulo `p`.
+    /// Panics before writing if any slice has a length other than `n` or any
+    /// coefficient lies outside `[0,p)`.
     pub fn decode_to(&self, coefficients: &[u64], slots: &mut [u64], scratch: &mut [u64]) {
         let n = self.slot_capacity();
         assert_eq!(

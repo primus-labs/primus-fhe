@@ -58,26 +58,15 @@ const Q: [u64; 4] = [
     1_152_921_504_606_830_593,
 ];
 
-fn compare_with_serial(table: &U64DcrtTable) {
-    for limbs in 1..=Q.len() {
-        let original = Q[..limbs]
-            .iter()
-            .flat_map(|&q| (0..N).map(move |i| if i % 7 == 0 { q - 1 } else { i as u64 }))
-            .collect::<Vec<_>>();
-        let mut expected = original.clone();
-        for (limb, component) in expected.as_chunks_mut::<N>().0.iter_mut().zip(table.iter()) {
-            component.transform_slice(limb);
-        }
-        let mut actual = original.clone();
-        without_allocating(|| table.transform_prefix_slice(&mut actual));
-        assert_eq!(actual, expected, "prefix={limbs}");
-        for (limb, component) in expected.as_chunks_mut::<N>().0.iter_mut().zip(table.iter()) {
-            component.inverse_transform_slice(limb);
-        }
-        without_allocating(|| table.inverse_transform_prefix_slice(&mut actual));
-        assert_eq!(actual, expected, "inverse prefix={limbs}");
-        assert_eq!(actual, original);
-    }
+/// Check the forward output against the serial component oracle. The original
+/// coefficients are the exact expected output of its inverse.
+fn check_prefix(table: &U64DcrtTable, coefficients: &[u64], transformed: &[u64]) {
+    let mut actual = coefficients.to_vec();
+    let limbs = coefficients.len() / N;
+    without_allocating(|| table.transform_prefix_slice(&mut actual));
+    assert_eq!(actual, transformed, "prefix={limbs}");
+    without_allocating(|| table.inverse_transform_prefix_slice(&mut actual));
+    assert_eq!(actual, coefficients, "inverse prefix={limbs}");
 }
 
 #[test]
@@ -100,12 +89,24 @@ fn complete_prefix_transforms_match_serial_and_reject_geometry_before_writes() {
     #[cfg(feature = "parallel")]
     let table = pools[0]
         .install(|| U64DcrtTable::new(PolyLength::new(N), &Q.map(BarrettModulus::new)).unwrap());
-    #[cfg(feature = "parallel")]
-    for pool in &pools {
-        pool.install(|| compare_with_serial(&table));
+    // Compute the serial reference once per prefix and share it across pool sizes.
+    for limbs in 1..=Q.len() {
+        let coefficients = Q[..limbs]
+            .iter()
+            .flat_map(|&q| (0..N).map(move |i| if i % 7 == 0 { q - 1 } else { i as u64 }))
+            .collect::<Vec<_>>();
+        let mut transformed = coefficients.clone();
+        let (transformed_limbs, _) = transformed.as_chunks_mut::<N>();
+        for (limb, component) in transformed_limbs.iter_mut().zip(table.iter()) {
+            component.transform_slice(limb);
+        }
+        #[cfg(feature = "parallel")]
+        for pool in &pools {
+            pool.install(|| check_prefix(&table, &coefficients, &transformed));
+        }
+        #[cfg(not(feature = "parallel"))]
+        check_prefix(&table, &coefficients, &transformed);
     }
-    #[cfg(not(feature = "parallel"))]
-    compare_with_serial(&table);
 
     for length in [0, N - 1, N + 1, table.rns_poly_len() + N] {
         for inverse in [false, true] {

@@ -146,7 +146,12 @@ where
         self.0.iter().all(Zero::is_zero)
     }
 
-    /// Evaluate the polynomial with the value `x`.
+    /// Evaluates the polynomial at `x` by Horner's method. An empty polynomial
+    /// evaluates to zero.
+    ///
+    /// # Correctness
+    /// The coefficients and `x` must satisfy [`ReduceMulAdd::reduce_mul_add`]'s
+    /// input ranges for `modulus`.
     #[must_use]
     #[inline]
     pub fn evaluate<M>(&self, x: T, modulus: M) -> T

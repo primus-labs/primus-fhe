@@ -492,14 +492,7 @@ mod dot_product {
     impl<T: FheUint> ReduceDotProduct<T> for BarrettModulus<T> {
         #[inline]
         fn reduce_dot_product(self, a: &[T], b: &[T]) -> T {
-            assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
-
-            let outer = crate::common::compact::DOT_PRODUCT_INNER_CHUNK * T::LANE_COUNT;
-            if a.len() < outer {
-                slice::reduce_dot_product(self, a, b)
-            } else {
-                crate::barrett_simd_reduce_dot_product(self, a, b)
-            }
+            crate::barrett_simd_reduce_dot_product(self, a, b)
         }
 
         #[inline]

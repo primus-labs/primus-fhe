@@ -501,4 +501,10 @@ fn monomial_transform_matches_full_ntt() {
         &UintNttTable::<u64>::new(poly_length, modulus64).unwrap(),
         q64 / 3,
     );
+
+    // A general degree at this size can overflow the unreduced exponent
+    // product on 32-bit targets. Compare the low-bit reduction to full NTT.
+    let large_length = PolyLength::new(1 << 16);
+    let table = U32NttTable::new(large_length, BarrettModulus::new(998_244_353)).unwrap();
+    assert_monomial(&table, 13, 2 * large_length.get() - 3);
 }

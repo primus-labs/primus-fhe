@@ -12,9 +12,11 @@ use crate::{MonomialNttTable, NttError, NttTable, U32NttTable, U64NttTable, Uint
 /// mutably. [`Self::poly_length`] is the checked ring length `N`, whereas
 /// [`Self::rns_poly_len`] is the total `moduli_count * N` element count.
 ///
-/// Transform inputs and outputs contain exactly one complete RNS polynomial in
-/// modulus-major order, matching the order of [`Self::ntt_tables`]. The caller
-/// maintains the complete layout; length checks are debug diagnostics only.
+/// Full transforms assume one complete RNS polynomial in modulus-major order,
+/// matching [`Self::ntt_tables`], and check the length in debug builds.
+/// [`Self::transform_prefix_slice`] and [`Self::inverse_transform_prefix_slice`]
+/// check that the length describes a nonempty prefix of complete limbs and
+/// transform them in the same modulus order.
 /// Coefficient ranges, root choice, NTT order and normalization follow the
 /// component [`NttTable`] contract.
 #[derive(Clone)]
@@ -177,10 +179,10 @@ where
     fn transform_prefix_kernel<const INVERSE: bool>(&self, poly: &mut [Ntt::ValueT]) {
         let n = self.poly_length.get();
         assert!(
-            !poly.is_empty() && poly.len().is_multiple_of(n) && poly.len() <= self.rns_poly_len,
+            !poly.is_empty() && poly.len() & (n - 1) == 0 && poly.len() <= self.rns_poly_len,
             "DCRT transform requires a nonempty complete limb prefix"
         );
-        let tables = &self.ntt_tables[..poly.len() / n];
+        let tables = &self.ntt_tables[..(poly.len() >> self.poly_length.log_n())];
         #[cfg(feature = "parallel")]
         if n >= 4096 && tables.len() >= 2 {
             let workers = rayon::current_num_threads().min(4).min(tables.len());

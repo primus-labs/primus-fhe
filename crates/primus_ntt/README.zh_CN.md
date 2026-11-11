@@ -92,6 +92,8 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
 
 `DcrtTable` 提供完整多项式的正逆变换，以及作用于所有分量的 `transform_coeff_one_monomial`。通过 `iter()` 或 `ntt_tables()` 访问分量 table，可使用各自的 lazy 和一般 monomial 操作。
 
+仅变换活跃模数前缀时，使用 `transform_prefix_slice` 或 `inverse_transform_prefix_slice`，按原模数顺序传入完整分量。两个方法均在写入前拒绝空切片、含不完整分量的切片及超长切片，release 构建也执行检查。
+
 ## SIMD backend 与编译目标
 
 默认 feature 集为空。专用 x86-64 table 在运行时选择可用的 scalar 或 SIMD 内核，无需启用可选的 `simd` feature；其他架构使用 scalar 实现。`simd` feature 启用依赖中的 portable-SIMD 支持，需要 nightly Rust。
@@ -112,6 +114,8 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
 cargo test -p primus_ntt
 cargo bench -p primus_ntt --bench bench_ntt
 ```
+
+基准对照两种字宽的专用与通用正逆变换。惰性变换、表构造和单项式操作各按字宽选取一组代表参数。启用 `parallel` 后增加 N=4096、四条有效 limb 的 DCRT prefix 对照，分别使用已准备好的单 worker 和四 worker 线程池。两组计时均包含进入线程池的开销。
 
 ## 许可证
 

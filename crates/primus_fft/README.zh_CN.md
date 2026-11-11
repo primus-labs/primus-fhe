@@ -84,6 +84,8 @@ cargo test -p primus_fft --features rustfft,tfhe-fft
 cargo bench -p primus_fft --bench fft --features rustfft,tfhe-fft
 ```
 
+变换基准在 N=1024 和 N=4096 上比较两种引擎的 u32、u64 路径。正反变换共用已准备的 table，建表和缓冲分配在计时外。
+
 ## 许可证
 
 本 crate 可由你选择使用 [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) 或 [MIT License](../../LICENSE-MIT)。
