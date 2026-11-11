@@ -43,7 +43,7 @@ assert_eq!(output, [11, 6, 50]);
 
 常量参数描述可使用 Native、PowOf2 或 Barrett 对应的 `ModulusConfig<M>`，再通过 `M::try_from(config)` 准备模数。转换检查所选表示及其范围，失败时返回 `ModulusConfigError`；它不验证素性或 NTT 兼容性。
 
-带检查的构造器会验证文档规定的范围。直接构造或更新 `CompactModulus`、`UintModulus` 的 `.0` 字段时，必须保持该范围，算术方法通常不重新验证。Raw Barrett 构造器还要求正确的倒数；小端表示和精确范围见 [`BarrettModulus` 及 `from_parts`](src/barrett/mod.rs)。
+用 `BarrettModulus::try_new(value)` 检查范围，失败时返回 `None`。调用方已有验证过的模数及正确的小端倒数时，可用 [`BarrettModulus::from_parts`](src/barrett/mod.rs)。直接构造或更新 `CompactModulus`、`UintModulus` 的 `.0` 字段时，必须保持文档规定的范围。
 
 ## 素数准备
 

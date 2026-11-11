@@ -9,10 +9,10 @@ Choose a target by the operation you want to measure. Each linked source defines
 | --- | --- |
 | [scalar_moduli](scalar_moduli.rs) | Scalar arithmetic across modulus types |
 | [barrett_scalar](barrett_scalar.rs) | Canonical/lazy Barrett multiplication and reduction |
-| [slice_moduli](slice_moduli.rs) | Slice arithmetic across modulus types |
-| [barrett_slice](barrett_slice.rs) | Canonical/lazy multiplication, dot products and batch inversion |
+| [slice_moduli](slice_moduli.rs) | Compact versus Uint add/sub, and native versus power-of-two add, multiply and dot product |
+| [barrett_slice](barrett_slice.rs) | Canonical/lazy multiplication, dot products, batch inversion, and PBS multiply-add dispatch |
 | [derived_mac](derived_mac.rs) | Constant-modulus multiply-add versus its fallback; requires `derive` |
-| [slice_arithmetic](slice_arithmetic.rs) | Native/Barrett add/sub, negation and broadcast multiplication |
+| [slice_arithmetic](slice_arithmetic.rs) | Native/Barrett add/sub and negation with a tail, plus broadcast multiplication matched to Shoup factor |
 | [signed_encoding](signed_encoding.rs) | Bounded signed-to-residue conversion |
 | [signed_dot_product](signed_dot_product.rs) | Signed versus pre-encoded ternary dot products |
 | [modulus_switch](modulus_switch.rs) | Prepared scalar and batch modulus switching |
@@ -27,6 +27,8 @@ cargo bench -p primus_modulus --bench derived_mac --features derive
 ```
 
 Setup and allocation are outside timing; slice throughput counts elements, not bytes. Reused-buffer cases do not measure a complete ciphertext/RNS traversal or parameter preparation.
+
+`barrett_slice` keeps both word widths, uses lengths 31/32/33 for the u64 multiply-add dispatch boundary, and includes moduli on both sides of the IFMA cutoff. `slice_moduli` keeps paired reducer comparisons at length 4096 and adds representative u64 lengths for multiply and dot product scaling.
 
 `slice_arithmetic` and [Shoup factor benchmarks](../../primus_factor/benches/README.md) have matched broadcast-multiplication cases. Compare those operations, rather than elementwise multiplication, to assess precomputation benefits; factor construction is outside timing.
 

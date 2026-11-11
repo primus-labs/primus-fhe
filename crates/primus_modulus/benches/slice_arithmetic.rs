@@ -2,11 +2,61 @@
 //! cargo bench -p primus_modulus --bench slice_arithmetic
 //! cargo +nightly bench -p primus_modulus --bench slice_arithmetic --features simd
 
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use criterion::{
+    BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
+};
 use primus_integer::FheUint;
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_reduce::RingContext;
-use std::hint::black_box;
+
+fn bench_basic<T: FheUint, M: RingContext<T>>(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    modulus: M,
+    lhs: &[T],
+    rhs: &[T],
+    output: &mut [T],
+    bench_add_to: bool,
+) {
+    // Native add_to is already covered by slice_moduli.
+    if bench_add_to {
+        group.bench_function("add_to", |b| {
+            b.iter(|| {
+                black_box(modulus).reduce_add_slice_to(
+                    black_box(lhs),
+                    black_box(rhs),
+                    black_box(&mut *output),
+                )
+            })
+        });
+    }
+    group.bench_function("add_assign", |b| {
+        b.iter(|| {
+            black_box(modulus).reduce_add_slice_assign(black_box(&mut *output), black_box(rhs))
+        })
+    });
+    group.bench_function("sub_to", |b| {
+        b.iter(|| {
+            black_box(modulus).reduce_sub_slice_to(
+                black_box(lhs),
+                black_box(rhs),
+                black_box(&mut *output),
+            )
+        })
+    });
+    group.bench_function("sub_assign", |b| {
+        b.iter(|| {
+            black_box(modulus).reduce_sub_slice_assign(black_box(&mut *output), black_box(rhs))
+        })
+    });
+    group.bench_function("neg_to", |b| {
+        b.iter(|| black_box(modulus).reduce_neg_slice_to(black_box(lhs), black_box(&mut *output)))
+    });
+    group.bench_function("neg_assign", |b| {
+        b.iter(|| black_box(modulus).reduce_neg_slice_assign(black_box(&mut *output)))
+    });
+}
 
 fn arithmetic<T: FheUint + TryFrom<u64>, M: RingContext<T>>(
     c: &mut Criterion,
@@ -35,45 +85,11 @@ fn arithmetic<T: FheUint + TryFrom<u64>, M: RingContext<T>>(
         let scalar = T::try_from(17u64).ok().unwrap();
         let mut group = c.benchmark_group(format!("slice/arithmetic/{name}/n{n}"));
         group.throughput(Throughput::Elements(n as u64));
-        // Native add_to is already covered by slice_moduli.
-        if bench_add_to {
-            group.bench_function("add_to", |b| {
-                b.iter(|| {
-                    black_box(modulus).reduce_add_slice_to(
-                        black_box(&lhs),
-                        black_box(&rhs),
-                        black_box(&mut output),
-                    )
-                })
-            });
+        // A single nonaligned length covers the streaming kernels and their tails.
+        if n == 1025 {
+            bench_basic(&mut group, modulus, &lhs, &rhs, &mut output, bench_add_to);
         }
-        group.bench_function("add_assign", |b| {
-            b.iter(|| {
-                black_box(modulus).reduce_add_slice_assign(black_box(&mut output), black_box(&rhs))
-            })
-        });
-        group.bench_function("sub_to", |b| {
-            b.iter(|| {
-                black_box(modulus).reduce_sub_slice_to(
-                    black_box(&lhs),
-                    black_box(&rhs),
-                    black_box(&mut output),
-                )
-            })
-        });
-        group.bench_function("sub_assign", |b| {
-            b.iter(|| {
-                black_box(modulus).reduce_sub_slice_assign(black_box(&mut output), black_box(&rhs))
-            })
-        });
-        group.bench_function("neg_to", |b| {
-            b.iter(|| {
-                black_box(modulus).reduce_neg_slice_to(black_box(&lhs), black_box(&mut output))
-            })
-        });
-        group.bench_function("neg_assign", |b| {
-            b.iter(|| black_box(modulus).reduce_neg_slice_assign(black_box(&mut output)))
-        });
+        // Match all three Shoup factor lengths for the broadcast comparison.
         group.bench_function("mul_scalar_to", |b| {
             b.iter(|| {
                 black_box(modulus).reduce_mul_scalar_slice_to(

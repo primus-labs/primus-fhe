@@ -43,7 +43,7 @@ assert_eq!(output, [11, 6, 50]);
 
 For constant parameter descriptions, use `ModulusConfig<M>` with Native, PowOf2 or Barrett and prepare it with `M::try_from(config)`. The conversion checks the selected representation and its range, returning `ModulusConfigError` on failure; it does not establish primality or NTT compatibility.
 
-Checked constructors validate their documented range. Direct construction or `.0` updates of `CompactModulus` and `UintModulus` must preserve that range; arithmetic methods do not generally revalidate it. Raw Barrett constructors additionally require the correct reciprocal; see [`BarrettModulus` and `from_parts`](src/barrett/mod.rs) for its little-endian representation and exact bounds.
+Use `BarrettModulus::try_new(value)` to report an invalid range without panicking. Use [`BarrettModulus::from_parts`](src/barrett/mod.rs) when the caller already has the validated modulus and its correct little-endian reciprocal. Direct construction or `.0` updates of `CompactModulus` and `UintModulus` must preserve their documented ranges.
 
 ## Prime preparation
 

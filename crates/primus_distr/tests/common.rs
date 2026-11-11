@@ -84,6 +84,7 @@ fn ternary_threshold_boundaries_and_public_validation() {
         );
         assert_eq!(output, expected);
         let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::ternary(negative, positive));
+        output.fill(19);
         sampler.sample_signed_to(&mut output, &mut Words(words.into_iter()));
         assert_eq!(output, expected);
     }

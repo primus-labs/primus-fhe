@@ -4,7 +4,7 @@
 
 use core::{hint::black_box, time::Duration};
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_modulus::{Barrett, reduce::ReduceMulAddSlice};
 use rand::{SeedableRng, distr::Distribution, distr::Uniform, rngs::StdRng};
 
@@ -78,6 +78,7 @@ macro_rules! modulus_case {
                         "barrett/derived_mac/{}/n{len}",
                         stringify!($module)
                     ));
+                    group.throughput(Throughput::Elements(len as u64));
                     group.bench_function("derived", |b| {
                         b.iter(|| {
                             Modulus.reduce_add_mul_slice_assign(
@@ -140,10 +141,10 @@ fn derived_mac(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
+    // Limit warm-up and sample count for the paired dispatch and fallback matrix.
     config = Criterion::default()
         .sample_size(20)
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5));
+        .warm_up_time(Duration::from_secs(1));
     targets = derived_mac
 }
 criterion_main!(benches);

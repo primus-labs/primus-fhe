@@ -7,12 +7,13 @@
 // PBS cases use fixed external-product profiles and separate initialization,
 // all retained levels, and their combined cost. They do not measure a full PBS.
 
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use std::hint::black_box;
-use std::time::Duration;
+use std::{hint::black_box, time::Duration};
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use primus_decompose::{big_integer::BigUintApproxSignedBasis, primitive::ApproxSignedBasis};
+use primus_decompose::{
+    DecompositionBaseLog, DecompositionLevelCount, big_integer::BigUintApproxSignedBasis,
+    primitive::ApproxSignedBasis,
+};
 use primus_integer::{BigUint, FheUint, multiply_many_values};
 
 type Word = u64;
@@ -31,21 +32,16 @@ fn big_modulus(limb_count: usize) -> BigUint<Vec<Word>> {
     multiply_many_values(&MODULI[..limb_count])
 }
 
-fn primitive_values(modulus: Option<Word>, count: usize) -> Vec<Word> {
-    (0..count)
-        .map(|index| {
-            let value = (index as Word)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15)
-                .wrapping_add(0xd1b5_4a32_d192_ed03);
-            modulus.map_or(value, |q| value % q)
-        })
-        .collect()
+fn primitive_value(index: usize) -> Word {
+    (index as Word)
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(0xd1b5_4a32_d192_ed03)
 }
 
 fn big_values(modulus: BigUint<&[Word]>, count: usize) -> Vec<Word> {
     let len = modulus.len();
     let high_mask = Word::MAX >> modulus[len - 1].leading_zeros();
-    let mut values = primitive_values(None, count * len);
+    let mut values: Vec<_> = (0..count * len).map(primitive_value).collect();
     for digits in values.chunks_exact_mut(len) {
         // Limit inputs to the modulus bit width, then reduce once: 2^bits < 2Q.
         digits[len - 1] &= high_mask;
@@ -77,7 +73,7 @@ fn bench_primitive_setup(c: &mut Criterion) {
 }
 
 fn bench_primitive_online(c: &mut Criterion) {
-    // Native Fourier: exact and truncated, both using the no-copy carry path.
+    // Native Fourier: exact and truncated, with a no-copy exact batch case.
     primitive_online(c, "u64/native", None::<u64>, 8, None);
     primitive_online(c, "u64/native", None::<u64>, 8, Some(3));
     // Explicit moduli: adjustment with and without an initial rounding carry.
@@ -89,19 +85,17 @@ fn bench_primitive_online(c: &mut Criterion) {
 }
 
 fn bench_pbs_decomposition(c: &mut Criterion) {
-    // Fixed historical decomposition profiles, independent of the current
-    // TFHE presets. N=1024/2048 cover common external-product polynomial lengths;
-    // the labels identify the coefficient representation, not a current PBS config.
+    let q27 = Some(132_120_577u32);
+    // Keep a matched length comparison for the multi-level explicit path.
     for n in [1024, 2048] {
-        pbs_decomposition(c, "glwe_ntt/u32", Some(132_120_577u32), 5, Some(5), n);
-        pbs_decomposition(c, "glwe_ntt/u64", Some(MODULI[0]), 23, Some(1), n);
-        pbs_decomposition(c, "ntru_ntt/u32", Some(132_120_577u32), 9, None, n);
-        pbs_decomposition(c, "ntru_ntt/u64", Some(MODULI[0]), 9, None, n);
-        pbs_decomposition(c, "glwe_fourier/u32", None::<u32>, 8, Some(3), n);
-        pbs_decomposition(c, "glwe_fourier/u64", None::<u64>, 23, Some(1), n);
-        pbs_decomposition(c, "ntru_fourier/u32", None::<u32>, 9, None, n);
-        pbs_decomposition(c, "ntru_fourier/u64", None::<u64>, 9, None, n);
+        pbs_decomposition(c, "glwe_ntt/u32", q27, 5, Some(5), n);
     }
+    // Adjustment without rounding, then wide single-level decomposition.
+    pbs_decomposition(c, "ntru_ntt/u32", q27, 9, None, 1024);
+    pbs_decomposition(c, "glwe_ntt/u64", Some(MODULI[0]), 23, Some(1), 2048);
+    // Native carry extraction with no adjusted-value copy.
+    pbs_decomposition(c, "glwe_fourier/u32", None::<u32>, 8, Some(3), 1024);
+    pbs_decomposition(c, "glwe_fourier/u64", None::<u64>, 23, Some(1), 2048);
 }
 
 fn pbs_decomposition<T: FheUint>(
@@ -131,10 +125,11 @@ fn pbs_decomposition<T: FheUint>(
     let mut adjusted = vec![T::ZERO; n];
     let mut carries = vec![false; n];
     let mut digits = vec![T::ZERO; n];
+    let needs_adjustment = !basis.modulus_is_power_of_2();
     let initialize = |adjusted: &mut [T], carries: &mut [bool]| {
         let basis = black_box(&basis);
         let values = black_box(&values);
-        if modulus.is_some() {
+        if needs_adjustment {
             basis.init_value_carry_slice_to(values, adjusted, carries);
         } else {
             basis.init_carry_slice(values, carries);
@@ -142,11 +137,7 @@ fn pbs_decomposition<T: FheUint>(
     };
     initialize(&mut adjusted, &mut carries);
     let initialized_carries = carries.clone();
-    let input = if modulus.is_some() {
-        &adjusted
-    } else {
-        &values
-    };
+    let input = if needs_adjustment { &adjusted } else { &values };
     let (scalar_values, mut scalar_carries): (Vec<_>, Vec<_>) = values
         .iter()
         .map(|&value| basis.init_value_carry(value))
@@ -200,11 +191,7 @@ fn pbs_decomposition<T: FheUint>(
     group.bench_function("full", |b| {
         b.iter(|| {
             initialize(black_box(&mut adjusted), black_box(&mut carries));
-            let input = if modulus.is_some() {
-                &adjusted
-            } else {
-                &values
-            };
+            let input = if needs_adjustment { &adjusted } else { &values };
             for decomposer in black_box(&basis).decomposer_iter() {
                 decomposer.decompose_slice_to(
                     black_box(input),
@@ -232,7 +219,7 @@ fn primitive_online<T: FheUint>(
         DecompositionBaseLog::new(log_basis),
         retained.map(DecompositionLevelCount::new),
     );
-    let value = T::as_from(primitive_values(None, 1)[0]);
+    let value = T::as_from(primitive_value(0));
     let value = modulus.map_or(value, |q| value % q);
     group.bench_function(
         BenchmarkId::new(
@@ -257,13 +244,19 @@ fn primitive_online<T: FheUint>(
             })
         },
     );
+    // Retain larger batch workloads for exact decomposition. The polynomial
+    // profiles measure carry-initialization costs with dropped bits.
+    if basis.drop_bits() != 0 {
+        group.finish();
+        return;
+    }
     let case = format!(
         "{label}/logB={log_basis}/L={}/drop={}/N={COEFFICIENT_COUNT}",
         basis.level_count().get(),
         basis.drop_bits(),
     );
-    let values: Vec<T> = primitive_values(None, COEFFICIENT_COUNT)
-        .into_iter()
+    let values: Vec<T> = (0..COEFFICIENT_COUNT)
+        .map(primitive_value)
         .map(|value| {
             let value = T::as_from(value);
             modulus.map_or(value, |q| value % q)
@@ -382,8 +375,7 @@ criterion_group! {
     name = benches;
     config = Criterion::default()
         .sample_size(20)
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5));
+        .warm_up_time(Duration::from_secs(1));
     targets = bench_primitive_setup, bench_primitive_online, bench_pbs_decomposition,
         bench_big_setup, bench_big_online
 }

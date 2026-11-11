@@ -10,7 +10,7 @@ fn signed_sampling(c: &mut Criterion) {
     let mut group = c.benchmark_group("secret_key/signed_i32_to");
     for length in [1024, 16384] {
         let mut output = vec![0i32; length];
-        let mut rng = StdRng::seed_from_u64(301);
+        group.throughput(Throughput::Elements(length as u64));
         for (name, distr) in [
             ("uniform_binary", SecretKeyDistr::UniformBinary),
             ("binary", SecretKeyDistr::binary(0.3)),
@@ -41,7 +41,7 @@ fn signed_sampling(c: &mut Criterion) {
             ("gaussian_ziggurat", SecretKeyDistr::gaussian(30.0)),
         ] {
             let sampler = SecretKeySampler::<u32>::new(distr);
-            group.throughput(Throughput::Elements(length as u64));
+            let mut rng = StdRng::seed_from_u64(301);
             group.bench_function(BenchmarkId::new(name, length), |b| {
                 b.iter(|| {
                     sampler.sample_signed_to(black_box(&mut output), &mut rng);
@@ -82,13 +82,10 @@ fn encoded_sampling(c: &mut Criterion) {
     let mut group = c.benchmark_group("secret_key/encoded_u32_to");
     for length in [1024, 16384] {
         let mut output = vec![0u32; length];
+        group.throughput(Throughput::Elements(length as u64));
+        // Keep the laws that encode negative samples in this representation.
         for (name, distr) in [
-            ("uniform_binary", SecretKeyDistr::UniformBinary),
             ("ternary", SecretKeyDistr::ternary(0.2, 0.4)),
-            (
-                "fixed_binary_dense",
-                SecretKeyDistr::fixed_hamming_weight_binary(length, length / 2),
-            ),
             (
                 "fixed_composition_dense",
                 SecretKeyDistr::fixed_composition_ternary(length, length / 3, length / 3),
@@ -96,7 +93,6 @@ fn encoded_sampling(c: &mut Criterion) {
         ] {
             let sampler = SecretKeySampler::<u32>::new(distr);
             let mut rng = StdRng::seed_from_u64(305);
-            group.throughput(Throughput::Elements(length as u64));
             group.bench_function(BenchmarkId::new(name, length), |b| {
                 b.iter(|| {
                     sampler.sample_encoded_to(black_box(&mut output), 132_120_576u32, &mut rng)
@@ -109,10 +105,10 @@ fn encoded_sampling(c: &mut Criterion) {
     let mut group = c.benchmark_group("secret_key/encoded_u64_to");
     for length in [1024, 16384] {
         let mut output = vec![0u64; length];
+        group.throughput(Throughput::Elements(length as u64));
         for (name, sigma) in [("gaussian", 3.2), ("gaussian_ziggurat", 30.0)] {
             let sampler = SecretKeySampler::<u64>::new(SecretKeyDistr::gaussian(sigma));
             let mut rng = StdRng::seed_from_u64(303);
-            group.throughput(Throughput::Elements(length as u64));
             group.bench_function(BenchmarkId::new(name, length), |b| {
                 b.iter(|| sampler.sample_encoded_to(black_box(&mut output), u64::MAX, &mut rng));
             });
