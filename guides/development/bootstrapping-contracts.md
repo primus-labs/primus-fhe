@@ -71,11 +71,12 @@ key error across inputs before making a tail estimate.
 
 GLWE NTT Block BR accepts batches of independent inputs. The lanes share
 read-only key tiles on one thread and own their exponents, aggregate,
-accumulator and external-product scratch. Two- and four-input groups
-preserve the per-chain control order and arithmetic. A one-input tail uses
-the single-input kernel. Complete layouts are checked before output writes
-and evaluation allocates no memory. The caller receives separate coefficient
-GLWE ciphertexts and chooses any summation, KS or extraction. See the
+accumulator and external-product scratch. The default capacity uses 4/2/1
+scheduling, and the sixteen-lane workspace uses 16/8/4/2/1. Each chain preserves
+its control order and arithmetic. A one-input tail uses the single-input kernel.
+Complete layouts are checked before output writes and evaluation allocates no memory.
+The caller receives separate coefficient GLWE ciphertexts and chooses any
+summation, KS or extraction. See the
 [Block workspace](../../crates/primus_tfhe_glwe_ntt/src/block/blind_rotation.rs).
 
 ## NTRU first lifting

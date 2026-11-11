@@ -50,8 +50,8 @@ pub fn add_mul_monomial_pair_assign<T, M>(
     );
     let shifts = [first_exponent & (n - 1), second_exponent & (n - 1)];
     let negatives = [first_exponent >= n, second_exponent >= n];
-    // Interval-major traversal improved the measured u64 path but regressed
-    // u32 sparse PBS. Keep polynomial locality for the other word widths.
+    // Earlier Sparse PBS measurements favored interval-major traversal for u64
+    // and polynomial locality for u32.
     if T::BITS == 64 {
         add_pair_by_segments(acc, first, second, shifts, negatives, n, modulus);
     } else {

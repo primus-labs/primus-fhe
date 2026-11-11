@@ -87,8 +87,8 @@ fn add_segment<T: FheUint, const A_NEG: bool, const B_NEG: bool>(
 ) {
     let two_q = q + q;
     let bias = (if A_NEG { q } else { T::ZERO }) + (if B_NEG { q } else { T::ZERO });
-    // Keep the canonical pair kernel's slice traversal here: polynomial-view
-    // iterators regressed measured u64 sparse PBS with otherwise identical work.
+    // The earlier u64 Sparse PBS benchmark favored the canonical pair kernel's
+    // slice traversal over polynomial-view iterators.
     for ((acc, a), b) in acc
         .chunks_exact_mut(n)
         .zip(first.chunks_exact(n))

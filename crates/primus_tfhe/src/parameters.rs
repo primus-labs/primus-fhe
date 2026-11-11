@@ -28,8 +28,8 @@ pub enum BlindRotationMethod {
     /// Per-coordinate binary or ternary CMux controls, including fixed-weight distributions.
     Classic,
     /// Contiguous equal-sized blocks with at most one `1` per block.
-    /// The block width is owned by the input secret distribution; all-zero
-    /// blocks are valid. Backend key generation must support this method.
+    /// The input secret distribution sets the width and occupancy. `AtMostOne`
+    /// permits all-zero blocks. `ExactlyOne` requires one `1` in every block.
     Block,
 }
 

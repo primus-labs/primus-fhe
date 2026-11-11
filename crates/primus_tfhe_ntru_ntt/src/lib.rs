@@ -29,9 +29,9 @@
 //! - [`boolean`]: Boolean clients and gates with plaintext modulus four.
 //! - [`circuit_bootstrap`]: optional trace/scheme-switch material and
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
-//! - [`block`]: direct contiguous block-binary controls, including an independent
-//!   empty-block dummy. The first block lifts the public LUT with NLEV controls;
-//!   later blocks apply NGSW controls through the same external-product kernel.
+//! - [`block`]: direct contiguous block-binary controls with an independent dummy
+//!   per block in `AtMostOne` mode. The first block lifts the public LUT with
+//!   NLEV controls. Later blocks use NGSW controls with the same external-product kernel.
 //!
 //! [`Evaluator`] owns common [`bootstrap::BootstrapResources`] and client-return buffers.
 //! Default [`CbsEvaluator`] / [`OneHotEvaluator`] own common BR resources;

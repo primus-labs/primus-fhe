@@ -96,11 +96,7 @@ where
         let domain = parameters.pbs_parameters();
         Self::check_blind_rotation_word_size(domain.blind_rotation_method())?;
         if precision.blind_rotation != crate::FourierPrecision::Ordinary
-            && (!domain.external_lwe().secret_key_distr().is_binary()
-                || !matches!(
-                    domain.blind_rotation_method(),
-                    crate::BlindRotationMethod::Classic | crate::BlindRotationMethod::Block
-                ))
+            && !domain.external_lwe().secret_key_distr().is_binary()
         {
             return Err(TfheContextError::UnsupportedSplitBlindRotation);
         }
