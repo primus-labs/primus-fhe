@@ -65,14 +65,6 @@ fn bench_primitive_gcd(c: &mut Criterion) {
         })
     });
 
-    group.bench_function(BenchmarkId::new("is_coprime", "general"), |b| {
-        b.iter(|| {
-            for &(x, y) in &general_pairs {
-                let _ = black_box(black_box(x).is_coprime(black_box(y)));
-            }
-        })
-    });
-
     group.bench_function(BenchmarkId::new("xgcd", "general"), |b| {
         b.iter(|| {
             for &(x, y) in &general_pairs {
@@ -105,16 +97,6 @@ fn bench_primitive_gcd(c: &mut Criterion) {
         })
     });
 
-    // Keep both explicit mask arguments opaque to measure the public
-    // runtime-mask paths rather than constant-specialized calls.
-    group.bench_function(BenchmarkId::new("gcdinv_pow_of_2", "full_width"), |b| {
-        b.iter(|| {
-            for &value in &odd_values {
-                let _ = black_box(u64::gcdinv_pow_of_2(black_box(value), black_box(u64::MAX)));
-            }
-        })
-    });
-
     group.bench_function(BenchmarkId::new("gcdinv_native", "full_width"), |b| {
         b.iter(|| {
             for &value in &odd_values {
@@ -123,6 +105,7 @@ fn bench_primitive_gcd(c: &mut Criterion) {
         })
     });
 
+    // Keep the mask opaque to measure the runtime partial-width path.
     group.bench_function(BenchmarkId::new("gcdinv_pow_of_2", "16_bit"), |b| {
         b.iter(|| {
             for &value in &odd_values {

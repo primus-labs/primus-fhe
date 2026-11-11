@@ -46,10 +46,10 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     pub fn new(value: T, modulus: T) -> Self {
         debug_assert!(value < modulus);
 
-        // Calculate the quotient of `value * 2^T::BITS / modulus`.
-        let quotient = DivWide::div_wide(T::ZERO, value, modulus);
-
-        Self { value, quotient }
+        Self {
+            value,
+            quotient: Self::quotient_for(value, modulus),
+        }
     }
 
     /// Constructs a [`ShoupFactor<T>`] from an already-computed value and
@@ -70,8 +70,8 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     /// Computes the Shoup quotient `floor(value * 2^T::BITS / modulus)`
     /// without constructing a full [`ShoupFactor<T>`].
     ///
-    /// This is equivalent to `ShoupFactor::new(value, modulus).quotient()`
-    /// but avoids discarding the value field.
+    /// Intended for layouts storing values and quotients separately. The value
+    /// and modulus must satisfy the bounds of [`Self::new`].
     #[must_use]
     #[inline]
     pub fn quotient_for(value: T, modulus: T) -> T {
@@ -86,8 +86,7 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     pub fn set_modulus(&mut self, modulus: T) {
         debug_assert!(self.value < modulus);
 
-        // Calculate the quotient of `value * 2^T::BITS / modulus`.
-        self.quotient = DivWide::div_wide(T::ZERO, self.value, modulus);
+        self.quotient = Self::quotient_for(self.value, modulus);
     }
 
     /// Resets the content of [`ShoupFactor<T>`].

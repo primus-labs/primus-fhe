@@ -74,7 +74,7 @@ where
     /// Panics if `dimension` exceeds the total storage length.
     #[inline]
     pub fn a_b_mut(&mut self, dimension: usize) -> (&mut [T], &mut [T]) {
-        self.0.split_at_mut(dimension)
+        self.0.as_mut_slice().split_at_mut(dimension)
     }
 
     /// Sets all values to `0`.
@@ -101,7 +101,7 @@ where
     /// Panics if `dimension` exceeds the total storage length.
     #[inline]
     pub fn a_b(&self, dimension: usize) -> (&[T], &[T]) {
-        self.0.split_at(dimension)
+        self.0.as_slice().split_at(dimension)
     }
 
     /// Allocates the sample for body coefficient `index`.

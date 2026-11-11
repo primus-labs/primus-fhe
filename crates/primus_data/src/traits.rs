@@ -50,52 +50,6 @@ pub trait Data: RawData {
     fn chunks_exact(&self, chunk_size: usize) -> std::slice::ChunksExact<'_, Self::Elem> {
         self.as_slice().chunks_exact(chunk_size)
     }
-
-    /// Divides the buffer into two slices at `mid`.
-    ///
-    /// # Panics
-    /// Panics if `mid > self.len()`.
-    #[must_use]
-    #[inline(always)]
-    fn split_at(&self, mid: usize) -> (&[Self::Elem], &[Self::Elem]) {
-        self.as_slice().split_at(mid)
-    }
-
-    /// Divides the buffer into two slices at `mid`, without bounds checking.
-    ///
-    /// # Safety
-    /// The caller must ensure `mid <= self.len()`.
-    #[must_use]
-    #[inline(always)]
-    unsafe fn split_at_unchecked(&self, mid: usize) -> (&[Self::Elem], &[Self::Elem]) {
-        unsafe { self.as_slice().split_at_unchecked(mid) }
-    }
-
-    /// Returns the first element, or `None` if empty.
-    #[must_use]
-    #[inline(always)]
-    fn first(&self) -> Option<&Self::Elem> {
-        self.as_slice().first()
-    }
-
-    /// Returns the last element, or `None` if empty.
-    #[must_use]
-    #[inline(always)]
-    fn last(&self) -> Option<&Self::Elem> {
-        self.as_slice().last()
-    }
-
-    /// Splits the buffer into a prefix of `N`-element chunks and a remainder.
-    ///
-    /// The remainder has fewer than `N` elements.
-    ///
-    /// # Panics
-    /// Panics if `N` is zero.
-    #[must_use]
-    #[inline(always)]
-    fn as_chunks<const N: usize>(&self) -> (&[[Self::Elem; N]], &[Self::Elem]) {
-        self.as_slice().as_chunks()
-    }
 }
 
 /// Mutable access to a contiguous buffer of [`RawData::Elem`].
@@ -147,62 +101,6 @@ pub trait DataMut: Data {
         chunk_size: usize,
     ) -> std::slice::ChunksExactMut<'_, Self::Elem> {
         self.as_mut_slice().chunks_exact_mut(chunk_size)
-    }
-
-    /// Divides the mutable buffer into two slices at `mid`.
-    ///
-    /// # Panics
-    /// Panics if `mid > self.len()`.
-    #[must_use]
-    #[inline(always)]
-    fn split_at_mut(&mut self, mid: usize) -> (&mut [Self::Elem], &mut [Self::Elem]) {
-        self.as_mut_slice().split_at_mut(mid)
-    }
-
-    /// Divides the mutable buffer into two slices at `mid`, without bounds checking.
-    ///
-    /// # Safety
-    /// The caller must ensure `mid <= self.len()`.
-    #[must_use]
-    #[inline(always)]
-    unsafe fn split_at_mut_unchecked(
-        &mut self,
-        mid: usize,
-    ) -> (&mut [Self::Elem], &mut [Self::Elem]) {
-        unsafe { self.as_mut_slice().split_at_mut_unchecked(mid) }
-    }
-
-    /// Returns a mutable reference to the first element, or `None` if empty.
-    #[must_use]
-    #[inline(always)]
-    fn first_mut(&mut self) -> Option<&mut Self::Elem> {
-        self.as_mut_slice().first_mut()
-    }
-
-    /// Returns a mutable reference to the last element, or `None` if empty.
-    #[must_use]
-    #[inline(always)]
-    fn last_mut(&mut self) -> Option<&mut Self::Elem> {
-        self.as_mut_slice().last_mut()
-    }
-
-    /// Reverses the order of elements in place.
-    #[inline(always)]
-    fn reverse(&mut self) {
-        self.as_mut_slice().reverse();
-    }
-
-    /// Splits the mutable buffer into a prefix of `N`-element chunks and a
-    /// remainder.
-    ///
-    /// The remainder has fewer than `N` elements.
-    ///
-    /// # Panics
-    /// Panics if `N` is zero.
-    #[must_use]
-    #[inline(always)]
-    fn as_chunks_mut<const N: usize>(&mut self) -> (&mut [[Self::Elem; N]], &mut [Self::Elem]) {
-        self.as_mut_slice().as_chunks_mut()
     }
 }
 

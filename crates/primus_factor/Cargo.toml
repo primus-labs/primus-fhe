@@ -7,8 +7,6 @@ edition = "2024"
 primus_integer = { path = "../primus_integer" }
 
 [dev-dependencies]
-primus_modulus = { path = "../primus_modulus" }
-primus_reduce = { path = "../primus_reduce" }
 rand = { workspace = true }
 criterion = { workspace = true }
 

@@ -16,8 +16,8 @@ fn compose_u64(limbs: &[u64]) -> u128 {
         .fold(0u128, |value, &limb| (value << u64::BITS) | limb as u128)
 }
 
-fn split_u128(value: u128) -> Vec<u64> {
-    vec![value as u64, (value >> u64::BITS) as u64]
+fn split_u128(value: u128) -> [u64; 2] {
+    [value as u64, (value >> u64::BITS) as u64]
 }
 
 /// Check limb order and representation-sensitive equality; a u128 product supplies the oracle.
@@ -59,30 +59,31 @@ fn representation_and_product_contracts() {
 /// All-ones limbs force carry/borrow chains, including overflow beyond the final limb.
 #[test]
 fn scalar_operations_propagate_across_limbs() {
-    for (input, expected, expected_carry) in [
-        ([u32::MAX, u32::MAX, 7, 9], [0, 0, 8, 9], false),
-        ([u32::MAX; 4], [0; 4], true),
+    for (input, scalar, expected, expected_carry) in [
+        ([u32::MAX - 1, u32::MAX, 7, 9], 2, [0, 0, 8, 9], false),
+        ([u32::MAX; 4], 1, [0; 4], true),
     ] {
         let mut output = [0u32; 4];
-        let carry = BigUint(&input[..]).add_value_to(1, &mut BigUint(&mut output[..]));
+        let carry = BigUint(&input[..]).add_value_to(scalar, &mut BigUint(&mut output[..]));
         assert_eq!((output, carry), (expected, expected_carry));
+
+        let mut assigned = BigUint(input);
+        let carry = assigned.add_value_assign(scalar);
+        assert_eq!((assigned.0, carry), (expected, expected_carry));
     }
 
-    for (input, expected, expected_borrow) in [
-        ([0u32, 0, 7, 9], [u32::MAX, u32::MAX, 6, 9], false),
-        ([0u32; 4], [u32::MAX; 4], true),
+    for (input, scalar, expected, expected_borrow) in [
+        ([1u32, 0, 7, 9], 2, [u32::MAX, u32::MAX, 6, 9], false),
+        ([0u32; 4], 1, [u32::MAX; 4], true),
     ] {
         let mut output = [0u32; 4];
-        let borrow = BigUint(&input[..]).sub_value_to(1, &mut BigUint(&mut output[..]));
+        let borrow = BigUint(&input[..]).sub_value_to(scalar, &mut BigUint(&mut output[..]));
         assert_eq!((output, borrow), (expected, expected_borrow));
-    }
 
-    let original = [u32::MAX, 5, 7];
-    let mut assigned = BigUint(original.to_vec());
-    assert!(!assigned.add_value_assign(2));
-    assert_eq!(compose_u32(assigned.digits()), compose_u32(&original) + 2);
-    assert!(!assigned.sub_value_assign(2));
-    assert_eq!(assigned.digits(), original);
+        let mut assigned = BigUint(input);
+        let borrow = assigned.sub_value_assign(scalar);
+        assert_eq!((assigned.0, borrow), (expected, expected_borrow));
+    }
 
     let limbs = [0xfedc_ba98u32, 0x7654_3210, 0x1234_5678];
     let scalar = 0x0123_4567u32;
@@ -168,22 +169,22 @@ fn modular_operations_handle_fixed_width_overflow() {
     let rhs = BigUint(split_u128(rhs_raw));
     let expected_add = add_modulo(lhs_raw, rhs_raw, modulus_raw);
 
-    let mut output = BigUint(vec![0u64; 2]);
+    let mut output = BigUint([0u64; 2]);
     lhs.add_modulo_to(&rhs, &mut output, &modulus);
     assert_eq!(compose_u64(output.digits()), expected_add);
 
-    let mut assigned = lhs.clone();
+    let mut assigned = lhs;
     assigned.add_modulo_assign(&rhs, &modulus);
     assert_eq!(compose_u64(assigned.digits()), expected_add);
 
     rhs.sub_modulo_to(&lhs, &mut output, &modulus);
     assert_eq!(compose_u64(output.digits()), modulus_raw - 100);
 
-    let mut assigned = rhs.clone();
+    let mut assigned = rhs;
     assigned.sub_modulo_assign(&lhs, &modulus);
     assert_eq!(compose_u64(assigned.digits()), modulus_raw - 100);
 
-    let mut reversed = lhs.clone();
+    let mut reversed = lhs;
     reversed.sub_modulo_rev_assign(&rhs, &modulus);
     assert_eq!(compose_u64(reversed.digits()), modulus_raw - 100);
 

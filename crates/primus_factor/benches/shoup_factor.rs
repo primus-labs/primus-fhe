@@ -1,19 +1,16 @@
 //! cargo bench -p primus_factor --bench shoup_factor
 //! cargo +nightly bench -p primus_factor --bench shoup_factor --features simd
 
+use std::{hint::black_box, time::Duration};
+
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_integer::FheUint;
-use std::hint::black_box;
-use std::time::Duration;
 
-fn slices<T: FheUint + TryFrom<u64>>(
-    c: &mut Criterion,
-    name: &str,
-    modulus: T,
-    factor: impl FactorSliceOps<T> + Copy,
-    q: u64,
-) {
+fn slices<T: FheUint + TryFrom<u64> + Into<u64>>(c: &mut Criterion, word: &str, modulus: T) {
+    // Match the modulus baseline's multiplier. Construct it outside the timed loop.
+    let factor = ShoupFactor::new(T::as_from(17u64), modulus);
+    let q = modulus.into();
     for n in [1024, 1025, 4096] {
         let mut state = 0x1234_5678_9abc_def0u64;
         let mut values = || {
@@ -31,7 +28,7 @@ fn slices<T: FheUint + TryFrom<u64>>(
         let data = values();
         let rhs = values();
         let mut output = data.clone();
-        let mut group = c.benchmark_group(format!("factor/shoup/{name}/n{n}"));
+        let mut group = c.benchmark_group(format!("factor/shoup/{word}/q{q}/n{n}"));
         group.throughput(Throughput::Elements(n as u64));
         group.bench_function("mul_to", |b| {
             b.iter(|| {
@@ -71,28 +68,19 @@ fn slices<T: FheUint + TryFrom<u64>>(
 }
 
 fn benchmarks(c: &mut Criterion) {
-    const Q32: u32 = 132_120_577;
-    // Same nontrivial multiplier as modulus scalar benchmarks; construction is
-    // excluded so timings represent amortized use of a precomputed factor.
-    slices(
-        c,
-        "u32/q132120577",
-        Q32,
-        ShoupFactor::new(17, Q32),
-        u64::from(Q32),
-    );
+    slices(c, "u32", 132_120_577u32);
     // Cover both the usual NTT modulus and the upper end of Shoup's range.
     // Factor arithmetic does not require a prime modulus.
-    for q in [1_125_899_906_826_241, (1 << 63) - 1] {
-        slices(c, &format!("u64/q{q}"), q, ShoupFactor::new(17, q), q);
+    for q in [1_125_899_906_826_241u64, (1 << 63) - 1] {
+        slices(c, "u64", q);
     }
 }
 criterion_group! {
     name = benches;
+    // Keep the full 36-case matrix practical for local runs.
     config = Criterion::default()
         .sample_size(20)
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5));
+        .warm_up_time(Duration::from_secs(1));
     targets = benchmarks
 }
 criterion_main!(benches);

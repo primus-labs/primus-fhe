@@ -1,28 +1,25 @@
 // cargo bench -p primus_integer --bench big_uint
 
-mod support;
-
 use core::{cmp::Ordering, hint::black_box};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use primus_integer::{BigUint, multiply_many_values};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-use support::{RNG_SEED, random_values};
-
 const BATCH_LEN: usize = 1024;
 const LIMB_COUNTS: [usize; 2] = [2, 8];
 
 fn bench_big_uint(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(RNG_SEED ^ 0x6269_675f_7569_6e74);
+    let mut rng = StdRng::seed_from_u64(0x0b07_133a_120c_1c2b);
     let mut group = c.benchmark_group("big_uint");
 
     for limb_count in LIMB_COUNTS {
-        let value_count = BATCH_LEN;
-        let buffer_len = limb_count * value_count;
-        let lhs = random_values::<u64>(&mut rng, buffer_len);
-        let rhs = random_values::<u64>(&mut rng, buffer_len);
-        let initial_acc = random_values::<u64>(&mut rng, buffer_len);
+        let buffer_len = limb_count * BATCH_LEN;
+        let [lhs, rhs, mut acc] = std::array::from_fn(|_| {
+            let mut values = vec![0u64; buffer_len];
+            rng.fill(values.as_mut_slice());
+            values
+        });
         let mut cmp_rhs = lhs.clone();
         for value in cmp_rhs.chunks_exact_mut(limb_count) {
             value[0] = value[0].wrapping_add(1);
@@ -38,7 +35,7 @@ fn bench_big_uint(c: &mut Criterion) {
         }
         let case = format!("u64/{limb_count}_limbs");
 
-        group.throughput(Throughput::Elements(value_count as u64));
+        group.throughput(Throughput::Elements(BATCH_LEN as u64));
 
         let mut product = vec![0u64; buffer_len];
         group.bench_function(BenchmarkId::new("mul_value_to", &case), |b| {
@@ -55,7 +52,6 @@ fn bench_big_uint(c: &mut Criterion) {
             })
         });
 
-        let mut acc = initial_acc.clone();
         group.bench_function(BenchmarkId::new("mul_value_add_to", &case), |b| {
             b.iter(|| {
                 let mut carry_mix = 0u64;
