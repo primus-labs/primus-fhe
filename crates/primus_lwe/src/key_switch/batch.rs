@@ -15,7 +15,7 @@ impl<T: FheUint> LweKeySwitchingKey<T> {
     pub fn key_switch_batch<M: RingContext<T>>(&self, input: &[T], modulus: M) -> Vec<T> {
         let count = batch_iter(input, self.input_dimension.get()).len();
         let mut output = vec![T::ZERO; batch_len(self.output_dimension.get(), count)];
-        self.key_switch_batch_to(input, &mut output, modulus);
+        self.key_switch_complete_batch(input, &mut output, modulus);
         output
     }
 
@@ -44,12 +44,23 @@ impl<T: FheUint> LweKeySwitchingKey<T> {
     ) {
         let count = batch_iter(input, self.input_dimension.get()).len();
         check_batch(output, self.output_dimension.get(), count);
+        self.key_switch_complete_batch(input, output, modulus);
+    }
+
+    /// Checks the modulus and dispatches after the caller establishes both layouts.
+    fn key_switch_complete_batch<M: RingContext<T>>(
+        &self,
+        input: &[T],
+        output: &mut [T],
+        modulus: M,
+    ) {
+        let modulus_value = modulus.explicit_value();
         assert_eq!(
             self.basis.modulus(),
-            modulus.explicit_value(),
+            modulus_value,
             "LWE key-switching modulus mismatch"
         );
-        if modulus.explicit_value().is_none() {
+        if modulus_value.is_none() {
             self.key_switch_batch_kernel::<true, _>(input, output, modulus);
         } else {
             self.key_switch_batch_kernel::<false, _>(input, output, modulus);

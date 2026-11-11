@@ -2,6 +2,7 @@
 
 #![cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 
+use num_traits::ConstZero;
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_glwe::FourierGlweEncryptor;
@@ -14,7 +15,7 @@ use primus_lattice::GlweDimension;
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{SeedableRng, rngs::StdRng};
 
 const DIMENSION: usize = 2;
 // Functional ring size; keep the original word widths, moduli and decomposition.
@@ -34,83 +35,58 @@ where
         .collect();
     let message = Polynomial::new(messages.clone());
 
-    for secret_key_distr in [
-        SecretKeyDistr::UniformBinary,
-        SecretKeyDistr::UniformTernary,
-        SecretKeyDistr::SparseTernary,
-        SecretKeyDistr::gaussian(3.2),
-        // A weight greater than N must be sampled over all k*N coefficients.
-        SecretKeyDistr::fixed_hamming_weight_ternary(DIMENSION * POLY_LENGTH, POLY_LENGTH + 7),
-    ] {
-        let params = GlweParameters::new(
-            GlweDimension::new(DIMENSION),
-            PolyLength::new(POLY_LENGTH),
-            T::try_from(PLAIN_MODULUS).unwrap(),
-            NativeModulus::new(),
-            secret_key_distr,
-            0.7,
-        );
-        let coefficients = GlweSecretKey::generate(
-            params.size(),
-            (params.encryption_parameters()).secret_key_sampler(),
-            &mut rng,
-        );
-        let secret_key_decrypt =
-            FourierGlweSecretKey::from_coeff_secret_key(&coefficients, &mut fft);
-        let mut secret_key =
-            FourierGlweEncryptor::try_new(&coefficients, params.encryption_parameters()).unwrap();
+    // A weight greater than N exercises all k*N coefficients, including the second mask.
+    let weight = POLY_LENGTH + 7;
+    let params = GlweParameters::new(
+        GlweDimension::new(DIMENSION),
+        PolyLength::new(POLY_LENGTH),
+        T::try_from(PLAIN_MODULUS).unwrap(),
+        NativeModulus::new(),
+        SecretKeyDistr::fixed_hamming_weight_ternary(DIMENSION * POLY_LENGTH, weight),
+        0.7,
+    );
+    let coefficients = GlweSecretKey::generate(
+        params.size(),
+        params.encryption_parameters().secret_key_sampler(),
+        &mut rng,
+    );
+    assert_eq!(
+        coefficients
+            .as_slice()
+            .iter()
+            .filter(|&&s| s != T::SignedInteger::ZERO)
+            .count(),
+        weight,
+    );
+    let decryptor = FourierGlweSecretKey::from_coeff_secret_key(&coefficients, &mut fft);
+    let mut encryptor =
+        FourierGlweEncryptor::try_new(&coefficients, params.encryption_parameters()).unwrap();
+    let mut workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut ciphertext = FourierGlweCiphertext::<Vec<_>>::zero(params.fourier_glwe_len());
+    let mut output = Polynomial::new(vec![T::MAX; POLY_LENGTH]);
 
-        let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-
-        let mut cipher = FourierGlweCiphertext::<Vec<_>>::zero(params.fourier_glwe_len());
-
-        secret_key.encrypt_zeros_to(
-            &mut cipher,
-            params.encryption_parameters(),
+    // The exact coefficient oracle covers raw/encoded ciphertext equality and RNG.
+    // Here reuse the decryption workspace across both embeddings and a zero message.
+    for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
+        encryptor.encrypt_message_to(
+            &message,
+            &mut ciphertext,
+            &params,
+            embedding,
             &mut fft,
             &mut rng,
         );
-        assert_eq!(
-            secret_key_decrypt
-                .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace)
-                .as_ref(),
-            vec![T::ZERO; POLY_LENGTH]
-        );
-
-        for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
-            let mut encoded = vec![T::ZERO; POLY_LENGTH];
-            params
-                .plaintext_codec()
-                .add_encode_slice_assign(&mut encoded, &messages, embedding);
-            // Raw encoded encryption must equal ordinary encryption with the same
-            // coins; this also checks that the codec is applied exactly once.
-            let seed = rng.next_u64();
-            rng = StdRng::seed_from_u64(seed);
-            let mut expected_rng = StdRng::seed_from_u64(seed);
-            let expected = secret_key.encrypt_message(
-                &message,
-                &params,
-                embedding,
-                &mut fft,
-                &mut expected_rng,
-            );
-            secret_key.encrypt_encoded_to(
-                &Polynomial::new(encoded),
-                &mut cipher,
-                params.encryption_parameters(),
-                &mut fft,
-                &mut rng,
-            );
-            assert_eq!(cipher.as_ref(), expected.as_ref());
-            assert_eq!(rng.next_u64(), expected_rng.next_u64());
-            assert_eq!(
-                secret_key_decrypt
-                    .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace)
-                    .as_ref(),
-                messages
-            );
-        }
+        decryptor.decrypt_message_to(&ciphertext, &mut output, &params, &mut fft, &mut workspace);
+        assert_eq!(output.as_ref(), messages);
     }
+    encryptor.encrypt_zeros_to(
+        &mut ciphertext,
+        params.encryption_parameters(),
+        &mut fft,
+        &mut rng,
+    );
+    decryptor.decrypt_message_to(&ciphertext, &mut output, &params, &mut fft, &mut workspace);
+    assert_eq!(output.as_ref(), vec![T::ZERO; POLY_LENGTH]);
 }
 
 #[test]

@@ -4,32 +4,35 @@
 //! Functional u64 workloads: sparse ternary keys, sigma 3.2, maximum basis length.
 //! Setup is excluded; these parameters do not establish cryptographic security.
 
-use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
-use primus_encoding::PlaintextEmbedding;
-use primus_shape::PolyLength;
 use std::{hint::black_box, time::Duration};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
+use primus_encoding::PlaintextEmbedding;
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntru::{
-    FourierNgswCiphertext, FourierNlevCiphertext, FourierNtruSchemeSwitchKey, FourierNtruTraceKey,
-    FourierNtruTraceWorkspace, NlevCiphertext, NttNgswCiphertext, NttNlevCiphertext,
-    NttNtruSchemeSwitchKey, NttNtruTraceKey, NttNtruTraceWorkspace,
-};
-use primus_ntru::{
-    FourierNtruAutomorphismKey, FourierNtruAutomorphismWorkspace, FourierNtruCiphertext,
-    FourierNtruEncryptWorkspace, FourierNtruExternalProductWorkspace,
-    FourierNtruGadgetEncryptWorkspace, FourierNtruKeySwitchingKey, FourierNtruSecretKey,
-    NlevParameters, NtruCiphertext, NtruParameters, NttNtruAutomorphismKey,
+    FourierNgswCiphertext, FourierNlevCiphertext, FourierNtruAutomorphismKey,
+    FourierNtruAutomorphismWorkspace, FourierNtruCiphertext, FourierNtruEncryptWorkspace,
+    FourierNtruExternalProductWorkspace, FourierNtruGadgetEncryptWorkspace,
+    FourierNtruKeySwitchingKey, FourierNtruSchemeSwitchKey, FourierNtruSecretKey,
+    FourierNtruTraceKey, FourierNtruTraceWorkspace, NlevCiphertext, NlevParameters, NtruCiphertext,
+    NtruParameters, NttNgswCiphertext, NttNlevCiphertext, NttNtruAutomorphismKey,
     NttNtruAutomorphismWorkspace, NttNtruCiphertext, NttNtruExternalProductWorkspace,
-    NttNtruGadgetEncryptWorkspace, NttNtruKeySwitchingKey, NttNtruSecretKey, SecretKeyDistr,
+    NttNtruGadgetEncryptWorkspace, NttNtruKeySwitchingKey, NttNtruSchemeSwitchKey,
+    NttNtruSecretKey, NttNtruTraceKey, NttNtruTraceWorkspace, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
+use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
-fn ntt(c: &mut Criterion, n: usize) {
+const SCHEME_SWITCH_OUTPUT: DecompositionConfig = DecompositionConfig {
+    log_basis: DecompositionBaseLog::new(8),
+    level_count: Some(DecompositionLevelCount::new(3)),
+};
+
+fn ntt(c: &mut Criterion, n: usize, profiles: &[(u32, bool)]) {
     let mut rng = StdRng::seed_from_u64(42);
     let modulus = BarrettModulus::new(1_125_899_906_826_241u64);
     let poly_length = PolyLength::new(n);
@@ -54,18 +57,27 @@ fn ntt(c: &mut Criterion, n: usize) {
     let mut input = NtruCiphertext::<Vec<u64>>::zero(n);
     transformed.write_coeff_form(&mut input, &table);
     let mut output = NtruCiphertext::<Vec<u64>>::zero(n);
-    let mut ntt_output = NttNtruCiphertext::<Vec<u64>>::zero(n);
     let mut generation = NttNtruGadgetEncryptWorkspace::new(poly_length);
     let mut switching = NttNtruExternalProductWorkspace::new(poly_length);
-    let mut auto_workspace = NttNtruAutomorphismWorkspace::new(poly_length);
-    let output_parameters = NlevParameters::with_ntru_params(
-        &parameters,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(8),
-            level_count: Some(DecompositionLevelCount::new(3)),
-        },
+    let mut trace_workspace = NttNtruTraceWorkspace::new(poly_length);
+
+    // Compare scheme-switch keys on the same NLev; only the key basis varies.
+    let output_parameters = NlevParameters::with_ntru_params(&parameters, SCHEME_SWITCH_OUTPUT);
+    let mut nlev = NttNlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
+    key.encrypt_nlev_constant_to(
+        1,
+        &mut nlev,
+        &output_parameters,
+        &table,
+        &mut StdRng::seed_from_u64(43),
+        &mut generation,
     );
-    for log_basis in [3, 10] {
+    let mut ss_input = NlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
+    for (input, mut output) in nlev.iter_ntt_ntru(n).zip(ss_input.iter_ntru_mut(n)) {
+        input.write_coeff_form(&mut output, &table);
+    }
+    let mut ss_output = NttNgswCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
+    for &(log_basis, all_operations) in profiles {
         let parameters = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -81,15 +93,17 @@ fn ntt(c: &mut Criterion, n: usize) {
             &mut rng,
             &mut generation,
         );
-        let auto = NttNtruAutomorphismKey::generate(
-            3,
-            &coeff_key,
-            &key,
-            &parameters,
-            &table,
-            &mut rng,
-            &mut generation,
-        );
+        let auto = all_operations.then(|| {
+            NttNtruAutomorphismKey::generate(
+                3,
+                &coeff_key,
+                &key,
+                &parameters,
+                &table,
+                &mut rng,
+                &mut generation,
+            )
+        });
         let trace = NttNtruTraceKey::generate(
             &coeff_key,
             &key,
@@ -98,8 +112,6 @@ fn ntt(c: &mut Criterion, n: usize) {
             &mut rng,
             &mut generation,
         );
-        let mut trace_workspace = NttNtruTraceWorkspace::new(poly_length);
-        let mut expanded = vec![0u64; 8 * n];
         let ss = NttNtruSchemeSwitchKey::generate(
             &coeff_key,
             &key,
@@ -109,20 +121,6 @@ fn ntt(c: &mut Criterion, n: usize) {
             &mut rng,
             &mut generation,
         );
-        let mut nlev = NttNlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
-        key.encrypt_nlev_constant_to(
-            1,
-            &mut nlev,
-            &output_parameters,
-            &table,
-            &mut rng,
-            &mut generation,
-        );
-        let mut ss_input = NlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
-        for (input, mut output) in nlev.iter_ntt_ntru(n).zip(ss_input.iter_ntru_mut(n)) {
-            input.write_coeff_form(&mut output, &table);
-        }
-        let mut ss_output = NttNgswCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
         let mut group = c.benchmark_group(format!(
             "ntru/ntt/n{n}/logb{log_basis}/l{}",
             parameters.level_count().get()
@@ -140,42 +138,34 @@ fn ntt(c: &mut Criterion, n: usize) {
                 black_box(output.as_ref());
             })
         });
-        group.bench_function("automorphism_coeff", |b| {
-            b.iter(|| {
-                auto.apply_to(
-                    black_box(&input),
-                    &mut output,
-                    modulus,
-                    &table,
-                    &mut auto_workspace,
-                );
-                black_box(output.as_ref());
-            })
-        });
-        group.bench_function("automorphism_ntt", |b| {
-            b.iter(|| {
-                auto.apply_ntt_to(
-                    black_box(&transformed),
-                    &mut ntt_output,
-                    modulus,
-                    &table,
-                    &mut auto_workspace,
-                );
-                black_box(ntt_output.as_ref());
-            })
-        });
-        group.bench_function("trace", |b| {
-            b.iter(|| {
-                trace.apply_to(
-                    black_box(&input),
-                    &mut output,
-                    modulus,
-                    &table,
-                    &mut trace_workspace,
-                );
-                black_box(output.as_ref());
-            })
-        });
+        if let Some(auto) = auto {
+            let mut auto_workspace = NttNtruAutomorphismWorkspace::new(poly_length);
+            let mut ntt_output = NttNtruCiphertext::<Vec<u64>>::zero(n);
+            group.bench_function("automorphism_coeff", |b| {
+                b.iter(|| {
+                    auto.apply_to(
+                        black_box(&input),
+                        &mut output,
+                        modulus,
+                        &table,
+                        &mut auto_workspace,
+                    );
+                    black_box(output.as_ref());
+                })
+            });
+            group.bench_function("automorphism_ntt", |b| {
+                b.iter(|| {
+                    auto.apply_ntt_to(
+                        black_box(&transformed),
+                        &mut ntt_output,
+                        modulus,
+                        &table,
+                        &mut auto_workspace,
+                    );
+                    black_box(ntt_output.as_ref());
+                })
+            });
+        }
         group.bench_function("reverse_trace", |b| {
             b.iter(|| {
                 trace.apply_reverse_to(
@@ -188,32 +178,47 @@ fn ntt(c: &mut Criterion, n: usize) {
                 black_box(output.as_ref());
             })
         });
-        group.bench_function("project_3", |b| {
-            b.iter(|| {
-                trace.project_coefficients_to(
-                    black_box(&input),
-                    &[0, 3, 7],
-                    &mut expanded[..3 * n],
-                    modulus,
-                    &table,
-                    &mut trace_workspace,
-                );
-                black_box(&expanded[..3 * n]);
-            })
-        });
-        group.bench_function("expand_prefix_8", |b| {
-            b.iter(|| {
-                trace.expand_partial_coefficients_to(
-                    black_box(&input),
-                    8,
-                    &mut expanded,
-                    modulus,
-                    &table,
-                    &mut trace_workspace,
-                );
-                black_box(&expanded);
-            })
-        });
+        if all_operations {
+            let mut expanded = vec![0u64; 8 * n];
+            group.bench_function("trace", |b| {
+                b.iter(|| {
+                    trace.apply_to(
+                        black_box(&input),
+                        &mut output,
+                        modulus,
+                        &table,
+                        &mut trace_workspace,
+                    );
+                    black_box(output.as_ref());
+                })
+            });
+            group.bench_function("project_3", |b| {
+                b.iter(|| {
+                    trace.project_coefficients_to(
+                        black_box(&input),
+                        &[0, 3, 7],
+                        &mut expanded[..3 * n],
+                        modulus,
+                        &table,
+                        &mut trace_workspace,
+                    );
+                    black_box(&expanded[..3 * n]);
+                })
+            });
+            group.bench_function("expand_prefix_8", |b| {
+                b.iter(|| {
+                    trace.expand_partial_coefficients_to(
+                        black_box(&input),
+                        8,
+                        &mut expanded,
+                        modulus,
+                        &table,
+                        &mut trace_workspace,
+                    );
+                    black_box(&expanded);
+                })
+            });
+        }
         group.bench_function("scheme_switch/logb_out8/l_out3", |b| {
             b.iter(|| {
                 ss.apply_to(
@@ -230,9 +235,10 @@ fn ntt(c: &mut Criterion, n: usize) {
     }
 }
 
-fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
+fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str, profiles: &[(u32, bool)]) {
     let mut rng = StdRng::seed_from_u64(42);
     let poly_length = PolyLength::new(n);
+    let fourier_len = poly_length.fourier_poly_len();
     let parameters = NtruParameters::new(
         poly_length,
         16u64,
@@ -261,18 +267,29 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
     let mut input = NtruCiphertext::<Vec<u64>>::zero(n);
     transformed.write_torus_form(&mut input, &mut fft);
     let mut output = NtruCiphertext::<Vec<u64>>::zero(n);
-    let mut fourier_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(n / 2);
     let mut generation = FourierNtruGadgetEncryptWorkspace::new(poly_length);
     let mut switching = FourierNtruExternalProductWorkspace::new(poly_length);
-    let mut auto_workspace = FourierNtruAutomorphismWorkspace::new(poly_length);
-    let output_parameters = NlevParameters::with_ntru_params(
-        &parameters,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(8),
-            level_count: Some(DecompositionLevelCount::new(3)),
-        },
+    let mut trace_workspace = FourierNtruTraceWorkspace::new(poly_length);
+
+    // Use one input NLev and the same scratch across both key bases.
+    let output_parameters = NlevParameters::with_ntru_params(&parameters, SCHEME_SWITCH_OUTPUT);
+    let mut nlev =
+        FourierNlevCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
+    key.encrypt_nlev_constant_to(
+        1,
+        &mut nlev,
+        &output_parameters,
+        &mut fft,
+        &mut StdRng::seed_from_u64(43),
+        &mut generation,
     );
-    for log_basis in [3, 10] {
+    let mut ss_input = NlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
+    for (input, mut output) in nlev.iter_ntru(fourier_len).zip(ss_input.iter_ntru_mut(n)) {
+        input.write_torus_form(&mut output, &mut fft);
+    }
+    let mut ss_output =
+        FourierNgswCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
+    for &(log_basis, all_operations) in profiles {
         let parameters = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -288,15 +305,17 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
             &mut rng,
             &mut generation,
         );
-        let auto = FourierNtruAutomorphismKey::generate(
-            3,
-            &coeff_key,
-            &key,
-            &parameters,
-            &mut fft,
-            &mut rng,
-            &mut generation,
-        );
+        let auto = all_operations.then(|| {
+            FourierNtruAutomorphismKey::generate(
+                3,
+                &coeff_key,
+                &key,
+                &parameters,
+                &mut fft,
+                &mut rng,
+                &mut generation,
+            )
+        });
         let trace = FourierNtruTraceKey::generate(
             &coeff_key,
             &key,
@@ -305,8 +324,6 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
             &mut rng,
             &mut generation,
         );
-        let mut trace_workspace = FourierNtruTraceWorkspace::new(poly_length);
-        let mut expanded = vec![0u64; 8 * n];
         let ss = FourierNtruSchemeSwitchKey::generate(
             &coeff_key,
             &key,
@@ -316,22 +333,6 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
             &mut rng,
             &mut generation,
         );
-        let mut nlev =
-            FourierNlevCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
-        key.encrypt_nlev_constant_to(
-            1,
-            &mut nlev,
-            &output_parameters,
-            &mut fft,
-            &mut rng,
-            &mut generation,
-        );
-        let mut ss_input = NlevCiphertext::<Vec<u64>>::zero(output_parameters.nlev_len());
-        for (input, mut output) in nlev.iter_ntru(n / 2).zip(ss_input.iter_ntru_mut(n)) {
-            input.write_torus_form(&mut output, &mut fft);
-        }
-        let mut ss_output =
-            FourierNgswCiphertext::<Vec<Complex64>>::zero(output_parameters.fourier_nlev_len());
         let mut group = c.benchmark_group(format!(
             "ntru/fourier/{backend}/n{n}/logb{log_basis}/l{}",
             parameters.level_count().get()
@@ -343,39 +344,32 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
                 black_box(output.as_ref());
             })
         });
-        group.bench_function("automorphism_coeff", |b| {
-            b.iter(|| {
-                auto.apply_to(
-                    black_box(&input),
-                    &mut output,
-                    &mut fft,
-                    &mut auto_workspace,
-                );
-                black_box(output.as_ref());
-            })
-        });
-        group.bench_function("automorphism_fourier", |b| {
-            b.iter(|| {
-                auto.apply_fourier_to(
-                    black_box(&transformed),
-                    &mut fourier_output,
-                    &mut fft,
-                    &mut auto_workspace,
-                );
-                black_box(fourier_output.as_ref());
-            })
-        });
-        group.bench_function("trace", |b| {
-            b.iter(|| {
-                trace.apply_to(
-                    black_box(&input),
-                    &mut output,
-                    &mut fft,
-                    &mut trace_workspace,
-                );
-                black_box(output.as_ref());
-            })
-        });
+        if let Some(auto) = auto {
+            let mut auto_workspace = FourierNtruAutomorphismWorkspace::new(poly_length);
+            let mut fourier_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(fourier_len);
+            group.bench_function("automorphism_coeff", |b| {
+                b.iter(|| {
+                    auto.apply_to(
+                        black_box(&input),
+                        &mut output,
+                        &mut fft,
+                        &mut auto_workspace,
+                    );
+                    black_box(output.as_ref());
+                })
+            });
+            group.bench_function("automorphism_fourier", |b| {
+                b.iter(|| {
+                    auto.apply_fourier_to(
+                        black_box(&transformed),
+                        &mut fourier_output,
+                        &mut fft,
+                        &mut auto_workspace,
+                    );
+                    black_box(fourier_output.as_ref());
+                })
+            });
+        }
         group.bench_function("reverse_trace", |b| {
             b.iter(|| {
                 trace.apply_reverse_to(
@@ -387,30 +381,44 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
                 black_box(output.as_ref());
             })
         });
-        group.bench_function("project_3", |b| {
-            b.iter(|| {
-                trace.project_coefficients_to(
-                    black_box(&input),
-                    &[0, 3, 7],
-                    &mut expanded[..3 * n],
-                    &mut fft,
-                    &mut trace_workspace,
-                );
-                black_box(&expanded[..3 * n]);
-            })
-        });
-        group.bench_function("expand_prefix_8", |b| {
-            b.iter(|| {
-                trace.expand_partial_coefficients_to(
-                    black_box(&input),
-                    8,
-                    &mut expanded,
-                    &mut fft,
-                    &mut trace_workspace,
-                );
-                black_box(&expanded);
-            })
-        });
+        if all_operations {
+            let mut expanded = vec![0u64; 8 * n];
+            group.bench_function("trace", |b| {
+                b.iter(|| {
+                    trace.apply_to(
+                        black_box(&input),
+                        &mut output,
+                        &mut fft,
+                        &mut trace_workspace,
+                    );
+                    black_box(output.as_ref());
+                })
+            });
+            group.bench_function("project_3", |b| {
+                b.iter(|| {
+                    trace.project_coefficients_to(
+                        black_box(&input),
+                        &[0, 3, 7],
+                        &mut expanded[..3 * n],
+                        &mut fft,
+                        &mut trace_workspace,
+                    );
+                    black_box(&expanded[..3 * n]);
+                })
+            });
+            group.bench_function("expand_prefix_8", |b| {
+                b.iter(|| {
+                    trace.expand_partial_coefficients_to(
+                        black_box(&input),
+                        8,
+                        &mut expanded,
+                        &mut fft,
+                        &mut trace_workspace,
+                    );
+                    black_box(&expanded);
+                })
+            });
+        }
         group.bench_function("scheme_switch/logb_out8/l_out3", |b| {
             b.iter(|| {
                 ss.apply_to(
@@ -427,10 +435,15 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
 }
 
 fn benchmarks(c: &mut Criterion) {
-    for n in [1024, 4096, 8192] {
-        ntt(c, n);
-        fourier::<RustFftTable>(c, n, "rustfft");
-        fourier::<TfheFftTable>(c, n, "tfhe");
+    // Use the full operation set once. Extra profiles measure size and basis
+    // effects on key switching, reverse trace and scheme switching.
+    for (n, profiles) in [
+        (1024, &[(3, false)][..]),
+        (4096, &[(3, true), (10, false)][..]),
+    ] {
+        ntt(c, n, profiles);
+        fourier::<RustFftTable>(c, n, "rustfft", profiles);
+        fourier::<TfheFftTable>(c, n, "tfhe", profiles);
     }
 }
 

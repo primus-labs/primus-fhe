@@ -74,18 +74,18 @@ impl<T: FheUint> NttNtruSchemeSwitchKey<T> {
         let output_len = n
             .checked_mul(output_basis.level_count().get())
             .expect("scheme-switch output length overflow");
+        ntt_secret_key.assert_gadget_domain(key_parameters, ntt, workspace);
         let mut encoded = Zeroizing::new(vec![T::ZERO; n]);
         key_parameters
             .encryption_parameters()
             .cipher_modulus()
             .encode_signed_slice_to(secret_key.as_slice(), encoded.as_mut_slice());
         let mut data = NttNgswCiphertext::zero(key_parameters.nlev_len());
-        // encrypt_ngsw_to checks the remaining generation resources before RNG
-        // use. Adding g_j*f to ciphertexts gives phase g_j*f², without a signed
-        // host-integer square or an extra secret-key inverse.
-        ntt_secret_key.encrypt_ngsw_to(
-            &Polynomial(encoded.as_slice()),
-            &mut data,
+        // Adding g_j*f to ciphertexts gives phase g_j*f² without explicitly
+        // squaring f. Both buffers have the lengths fixed by key_parameters.
+        ntt_secret_key.encrypt_ngsw_kernel_to(
+            Polynomial(encoded.as_slice()),
+            data.as_mut_view(),
             key_parameters,
             ntt,
             rng,

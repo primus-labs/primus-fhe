@@ -63,6 +63,10 @@ fn check_packing(q: u128, batch: &[u64], mut pack: impl FnMut(&[u64], &mut Glwe<
         pack(&batch[..count * (INPUT_SECRET.len() + 1)], &mut output);
         assert_phase(output.as_ref(), &expected, &secret(), q);
     }
+}
+
+fn check_packing_layout(mut pack: impl FnMut(&[u64], &mut Glwe<Vec<u64>>)) {
+    let size = GlweSize::new(GlweDimension::new(K), PolyLength::new(N));
     for (length, output_len) in [
         (0, size.glwe_len()),
         (INPUT_SECRET.len(), size.glwe_len()),
@@ -80,7 +84,8 @@ fn check_packing(q: u128, batch: &[u64], mut pack: impl FnMut(&[u64], &mut Glwe<
     }
 }
 
-fn ntt_packing(log_basis: u32, levels: usize) {
+#[test]
+fn ntt_packing_switches_an_independent_signed_lwe_secret() {
     let modulus = BarrettModulus::new(Q);
     let ntt = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
     let params = GlweParameters::new(
@@ -91,77 +96,80 @@ fn ntt_packing(log_basis: u32, levels: usize) {
         SecretKeyDistr::UniformTernary,
         0.7,
     );
-    let glev = GlevParameters::with_glwe_params(
-        &params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(log_basis),
-            level_count: Some(DecompositionLevelCount::new(levels)),
-        },
-    );
     let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
     let sk = NttGlweSecretKey::from_coeff_secret_key(&coeff, &ntt);
-    let mut rng = StdRng::seed_from_u64(0x5041434b);
-    let key = NttLwePackingKeySwitchingKey::generate(
-        LweSecretKeyRef::Signed(&INPUT_SECRET),
-        &sk,
-        &glev,
-        &ntt,
-        &mut rng,
-        &mut NttGlweGadgetEncryptWorkspace::new(glev.size()),
-    );
-    let batch = inputs(
-        u128::from(Q),
-        glev.basis().scalar_iter().last().unwrap(),
-        &mut rng,
-    );
     let mut workspace = NttGlweKeySwitchingWorkspace::new(params.size());
-    check_packing(u128::from(Q), &batch, |input, output| {
-        if input.len() == INPUT_SECRET.len() + 1 {
-            key.key_switch_to(&Lwe::new(input), output, modulus, &ntt, &mut workspace);
-        } else {
-            key.pack_lwes_to(input, output, modulus, &ntt, &mut workspace);
-        }
-    });
-    let wrong_modulus = BarrettModulus::new(132_120_577u64);
-    let wrong_table = U64NttTable::new(PolyLength::new(N), wrong_modulus).unwrap();
-    let wrong_length = U64NttTable::new(PolyLength::new(N * 2), modulus).unwrap();
-    for (modulus, table, size) in [
-        (wrong_modulus, &ntt, params.size()),
-        (modulus, &wrong_table, params.size()),
-        (modulus, &wrong_length, params.size()),
-        (
-            modulus,
-            &ntt,
-            GlweSize::new(GlweDimension::new(K + 1), PolyLength::new(N)),
-        ),
-        (
-            modulus,
-            &ntt,
-            GlweSize::new(GlweDimension::new(K), PolyLength::new(2 * N)),
-        ),
-    ] {
-        let mut output = Glwe::new(vec![7; params.glwe_len()]);
-        let mut workspace = NttGlweKeySwitchingWorkspace::new(size);
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                key.pack_lwes_to(&batch, &mut output, modulus, table, &mut workspace);
-            }))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&x| x == 7));
-    }
-}
 
-#[test]
-fn ntt_packing_switches_an_independent_signed_lwe_secret() {
-    // Cover the specialized small-digit kernel and the general multiply-add kernel.
+    // Cover both the small-digit and general multiply-add kernels.
     for (log_basis, levels) in [(3, 10), (10, 3)] {
-        ntt_packing(log_basis, levels);
+        let glev = GlevParameters::with_glwe_params(
+            &params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(log_basis),
+                level_count: Some(DecompositionLevelCount::new(levels)),
+            },
+        );
+        let mut rng = StdRng::seed_from_u64(0x5041434b);
+        let key = NttLwePackingKeySwitchingKey::generate(
+            LweSecretKeyRef::Signed(&INPUT_SECRET),
+            &sk,
+            &glev,
+            &ntt,
+            &mut rng,
+            &mut NttGlweGadgetEncryptWorkspace::new(glev.size()),
+        );
+        let batch = inputs(
+            u128::from(Q),
+            glev.basis().scalar_iter().last().unwrap(),
+            &mut rng,
+        );
+        let mut pack = |input: &[u64], output: &mut Glwe<Vec<u64>>| {
+            if input.len() == INPUT_SECRET.len() + 1 {
+                key.key_switch_to(&Lwe::new(input), output, modulus, &ntt, &mut workspace);
+            } else {
+                key.pack_lwes_to(input, output, modulus, &ntt, &mut workspace);
+            }
+        };
+        check_packing(u128::from(Q), &batch, &mut pack);
+        // Preflight is independent of the digit kernel.
+        if log_basis != 3 {
+            continue;
+        }
+        check_packing_layout(pack);
+        let wrong_modulus = BarrettModulus::new(132_120_577u64);
+        let wrong_table = U64NttTable::new(PolyLength::new(N), wrong_modulus).unwrap();
+        let wrong_length = U64NttTable::new(PolyLength::new(N * 2), modulus).unwrap();
+        for (modulus, table, size) in [
+            (wrong_modulus, &ntt, params.size()),
+            (modulus, &wrong_table, params.size()),
+            (modulus, &wrong_length, params.size()),
+            (
+                modulus,
+                &ntt,
+                GlweSize::new(GlweDimension::new(K + 1), PolyLength::new(N)),
+            ),
+            (
+                modulus,
+                &ntt,
+                GlweSize::new(GlweDimension::new(K), PolyLength::new(2 * N)),
+            ),
+        ] {
+            let mut output = Glwe::new(vec![7; params.glwe_len()]);
+            let mut workspace = NttGlweKeySwitchingWorkspace::new(size);
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    key.pack_lwes_to(&batch, &mut output, modulus, table, &mut workspace);
+                }))
+                .is_err()
+            );
+            assert!(output.as_ref().iter().all(|&x| x == 7));
+        }
     }
 }
 
-fn fourier_packing<Table: FftTable>(log_basis: u32, levels: usize) {
+fn fourier_packing<Table: FftTable>() {
     let table = Table::new(PolyLength::new(N));
+    let wrong_table = Table::new(PolyLength::new(2 * N));
     let mut fft = FftEngine::new(&table);
     let params = GlweParameters::new(
         GlweDimension::new(K),
@@ -171,62 +179,67 @@ fn fourier_packing<Table: FftTable>(log_basis: u32, levels: usize) {
         SecretKeyDistr::UniformTernary,
         0.7,
     );
-    let glev = GlevParameters::with_glwe_params(
-        &params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(log_basis),
-            level_count: Some(DecompositionLevelCount::new(levels)),
-        },
-    );
     let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
     let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
-    let mut rng = StdRng::seed_from_u64(0x5041434b);
     let encoded = INPUT_SECRET.map(|x| x as u64);
-    let key = FourierLwePackingKeySwitchingKey::generate(
-        LweSecretKeyRef::Encoded(&encoded),
-        &mut sk,
-        &glev,
-        &mut fft,
-        &mut rng,
-    );
-    let batch = inputs(
-        1u128 << 64,
-        glev.basis().scalar_iter().last().unwrap(),
-        &mut rng,
-    );
     let mut workspace = FourierGlweKeySwitchingWorkspace::new(params.size());
-    check_packing(1u128 << 64, &batch, |input, output| {
-        if input.len() == INPUT_SECRET.len() + 1 {
-            key.key_switch_to(&Lwe::new(input), output, &mut fft, &mut workspace);
-        } else {
-            key.pack_lwes_to(input, output, &mut fft, &mut workspace);
-        }
-    });
-    let wrong_table = Table::new(PolyLength::new(2 * N));
-    let mut wrong_fft = FftEngine::new(&wrong_table);
-    for (fft, size) in [
-        (&mut wrong_fft, params.size()),
-        (
-            &mut fft,
-            GlweSize::new(GlweDimension::new(K + 1), PolyLength::new(N)),
-        ),
-    ] {
-        let mut output = Glwe::new(vec![7; params.glwe_len()]);
-        let mut workspace = FourierGlweKeySwitchingWorkspace::new(size);
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                key.pack_lwes_to(&batch, &mut output, fft, &mut workspace);
-            }))
-            .is_err()
+
+    for (log_basis, levels) in [(3, 10), (10, 3)] {
+        let glev = GlevParameters::with_glwe_params(
+            &params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(log_basis),
+                level_count: Some(DecompositionLevelCount::new(levels)),
+            },
         );
-        assert!(output.as_ref().iter().all(|&x| x == 7));
+        let mut rng = StdRng::seed_from_u64(0x5041434b);
+        let key = FourierLwePackingKeySwitchingKey::generate(
+            LweSecretKeyRef::Encoded(&encoded),
+            &mut sk,
+            &glev,
+            &mut fft,
+            &mut rng,
+        );
+        let batch = inputs(
+            1u128 << 64,
+            glev.basis().scalar_iter().last().unwrap(),
+            &mut rng,
+        );
+        let mut pack = |input: &[u64], output: &mut Glwe<Vec<u64>>| {
+            if input.len() == INPUT_SECRET.len() + 1 {
+                key.key_switch_to(&Lwe::new(input), output, &mut fft, &mut workspace);
+            } else {
+                key.pack_lwes_to(input, output, &mut fft, &mut workspace);
+            }
+        };
+        check_packing(1u128 << 64, &batch, &mut pack);
+        if log_basis != 3 {
+            continue;
+        }
+        check_packing_layout(pack);
+        let mut wrong_fft = FftEngine::new(&wrong_table);
+        for (fft, size) in [
+            (&mut wrong_fft, params.size()),
+            (
+                &mut fft,
+                GlweSize::new(GlweDimension::new(K + 1), PolyLength::new(N)),
+            ),
+        ] {
+            let mut output = Glwe::new(vec![7; params.glwe_len()]);
+            let mut workspace = FourierGlweKeySwitchingWorkspace::new(size);
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    key.pack_lwes_to(&batch, &mut output, fft, &mut workspace);
+                }))
+                .is_err()
+            );
+            assert!(output.as_ref().iter().all(|&x| x == 7));
+        }
     }
 }
 
 #[test]
 fn fourier_packing_switches_an_independent_encoded_lwe_secret() {
-    for (log_basis, levels) in [(3, 10), (10, 3)] {
-        fourier_packing::<RustFftTable>(log_basis, levels);
-        fourier_packing::<TfheFftTable>(log_basis, levels);
-    }
+    fourier_packing::<RustFftTable>();
+    fourier_packing::<TfheFftTable>();
 }

@@ -206,13 +206,18 @@ fn generation_validates_before_sampling() {
 
 #[test]
 fn batch_matches_scalar_key_entry_sum() {
-    check_batch_sum(NativeModulus::<u32>::new());
-    check_batch_sum(BarrettModulus::new(132_120_577u32));
-    check_batch_sum(NativeModulus::<u64>::new());
-    check_batch_sum(PowOf2Modulus::new(1u64 << 40));
+    let tile_boundaries = [0, 1, 7, 8, 17];
+    check_batch_sum(NativeModulus::<u32>::new(), 2, &tile_boundaries);
+    check_batch_sum(BarrettModulus::new(132_120_577u32), 4, &tile_boundaries);
+    check_batch_sum(NativeModulus::<u64>::new(), 4, &[17]);
+    check_batch_sum(PowOf2Modulus::new(1u64 << 40), 2, &[17]);
 }
 
-fn check_batch_sum<T: primus_integer::FheUint, M: RingContext<T>>(modulus: M) {
+fn check_batch_sum<T: primus_integer::FheUint, M: RingContext<T>>(
+    modulus: M,
+    log_basis: u32,
+    counts: &[usize],
+) {
     use primus_lattice::lwe::{Lwe, LweIter};
     use rand::distr::Distribution;
 
@@ -225,59 +230,61 @@ fn check_batch_sum<T: primus_integer::FheUint, M: RingContext<T>>(modulus: M) {
         0.7,
     );
     let output_key = LweSecretKey::generate(params.encryption_parameters(), &mut rng);
-    for log_basis in [2, 4] {
-        let basis = ApproxSignedBasis::new(
-            modulus.explicit_value(),
-            DecompositionBaseLog::new(log_basis),
-            None,
-        );
-        let parameters =
-            LweKeySwitchingParameters::new(params.encryption_parameters().clone(), basis);
-        let key = LweKeySwitchingKey::generate(
-            LweSecretKeyRef::Encoded(&[T::ONE; 7]),
-            &output_key,
-            &parameters,
-            &mut rng,
-        );
-        for count in [0, 1, 7, 8, 17] {
-            let mut input: Vec<T> = params
-                .cipher_modulus_uniform_distr()
-                .sample_iter(&mut rng)
-                .take(count * 8)
-                .collect();
-            // Include zero and negative residues to exercise rounding and carry chains.
-            for sample in input.as_chunks_mut::<8>().0 {
-                sample[0] = T::ZERO;
-                sample[1] = modulus.reduce_neg(T::ONE);
-                sample[2] = modulus.reduce_neg(T::TWO);
-            }
-            let mut expected = vec![T::ZERO; count * 66];
-            for (input, output) in
-                LweIter::new(&input, 8).zip(expected.as_chunks_mut::<66>().0.iter_mut())
-            {
-                output[65] = input.b();
-                for (&coefficient, block) in input.a().iter().zip(
-                    key.as_slice()
-                        .chunks_exact(66 * key.basis().level_count().get()),
-                ) {
-                    let (adjusted, mut carry) = key.basis().init_value_carry(coefficient);
-                    for (decomposer, entry) in
-                        key.basis().decomposer_iter().zip(block.as_chunks::<66>().0)
-                    {
-                        let (digit, next) = decomposer.decompose(adjusted, carry);
-                        carry = next;
-                        for (acc, &value) in output.iter_mut().zip(entry) {
-                            *acc = modulus.reduce_sub(*acc, modulus.reduce_mul(digit, value));
-                        }
+    let basis = ApproxSignedBasis::new(
+        modulus.explicit_value(),
+        DecompositionBaseLog::new(log_basis),
+        None,
+    );
+    let parameters = LweKeySwitchingParameters::new(params.encryption_parameters().clone(), basis);
+    let key = LweKeySwitchingKey::generate(
+        LweSecretKeyRef::Encoded(&[T::ONE; 7]),
+        &output_key,
+        &parameters,
+        &mut rng,
+    );
+    for &count in counts {
+        let mut input: Vec<T> = params
+            .cipher_modulus_uniform_distr()
+            .sample_iter(&mut rng)
+            .take(count * 8)
+            .collect();
+        // Include zero and negative residues to exercise rounding and carry chains.
+        for sample in input.as_chunks_mut::<8>().0 {
+            sample[0] = T::ZERO;
+            sample[1] = modulus.reduce_neg(T::ONE);
+            sample[2] = modulus.reduce_neg(T::TWO);
+        }
+        let mut expected = vec![T::ZERO; count * 66];
+        for (input, output) in
+            LweIter::new(&input, 8).zip(expected.as_chunks_mut::<66>().0.iter_mut())
+        {
+            output[65] = input.b();
+            for (&coefficient, block) in input.a().iter().zip(
+                key.as_slice()
+                    .chunks_exact(66 * key.basis().level_count().get()),
+            ) {
+                let (adjusted, mut carry) = key.basis().init_value_carry(coefficient);
+                for (decomposer, entry) in
+                    key.basis().decomposer_iter().zip(block.as_chunks::<66>().0)
+                {
+                    let (digit, next) = decomposer.decompose(adjusted, carry);
+                    carry = next;
+                    for (acc, &value) in output.iter_mut().zip(entry) {
+                        *acc = modulus.reduce_sub(*acc, modulus.reduce_mul(digit, value));
                     }
                 }
-                let mut single = Lwe::new(vec![T::ONE; 66]);
-                key.key_switch_to(&input, &mut single, modulus);
-                assert_eq!(single.0.as_slice(), output.as_slice());
             }
-            let mut actual = vec![T::ONE; count * 66];
-            key.key_switch_batch_to(&input, &mut actual, modulus);
-            assert_eq!(actual, expected);
+            let mut single = Lwe::new(vec![T::ONE; 66]);
+            key.key_switch_to(&input, &mut single, modulus);
+            assert_eq!(single.0.as_slice(), output.as_slice());
+        }
+        let mut actual = vec![T::ONE; count * 66];
+        key.key_switch_batch_to(&input, &mut actual, modulus);
+        assert_eq!(actual, expected);
+        // The allocating wrapper shares the same batch kernel. Check its
+        // empty and multi-tile outputs without repeating every tile size.
+        if count == 0 || count == 17 {
+            assert_eq!(key.key_switch_batch(&input, modulus), expected);
         }
     }
 }

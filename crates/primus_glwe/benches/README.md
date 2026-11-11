@@ -17,6 +17,8 @@ Key/table setup and buffer allocation stay outside timing. Encryption includes s
 
 Ordinary and reverse trace have different output scales. Projection and partial expansion use the same zero-tail message and report output-message throughput. Trace packing uses the flattened GLWE secret and spaced slots; independent-key packing uses consecutive slots. Compare these endpoints according to the desired operation.
 
+The main workload uses rank one and N=1024. Rank two at N=4096 adds secret encryption, batched constant GGSW generation, full ordinary and reverse trace, and scheme switching. The two NTT scheme-switch rows exercise the square and general keys. Trace uses NTT or RustFFT. Direct Fourier automorphism compares RustFFT and TFHE-FFT at rank one.
+
 ## Run
 
 ```sh

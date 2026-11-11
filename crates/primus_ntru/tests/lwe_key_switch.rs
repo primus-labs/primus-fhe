@@ -1,20 +1,21 @@
 //! Independent coefficient phases, rounding and key-entry noise for NTRU -> LWE.
 
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use primus_encoding::PlaintextEmbedding;
-use primus_lattice::LweDimension;
-use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use primus_decompose::primitive::ApproxSignedBasis;
+use primus_decompose::{
+    DecompositionBaseLog, DecompositionLevelCount, primitive::ApproxSignedBasis,
+};
+use primus_encoding::PlaintextEmbedding;
 use primus_integer::{AsInto, FheUint};
-use primus_lattice::lwe::LweIter;
+use primus_lattice::{LweDimension, lwe::LweIter};
 use primus_lwe::{LweCiphertext, LweKeySwitchingParameters, LweParameters, LweSecretKey};
 use primus_modulus::{BarrettModulus, NativeModulus, PowOf2Modulus, UintModulus};
 use primus_ntru::{
-    LweReturnEvaluator, NtruCiphertext, NtruLweKeySwitchingKey, NtruSecretKey, SecretKeyDistr,
+    LweReturnBatchWorkspace, LweReturnEvaluator, NtruCiphertext, NtruLweKeySwitchingKey,
+    NtruSecretKey, SecretKeyDistr,
 };
 use primus_reduce::{Modulus, RingContext};
+use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const N: usize = 32;
@@ -205,20 +206,20 @@ fn coefficient_inputs<T: FheUint>(source_q: u128, q: u128) -> Vec<NtruCiphertext
 // Establish an integer-checked result for each source/index pair. Later batch
 // comparisons reuse these ciphertexts, so their oracle is not another batch path.
 fn check_scalar_returns<T: FheUint, M: RingContext<T>>(
-    key: &NtruLweKeySwitchingKey<T>,
+    evaluator: &LweReturnEvaluator<'_, T, M>,
+    oracle: &ReturnOracle<'_, T>,
     inputs: &[NtruCiphertext<Vec<T>>],
     source_q: u128,
-    target: M,
 ) -> Vec<Vec<LweCiphertext<T>>> {
-    let q = modulus_value::<T, _>(target);
-    let oracle = ReturnOracle::new(key, q);
-    let evaluator = LweReturnEvaluator::new(key, target);
     let mut workspace = evaluator.new_scalar_workspace();
     let mut output = LweCiphertext::<T>::new(vec![T::ONE; S.len() + 1]);
-    let mut expected_inputs = Vec::new();
+    let mut expected_inputs = Vec::with_capacity(inputs.len());
     for input in inputs {
         let raw: Vec<u128> = input.as_ref().iter().map(|&v| v.as_into()).collect();
-        let switched: Vec<_> = raw.iter().map(|&v| rounded(v, source_q, q)).collect();
+        let switched: Vec<_> = raw
+            .iter()
+            .map(|&v| rounded(v, source_q, oracle.q))
+            .collect();
         let mut expected = vec![output.clone(); F.len()];
         for index in (0..F.len()).rev() {
             evaluator.return_at_to(input.as_view(), index, output.as_mut_view(), &mut workspace);
@@ -233,14 +234,12 @@ fn check_scalar_returns<T: FheUint, M: RingContext<T>>(
 // Shared-input returns preserve repeated/nonmonotonic indices across two tiles
 // and a tail. Singleton and empty requests reuse the same dirty buffers.
 fn check_shared_input_returns<T: FheUint, M: RingContext<T>>(
-    key: &NtruLweKeySwitchingKey<T>,
+    evaluator: &LweReturnEvaluator<'_, T, M>,
+    workspace: &mut LweReturnBatchWorkspace<T>,
     inputs: &[NtruCiphertext<Vec<T>>],
     expected_inputs: &[Vec<LweCiphertext<T>>],
-    target: M,
     outputs: &mut [LweCiphertext<T>],
 ) {
-    let evaluator = LweReturnEvaluator::new(key, target);
-    let mut workspace = evaluator.new_batch_workspace();
     for (input, expected) in inputs.iter().zip(expected_inputs) {
         for count in [17, 1, 0] {
             let indices = (0..count).map(|i| (3 * (i % 9) + 1) % F.len());
@@ -249,7 +248,7 @@ fn check_shared_input_returns<T: FheUint, M: RingContext<T>>(
                 input.as_view(),
                 indices.clone(),
                 &mut outputs[..count],
-                &mut workspace,
+                workspace,
             );
             for (output, index) in outputs[..count].iter().zip(indices) {
                 assert_eq!(output, &expected[index]);
@@ -258,7 +257,7 @@ fn check_shared_input_returns<T: FheUint, M: RingContext<T>>(
             // The bound prefix path uses the same scalar integer oracle and leaves
             // complete ciphertexts beyond the supplied output slice untouched.
             assert_eq!(&outputs[count..], tail);
-            evaluator.return_prefix_to(input.as_view(), &mut outputs[..count], &mut workspace);
+            evaluator.return_prefix_to(input.as_view(), &mut outputs[..count], workspace);
             assert_eq!(&outputs[..count], &expected[..count]);
             assert_eq!(&outputs[count..], tail);
         }
@@ -268,14 +267,12 @@ fn check_shared_input_returns<T: FheUint, M: RingContext<T>>(
 // Streamed returns retain extracted LWEs while the single source buffer is
 // overwritten before KS. A short final tile must ignore older slots past its end.
 fn check_streamed_returns<T: FheUint, M: RingContext<T>>(
-    key: &NtruLweKeySwitchingKey<T>,
+    evaluator: &LweReturnEvaluator<'_, T, M>,
+    workspace: &mut LweReturnBatchWorkspace<T>,
     inputs: &[NtruCiphertext<Vec<T>>],
     expected_inputs: &[Vec<LweCiphertext<T>>],
-    target: M,
     outputs: &mut [LweCiphertext<T>],
 ) {
-    let evaluator = LweReturnEvaluator::new(key, target);
-    let mut workspace = evaluator.new_batch_workspace();
     let mut current = NtruCiphertext::<Vec<T>>::zero(F.len());
     let capacity = workspace.batch_capacity();
     for count in [17, 1, 0] {
@@ -287,15 +284,15 @@ fn check_streamed_returns<T: FheUint, M: RingContext<T>>(
                 current
                     .as_mut()
                     .copy_from_slice(inputs[i % inputs.len()].as_ref());
-                evaluator.append_at(current.as_view(), (3 * i + 1) % F.len(), &mut workspace);
+                evaluator.append_at(current.as_view(), (3 * i + 1) % F.len(), workspace);
                 current.as_mut().fill(T::ZERO);
             }
-            evaluator.return_batch_to(outputs, &mut workspace);
+            evaluator.return_batch_to(outputs, workspace);
             assert!(!workspace.is_batch_active());
         }
         if count == 0 {
             workspace.begin_batch();
-            evaluator.return_batch_to(&mut outputs[..0], &mut workspace);
+            evaluator.return_batch_to(&mut outputs[..0], workspace);
             assert!(!workspace.is_batch_active());
         }
         assert_eq!(&outputs[count..], tail);
@@ -309,7 +306,11 @@ fn check_streamed_returns<T: FheUint, M: RingContext<T>>(
 }
 
 // Generate each modulus/basis fixture once for all three return paths.
-fn check_modulus_pair<T: FheUint, Q: Modulus<ValueT = T>, M: RingContext<T>>(source: Q, target: M) {
+fn check_modulus_pair<T: FheUint, Q: Modulus<ValueT = T>, M: RingContext<T>>(
+    source: Q,
+    target: M,
+    check_batches: bool,
+) {
     let source_q = modulus_value::<T, _>(source);
     let q = modulus_value::<T, _>(target);
     let secret = NtruSecretKey::new(
@@ -331,7 +332,6 @@ fn check_modulus_pair<T: FheUint, Q: Modulus<ValueT = T>, M: RingContext<T>>(sou
         0.7,
     );
     let inputs = coefficient_inputs(source_q, q);
-    let mut outputs = vec![LweCiphertext::new(vec![T::ONE; S.len() + 1]); 17];
     for level_count in [None, Some(2)] {
         let basis = ApproxSignedBasis::new(
             target.explicit_value(),
@@ -351,31 +351,47 @@ fn check_modulus_pair<T: FheUint, Q: Modulus<ValueT = T>, M: RingContext<T>>(sou
         assert_eq!(key.input_modulus(), source.explicit_value());
         assert_eq!(key.poly_length(), F.len());
         assert_eq!(key.output_dimension(), LweDimension::new(S.len()));
-        let expected = check_scalar_returns(&key, &inputs, source_q, target);
-        check_shared_input_returns(&key, &inputs, &expected, target, &mut outputs);
-        check_streamed_returns(&key, &inputs, &expected, target, &mut outputs);
+        let evaluator = LweReturnEvaluator::new(&key, target);
+        let expected =
+            check_scalar_returns(&evaluator, &ReturnOracle::new(&key, q), &inputs, source_q);
+        if check_batches {
+            let mut outputs = vec![LweCiphertext::new(vec![T::ONE; S.len() + 1]); 17];
+            let mut workspace = evaluator.new_batch_workspace();
+            check_shared_input_returns(
+                &evaluator,
+                &mut workspace,
+                &inputs,
+                &expected,
+                &mut outputs,
+            );
+            // The stream must ignore old tile contents from the shared-input path.
+            check_streamed_returns(&evaluator, &mut workspace, &inputs, &expected, &mut outputs);
+        }
     }
 }
 
-// Keep both word widths on the same source/target modulus and rounding matrix.
+// Check scalar rounding for the full matrix at both widths. Batches compare
+// with that oracle for identity, shift, and explicit-modulus conversions.
 fn check_moduli<T: FheUint>() {
     let native = NativeModulus::<T>::new();
     let odd = BarrettModulus::new(T::as_from(65537u32));
     let source = BarrettModulus::new(T::as_from(132120577u32));
     let power = PowOf2Modulus::new(T::ONE << (T::BITS - 4));
-    check_modulus_pair(native, native);
-    check_modulus_pair(native, odd);
-    check_modulus_pair(native, power);
-    check_modulus_pair(source, odd);
-    check_modulus_pair(source, source);
-    check_modulus_pair(source, native);
-    check_modulus_pair(BarrettModulus::new(T::as_from(131074u32)), odd); // half ties, including endpoint
+    check_modulus_pair(native, native, true);
+    check_modulus_pair(native, odd, false);
+    check_modulus_pair(native, power, true);
+    check_modulus_pair(source, odd, false);
+    check_modulus_pair(source, source, false);
+    check_modulus_pair(source, native, true);
+    // Check a half tie at the modulus endpoint in both scalar and batched conversion.
+    check_modulus_pair(BarrettModulus::new(T::as_from(131074u32)), odd, true);
     check_modulus_pair(
         PowOf2Modulus::new(T::ONE << (T::BITS - 2)),
         PowOf2Modulus::new(T::as_from(65536u32)),
+        false,
     );
-    check_modulus_pair(UintModulus::new(T::MAX), odd); // full-width explicit source; no narrowing
-    check_modulus_pair(UintModulus::new(T::MAX), native);
+    check_modulus_pair(UintModulus::new(T::MAX), odd, false); // full-width explicit source
+    check_modulus_pair(UintModulus::new(T::MAX), native, false);
 }
 
 // Scalar integer oracles also anchor the two batch paths at both word widths.
@@ -388,6 +404,7 @@ fn coefficient_rounding_extraction_and_independent_lwe_key_switch() {
 // Invalid scalar inputs leave the caller's output unchanged.
 fn check_scalar_errors(key: &NtruLweKeySwitchingKey<u32>) {
     let evaluator = LweReturnEvaluator::new(key, BarrettModulus::new(65537));
+    let mut workspace = evaluator.new_scalar_workspace();
     for (input_len, index, output_len) in [
         (0, 0, 4),
         (N - 1, 0, 4),
@@ -401,7 +418,6 @@ fn check_scalar_errors(key: &NtruLweKeySwitchingKey<u32>) {
         let input = NtruCiphertext::new(vec![9u32; input_len]);
         let mut output = LweCiphertext::new(vec![17u32; output_len]);
         let before = output.as_ref().to_vec();
-        let mut workspace = evaluator.new_scalar_workspace();
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
                 evaluator.return_at_to(
@@ -626,11 +642,7 @@ fn check_bound_workspace_errors(key: &NtruLweKeySwitchingKey<u32>) {
 }
 
 // Invalid key bindings must fail before consuming randomness.
-fn check_generation_errors(params: &LweParameters<u32, BarrettModulus<u32>>) {
-    let key_parameters = LweKeySwitchingParameters::new(
-        params.encryption_parameters().clone(),
-        ApproxSignedBasis::new(Some(65537), DecompositionBaseLog::new(4), None),
-    );
+fn check_generation_errors(key_parameters: &LweKeySwitchingParameters<u32, BarrettModulus<u32>>) {
     for (f, dimension, source_q) in [
         (65537, 3, 97),
         (-65537, 3, 97),
@@ -644,7 +656,7 @@ fn check_generation_errors(params: &LweParameters<u32, BarrettModulus<u32>>) {
         let output_key = LweSecretKey::new(
             vec![1; dimension],
             SecretKeyDistr::UniformBinary,
-            params.cipher_modulus(),
+            key_parameters.output().cipher_modulus(),
         );
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
@@ -652,7 +664,7 @@ fn check_generation_errors(params: &LweParameters<u32, BarrettModulus<u32>>) {
                     &secret,
                     UintModulus(source_q),
                     &output_key,
-                    &key_parameters,
+                    key_parameters,
                     &mut rng,
                 );
             }))
@@ -697,7 +709,7 @@ fn validation_precedes_output_writes_and_key_sampling() {
     check_shared_input_errors(&key);
     check_bound_return_state(&key);
     check_bound_workspace_errors(&key);
-    check_generation_errors(&params);
+    check_generation_errors(&key_parameters);
 }
 
 // Return actual encrypted coefficients to an independent, noninvertible LWE secret.

@@ -72,14 +72,15 @@ impl<T: TorusFftValue> FourierNtruSchemeSwitchKey<T> {
         let output_len = n
             .checked_mul(output_basis.level_count().get())
             .expect("scheme-switch output length overflow");
+        fourier_secret_key.assert_gadget_domain(key_parameters, fft, workspace);
         let mut encoded = Zeroizing::new(vec![T::ZERO; n]);
         NativeModulus::new().encode_signed_slice_to(secret_key.as_slice(), encoded.as_mut_slice());
         let mut data = FourierNgswCiphertext::zero(key_parameters.fourier_nlev_len());
-        // Gadget encryption validates the remaining resources before sampling.
-        // Each ciphertext receives g_j*f; the phase therefore receives g_j*f².
-        fourier_secret_key.encrypt_ngsw_to(
-            &Polynomial(encoded.as_slice()),
-            &mut data,
+        // Each ciphertext receives g_j*f and has phase g_j*f². Both buffers
+        // have the lengths fixed by key_parameters.
+        fourier_secret_key.encrypt_ngsw_kernel_to(
+            Polynomial(encoded.as_slice()),
+            data.as_mut_view(),
             key_parameters,
             fft,
             rng,

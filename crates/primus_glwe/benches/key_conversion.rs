@@ -2,7 +2,8 @@
 //! NTT q=1_125_899_906_826_241; Fourier native u64 with RustFFT.
 //! Binary secrets and sigma 3.2. Most cases use base 2^10 / three levels;
 //! single-LWE packing also uses base 2^3 / ten levels (both retain 30 bits).
-//! Packing input dimension is 512, independent of the output GLWE secret.
+//! Packing uses rank one and an independent input secret of dimension 512.
+//! Scheme switching also uses rank two. NTT has distinct square and general keys.
 //! These are regression workloads, not matched-security comparisons.
 //! Setup, key generation, output and workspace allocations are outside timing.
 //!
@@ -64,41 +65,75 @@ fn ntt_conversion(c: &mut Criterion) {
             },
         );
         let mut gadget = NttGlweGadgetEncryptWorkspace::new(glev.size());
-        let source = params
-            .secret_key_sampler()
-            .sample_signed(INPUT_DIMENSION, &mut rng);
-        let source = LweSecretKeyRef::Signed(&source);
-        let key = NttLwePackingKeySwitchingKey::generate(
-            source,
-            &sk,
-            &glev,
-            &table,
-            &mut rng,
-            &mut gadget,
-        );
-        let mut workspace = NttGlweKeySwitchingWorkspace::new(size);
-        let mut output = Glwe::new(vec![0; size.glwe_len()]);
-        let mut batch = vec![0; n * (INPUT_DIMENSION + 1)];
-        for (i, block) in batch
-            .as_chunks_mut::<{ INPUT_DIMENSION + 1 }>()
-            .0
-            .iter_mut()
-            .enumerate()
-        {
-            source.encrypt_encoded_to(
-                (i % 16) as u64,
-                &mut Lwe::new(block.as_mut_slice()),
-                modulus,
-                params.cipher_modulus_uniform_distr(),
-                params.noise_distribution(),
-                &mut rng,
-            );
-        }
         let mut group = c.benchmark_group(format!("glwe/ntt/k{k}_n{n}"));
-        for count in [1, 8, n] {
-            let input = &batch[..count * (INPUT_DIMENSION + 1)];
-            group.throughput(Throughput::Elements(count as u64));
-            group.bench_function(format!("packing_key_switch/b10_l3/{count}"), |b| {
+        if k == 1 {
+            let source = params
+                .secret_key_sampler()
+                .sample_signed(INPUT_DIMENSION, &mut rng);
+            let source = LweSecretKeyRef::Signed(&source);
+            let key = NttLwePackingKeySwitchingKey::generate(
+                source,
+                &sk,
+                &glev,
+                &table,
+                &mut rng,
+                &mut gadget,
+            );
+            let mut workspace = NttGlweKeySwitchingWorkspace::new(size);
+            let mut output = Glwe::new(vec![0; size.glwe_len()]);
+            let mut batch = vec![0; n * (INPUT_DIMENSION + 1)];
+            for (i, block) in batch
+                .as_chunks_mut::<{ INPUT_DIMENSION + 1 }>()
+                .0
+                .iter_mut()
+                .enumerate()
+            {
+                source.encrypt_encoded_to(
+                    (i % 16) as u64,
+                    &mut Lwe::new(block.as_mut_slice()),
+                    modulus,
+                    params.cipher_modulus_uniform_distr(),
+                    params.noise_distribution(),
+                    &mut rng,
+                );
+            }
+            for count in [1, 8, n] {
+                let input = &batch[..count * (INPUT_DIMENSION + 1)];
+                group.throughput(Throughput::Elements(count as u64));
+                group.bench_function(format!("packing_key_switch/b10_l3/{count}"), |b| {
+                    b.iter(|| {
+                        key.pack_lwes_to(
+                            black_box(input),
+                            &mut output,
+                            modulus,
+                            &table,
+                            &mut workspace,
+                        );
+                        black_box(output.as_ref());
+                    })
+                });
+            }
+            drop(key);
+            // Keep a small-basis single-LWE case: its frequent 0/±1/±2 digits
+            // exercise a different accumulation cost than the large-basis path.
+            let small_glev = GlevParameters::with_glwe_params(
+                &params,
+                DecompositionConfig {
+                    log_basis: DecompositionBaseLog::new(3),
+                    level_count: Some(DecompositionLevelCount::new(10)),
+                },
+            );
+            let key = NttLwePackingKeySwitchingKey::generate(
+                source,
+                &sk,
+                &small_glev,
+                &table,
+                &mut rng,
+                &mut gadget,
+            );
+            let input = &batch[..INPUT_DIMENSION + 1];
+            group.throughput(Throughput::Elements(1));
+            group.bench_function("packing_key_switch/b3_l10/1", |b| {
                 b.iter(|| {
                     key.pack_lwes_to(
                         black_box(input),
@@ -111,39 +146,6 @@ fn ntt_conversion(c: &mut Criterion) {
                 })
             });
         }
-        drop(key);
-        // Keep a small-basis single-LWE case: its frequent 0/±1/±2 digits
-        // exercise a different accumulation cost than the large-basis path.
-        let small_glev = GlevParameters::with_glwe_params(
-            &params,
-            DecompositionConfig {
-                log_basis: DecompositionBaseLog::new(3),
-                level_count: Some(DecompositionLevelCount::new(10)),
-            },
-        );
-        let key = NttLwePackingKeySwitchingKey::generate(
-            source,
-            &sk,
-            &small_glev,
-            &table,
-            &mut rng,
-            &mut gadget,
-        );
-        let input = &batch[..INPUT_DIMENSION + 1];
-        group.throughput(Throughput::Elements(1));
-        group.bench_function("packing_key_switch/b3_l10/1", |b| {
-            b.iter(|| {
-                key.pack_lwes_to(
-                    black_box(input),
-                    &mut output,
-                    modulus,
-                    &table,
-                    &mut workspace,
-                );
-                black_box(output.as_ref());
-            })
-        });
-        drop(key);
 
         let key = NttGlweSchemeSwitchKey::generate(
             &coeff,
@@ -208,66 +210,68 @@ fn fourier_conversion(c: &mut Criterion) {
             },
         );
 
-        let source = params
-            .secret_key_sampler()
-            .sample_signed(INPUT_DIMENSION, &mut rng);
-        let source = LweSecretKeyRef::Signed(&source);
-        let key =
-            FourierLwePackingKeySwitchingKey::generate(source, &mut sk, &glev, &mut fft, &mut rng);
-        let mut workspace = FourierGlweKeySwitchingWorkspace::new(size);
-        let mut output = Glwe::new(vec![0; size.glwe_len()]);
-        let mut batch = vec![0; n * (INPUT_DIMENSION + 1)];
-        for (i, block) in batch
-            .as_chunks_mut::<{ INPUT_DIMENSION + 1 }>()
-            .0
-            .iter_mut()
-            .enumerate()
-        {
-            source.encrypt_encoded_to(
-                (i % 16) as u64,
-                &mut Lwe::new(block.as_mut_slice()),
-                modulus,
-                params.cipher_modulus_uniform_distr(),
-                params.noise_distribution(),
+        let mut group = c.benchmark_group(format!("glwe/fourier/k{k}_n{n}"));
+        if k == 1 {
+            let source = params
+                .secret_key_sampler()
+                .sample_signed(INPUT_DIMENSION, &mut rng);
+            let source = LweSecretKeyRef::Signed(&source);
+            let key = FourierLwePackingKeySwitchingKey::generate(
+                source, &mut sk, &glev, &mut fft, &mut rng,
+            );
+            let mut workspace = FourierGlweKeySwitchingWorkspace::new(size);
+            let mut output = Glwe::new(vec![0; size.glwe_len()]);
+            let mut batch = vec![0; n * (INPUT_DIMENSION + 1)];
+            for (i, block) in batch
+                .as_chunks_mut::<{ INPUT_DIMENSION + 1 }>()
+                .0
+                .iter_mut()
+                .enumerate()
+            {
+                source.encrypt_encoded_to(
+                    (i % 16) as u64,
+                    &mut Lwe::new(block.as_mut_slice()),
+                    modulus,
+                    params.cipher_modulus_uniform_distr(),
+                    params.noise_distribution(),
+                    &mut rng,
+                );
+            }
+            for count in [1, 8, n] {
+                let input = &batch[..count * (INPUT_DIMENSION + 1)];
+                group.throughput(Throughput::Elements(count as u64));
+                group.bench_function(format!("packing_key_switch/b10_l3/{count}"), |b| {
+                    b.iter(|| {
+                        key.pack_lwes_to(black_box(input), &mut output, &mut fft, &mut workspace);
+                        black_box(output.as_ref());
+                    })
+                });
+            }
+            drop(key);
+            // Track zero-skipping with frequent zeros as well as the rare-zero large basis.
+            let small_glev = GlevParameters::with_glwe_params(
+                &params,
+                DecompositionConfig {
+                    log_basis: DecompositionBaseLog::new(3),
+                    level_count: Some(DecompositionLevelCount::new(10)),
+                },
+            );
+            let key = FourierLwePackingKeySwitchingKey::generate(
+                source,
+                &mut sk,
+                &small_glev,
+                &mut fft,
                 &mut rng,
             );
-        }
-        let mut group = c.benchmark_group(format!("glwe/fourier/k{k}_n{n}"));
-        for count in [1, 8, n] {
-            let input = &batch[..count * (INPUT_DIMENSION + 1)];
-            group.throughput(Throughput::Elements(count as u64));
-            group.bench_function(format!("packing_key_switch/b10_l3/{count}"), |b| {
+            let input = &batch[..INPUT_DIMENSION + 1];
+            group.throughput(Throughput::Elements(1));
+            group.bench_function("packing_key_switch/b3_l10/1", |b| {
                 b.iter(|| {
                     key.pack_lwes_to(black_box(input), &mut output, &mut fft, &mut workspace);
                     black_box(output.as_ref());
                 })
             });
         }
-        drop(key);
-        // Track zero-skipping with frequent zeros as well as the rare-zero large basis.
-        let small_glev = GlevParameters::with_glwe_params(
-            &params,
-            DecompositionConfig {
-                log_basis: DecompositionBaseLog::new(3),
-                level_count: Some(DecompositionLevelCount::new(10)),
-            },
-        );
-        let key = FourierLwePackingKeySwitchingKey::generate(
-            source,
-            &mut sk,
-            &small_glev,
-            &mut fft,
-            &mut rng,
-        );
-        let input = &batch[..INPUT_DIMENSION + 1];
-        group.throughput(Throughput::Elements(1));
-        group.bench_function("packing_key_switch/b3_l10/1", |b| {
-            b.iter(|| {
-                key.pack_lwes_to(black_box(input), &mut output, &mut fft, &mut workspace);
-                black_box(output.as_ref());
-            })
-        });
-        drop(key);
 
         let key =
             FourierGlweSchemeSwitchKey::generate(&mut sk, glev.size(), &glev, &mut fft, &mut rng);

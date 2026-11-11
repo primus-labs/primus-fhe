@@ -40,13 +40,15 @@ pub(super) fn trace_assign<T, M, H, F, const REVERSE: bool>(
 /// Packs bit-reversed leaves bottom-up using the paper's even/odd recursion.
 /// At width p, output = U + Auto_(p+1)(U) + X^(N/p)*O,
 /// where U = (E - X^(N/p)*O)/2. A final partial reverse trace removes
-/// coefficients outside the p evenly spaced slots.
+/// coefficients outside the p evenly spaced slots. The caller already checks
+/// that `count` complete LWEs match the tree and that `count` divides N.
 #[expect(
     clippy::too_many_arguments,
     reason = "explicit validated layout, buffers and backend kernels"
 )]
 pub(super) fn pack_to<T, M, H, F>(
     input: &[T],
+    count: usize,
     output: &mut [T],
     tree: &mut [T],
     scratch: &mut [T],
@@ -63,7 +65,8 @@ pub(super) fn pack_to<T, M, H, F>(
     let glwe_len = size.glwe_len();
     let poly_length = size.poly_length().get();
     let lwe_len = size.mask_len() + 1;
-    let count = input.len() / lwe_len;
+    debug_assert_eq!(input.len(), count * lwe_len);
+    debug_assert_eq!(tree.len(), count * glwe_len);
     let log_count = count.trailing_zeros();
     for (i, leaf) in tree.chunks_exact_mut(glwe_len).enumerate() {
         // A single leaf has no index bits; its full-width checked shift falls back to 0.
@@ -99,7 +102,7 @@ pub(super) fn pack_to<T, M, H, F>(
     output.copy_from_slice(&tree[..glwe_len]);
     trace_assign::<_, _, _, _, true>(
         output,
-        (poly_length / count).trailing_zeros() as usize,
+        (size.poly_length().log_n() - log_count) as usize,
         scratch,
         modulus,
         halve,
@@ -111,12 +114,17 @@ pub(super) fn pack_to<T, M, H, F>(
 /// each live ciphertext contains
 /// coefficients in one residue class modulo 2^j, shifted to coefficient zero.
 /// Output storage is also the tree; the second half of each butterfly is written
-/// directly into its final residue-class block. Output contains count complete
-/// GLWEs, where count is a validated power of two in 1..=N. Normalization is by
-/// count and only log2(count) levels are evaluated. The caller owns the zero-tail
-/// target-message requirement for constant outputs when count < N.
+/// directly into its final residue-class block. The caller validates that output
+/// contains `count = 2^log_count` complete GLWEs in `1..=N`. Normalization is by
+/// `count` and only `log_count` levels are evaluated. The caller owns the zero-tail
+/// target-message requirement for constant outputs when `count < N`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit validated layout, buffers and backend kernels"
+)]
 pub(super) fn expand_to<T, M, H, F>(
     input: &[T],
+    log_count: u32,
     output: &mut [T],
     scratch: &mut [T],
     size: GlweSize,
@@ -131,12 +139,12 @@ pub(super) fn expand_to<T, M, H, F>(
 {
     let glwe_len = size.glwe_len();
     let poly_length = size.poly_length().get();
+    debug_assert_eq!(output.len(), (1usize << log_count) * glwe_len);
     output[..glwe_len].copy_from_slice(input);
     // Normalize before evaluation-key error enters the tree. In the NTT path,
     // this avoids multiplying intermediate key-switch error by modular inverses.
     normalize(&mut output[..glwe_len]);
-    let count = output.len() / glwe_len;
-    for depth in 0..count.trailing_zeros() as usize {
+    for depth in 0..log_count as usize {
         let live = 1 << depth;
         let (left, right) = output[..2 * live * glwe_len].split_at_mut(live * glwe_len);
         for (even, odd) in left

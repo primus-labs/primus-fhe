@@ -13,8 +13,13 @@ use primus_reduce::RingContext;
 use rand::{SeedableRng, rngs::StdRng};
 use std::hint::black_box;
 
-// Generation fixes n; batch encryption below varies dimensions and counts.
-fn bench_generation<T: FheUint>(c: &mut Criterion, name: &str, modulus: impl RingContext<T>) {
+// Compare the two secret representations on u32 and track generation on both widths.
+fn bench_generation<T: FheUint>(
+    c: &mut Criterion,
+    name: &str,
+    modulus: impl RingContext<T>,
+    compare_signed: bool,
+) {
     let dimension = 1024;
     let params = LweParameters::new(
         LweDimension::new(dimension),
@@ -36,12 +41,11 @@ fn bench_generation<T: FheUint>(c: &mut Criterion, name: &str, modulus: impl Rin
     let mut group = c.benchmark_group(format!("lwe_public_key/{name}/n{dimension}/generate"));
     // Includes output allocation and all n zero encryptions; encoding is setup.
     // Both views share the timed body and start from the same RNG seed.
-    for (name, secret) in [
-        ("encoded", LweSecretKeyRef::Encoded(&encoded)),
-        ("signed", LweSecretKeyRef::Signed(&signed)),
-    ] {
+    let encoded_case = ("encoded", LweSecretKeyRef::Encoded(&encoded));
+    let signed_case = compare_signed.then_some(("signed", LweSecretKeyRef::Signed(&signed)));
+    for (name, secret) in std::iter::once(encoded_case).chain(signed_case) {
+        let mut rng = StdRng::seed_from_u64(0x1_ee15);
         group.bench_function(name, |b| {
-            let mut rng = StdRng::seed_from_u64(0x1_ee15);
             b.iter(|| {
                 let params = black_box(&params);
                 LwePublicKey::generate(
@@ -59,16 +63,10 @@ fn bench_generation<T: FheUint>(c: &mut Criterion, name: &str, modulus: impl Rin
 }
 
 fn bench_batch_domain<M: RingContext<u32>>(c: &mut Criterion, name: &str, modulus: M) {
-    // Cover both Gaussian backends; CDT also tracks matrix-size scaling and
-    // a non-power-of-two dimension without duplicating those cases for Ziggurat.
-    for (sigma, dimension, count) in [
-        (3.2, 512, 1),
-        (3.2, 512, 64),
-        (3.2, 805, 64),
-        (3.2, 1024, 64),
-        (30.0, 512, 1),
-        (30.0, 512, 64),
-    ] {
+    // Use the same non-power-of-two dimension for CDT and Ziggurat, including
+    // a single-message latency case with the usual CDT noise.
+    let dimension = 805;
+    for (sigma, count) in [(3.2, 1), (3.2, 64), (30.0, 64)] {
         let mut rng = StdRng::seed_from_u64(0x1_ee25);
         let params = LweParameters::new(
             LweDimension::new(dimension),
@@ -130,13 +128,14 @@ fn bench_batch_domain<M: RingContext<u32>>(c: &mut Criterion, name: &str, modulu
 }
 
 fn public_key(c: &mut Criterion) {
-    bench_generation(c, "u32/native", NativeModulus::<u32>::new());
-    bench_generation(c, "u64/native", NativeModulus::<u64>::new());
-    bench_generation(c, "u32/barrett", BarrettModulus::new(132_120_577u32));
+    bench_generation(c, "u32/native", NativeModulus::<u32>::new(), true);
+    bench_generation(c, "u64/native", NativeModulus::<u64>::new(), false);
+    bench_generation(c, "u32/barrett", BarrettModulus::new(132_120_577u32), true);
     bench_generation(
         c,
         "u64/barrett",
         BarrettModulus::new(1_152_921_504_606_846_977u64),
+        false,
     );
     bench_batch_domain(c, "native", NativeModulus::new());
     bench_batch_domain(c, "explicit", BarrettModulus::new(132_120_577));

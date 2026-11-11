@@ -60,7 +60,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if input and output lengths differ.
+    /// Panics before writing if input and output lengths differ. If they agree
+    /// but do not match the table length, the inverse transform rejects the
+    /// output after the evaluations have been copied into it.
     #[inline]
     pub fn write_coeff_form<Table, A>(&self, output: &mut Ntru<A>, ntt_table: &Table)
     where
@@ -162,19 +164,20 @@ where
     S: Data<Elem = T>,
     T: FheUint,
 {
-    /// Transforms `self` to ntt form and stores in `output`.
+    /// Transforms `self` to NTT form and stores the evaluations in `output`.
     ///
     /// # Correctness
     ///
-    /// Storage must contain exactly one polynomial of `ntt_table.poly_length().get()`
-    /// values, satisfying the selected transform's input range. The table
-    /// modulus must match the ciphertext; inverse input must use that table's
-    /// evaluation order and normalization. Output has the same length and is
-    /// fully overwritten.
+    /// Storage must contain exactly one coefficient polynomial of
+    /// `ntt_table.poly_length().get()` values in the forward transform's input
+    /// range. The table modulus must match the ciphertext. Output has the
+    /// same length and uses the supplied table's evaluation order.
     ///
     /// # Panics
     ///
-    /// Panics if input and output lengths differ.
+    /// Panics before writing if input and output lengths differ. If they agree
+    /// but do not match the table length, the forward transform rejects the
+    /// output after the coefficients have been copied into it.
     #[inline]
     pub fn write_ntt_form<Table, A>(&self, output: &mut NttNtru<A>, ntt_table: &Table)
     where

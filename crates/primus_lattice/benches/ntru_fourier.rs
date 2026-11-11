@@ -100,13 +100,11 @@ fn fourier<T: TorusFftValue>(
 }
 
 fn benchmarks(c: &mut Criterion) {
-    for log_n in [10u32, 11] {
-        let poly_length = PolyLength::new(1usize << log_n);
-        fourier::<u32>(c, "rustfft", RustFftTable::new(poly_length), 9, 3);
-        fourier::<u64>(c, "rustfft", RustFftTable::new(poly_length), 9, 7);
-        fourier::<u32>(c, "tfhe", TfheFftTable::new(poly_length), 9, 3);
-        fourier::<u64>(c, "tfhe", TfheFftTable::new(poly_length), 9, 7);
-    }
+    let poly_length = PolyLength::new(1024);
+    fourier::<u32>(c, "rustfft", RustFftTable::new(poly_length), 9, 3);
+    fourier::<u64>(c, "rustfft", RustFftTable::new(poly_length), 9, 7);
+    fourier::<u32>(c, "tfhe", TfheFftTable::new(poly_length), 9, 3);
+    fourier::<u64>(c, "tfhe", TfheFftTable::new(poly_length), 9, 7);
 }
 criterion_group! { name = benches; config = Criterion::default().sample_size(20).warm_up_time(std::time::Duration::from_secs(1)).measurement_time(std::time::Duration::from_secs(5)); targets = benchmarks }
 criterion_main!(benches);

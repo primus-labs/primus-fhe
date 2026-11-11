@@ -114,7 +114,7 @@ fn fourier<Table: FftTable>(c: &mut Criterion, n: usize, backend: &str) {
 }
 
 fn benchmarks(c: &mut Criterion) {
-    for n in [1024, 4096, 8192] {
+    for n in [1024, 4096] {
         ntt(c, n);
         fourier::<RustFftTable>(c, n, "rustfft");
         fourier::<TfheFftTable>(c, n, "tfhe");

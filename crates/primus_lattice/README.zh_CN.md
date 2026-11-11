@@ -113,7 +113,7 @@ Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridMod
 
 工作区提供可复用 scratch，不验证密钥、basis、table 或模数身份。覆盖式外积会初始化所需缓冲区，合法调用之间无需 reset；累加接口要求输出已有有效值。GLWE 外积工作区的 `with_rebound` 临时改变分解层数，保持 GLWE 形状，并在调用结束后恢复原布局；`resize` 可改变缓冲区尺寸。
 
-批量外积和 k-CMux 检查迭代器数量；缓冲区长度检查因操作而异，部分只使用 debug 断言。后续项无效或迭代器 panic 可能留下部分输出或 scratch；丢弃结果后，合法调用仍可复用工作区。具体检查与写入边界见相应方法文档。
+批量外积和 k-CMux 检查迭代器数量。NLEV 求和和 NGSW k-CMux 逐对检查流式输入的缓冲区长度。GGSW k-CMux 由调用方保证完整的缓冲区布局，并在 debug 构建中诊断长度不匹配。后续输入对非法或迭代器 panic 时，输出或 scratch 可能仅部分更新。应丢弃结果，再用有效输入复用工作区。具体检查及写入边界见方法文档。
 
 CMux 的选择语义要求控制加密比特；k-CMux 要求至多一个控制比特为一。三元 `cmux_ternary_monomial_to` 使用互斥比特 `s⁺, s⁻`，理想旋转为 `X^(exponent * (s⁺-s⁻))`；指数须在 `0..2N`，零指数精确复制输入。控制须使用相同密钥、basis 和变换约定；Fourier 控制使用 native-torus 尺度和匹配的 native basis。噪声增长和可解密性由更高层负责。
 
@@ -163,5 +163,7 @@ assert_eq!(sample.b(), 76);
 各 target 显式声明所需表示和具体 FFT 实现。混合后端的对照测试需要全部对应 feature；缺失时 Cargo 跳过整个 target。
 
 ## 测试与基准
+
+`gadget_operations` 集成测试覆盖系数和变换域输出的外积、融合求和，以及多路与三值 CMux。运行命令为 `cargo test -p primus_lattice --test gadget_operations --features ntt,rustfft,tfhe-fft`。
 
 验证命令见 workspace [测试指南](../../guides/development/testing.md)。[基准指南](benches/README.md) 列出可独立运行的 target 和测量端点；完整 PBS 与连续读取计算密钥的成本须在上层测量。

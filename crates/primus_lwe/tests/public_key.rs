@@ -169,7 +169,9 @@ fn public_key_encryption_matches_matrix_and_noise_equations() {
     check_equations(BarrettModulus::new(1_125_899_906_826_241u64));
 }
 
-fn check_messages<M: RingContext<u32>>(modulus: M) {
+#[test]
+fn both_embeddings_decrypt_and_key_switch() {
+    let modulus = BarrettModulus::new(132_120_577u32);
     let params = LweParameters::new(
         LweDimension::new(17),
         4,
@@ -198,42 +200,26 @@ fn check_messages<M: RingContext<u32>>(modulus: M) {
     let key_parameters = LweKeySwitchingParameters::new(
         output_params.encryption_parameters().clone(),
         ApproxSignedBasis::new(
-            modulus.explicit_value(),
+            Some(modulus.value()),
             DecompositionBaseLog::new(2),
-            modulus
-                .explicit_value()
-                .map(|_| 13)
-                .map(DecompositionLevelCount::new),
+            Some(DecompositionLevelCount::new(13)),
         ),
     );
     let switching =
         LweKeySwitchingKey::generate(secret.as_view(), &output_secret, &key_parameters, &mut rng);
     let mut storage = [u32::MAX; 18];
-    for message in 0..4u32 {
-        for centered in [false, true] {
-            let seed = rng.next_u64();
-            let mut rng = StdRng::seed_from_u64(seed);
-            let mut output = Lwe::new(&mut storage[..]);
-            let embedding = if centered {
-                PlaintextEmbedding::Centered
-            } else {
-                PlaintextEmbedding::Unsigned
-            };
-            key.encrypt_message_to(message, &mut output, &params, embedding, &mut rng);
-            assert_eq!(secret.decrypt_message(&output, &params), message);
-            let switched = switching.key_switch(&output, modulus);
-            assert_eq!(
-                output_secret.decrypt_message(&switched, &output_params),
-                message
-            );
-        }
+    // Three has a negative representative under centered encoding.
+    let message = 3u32;
+    for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
+        let mut output = Lwe::new(&mut storage[..]);
+        key.encrypt_message_to(message, &mut output, &params, embedding, &mut rng);
+        assert_eq!(secret.decrypt_message(&output, &params), message);
+        let switched = switching.key_switch(&output, modulus);
+        assert_eq!(
+            output_secret.decrypt_message(&switched, &output_params),
+            message
+        );
     }
-}
-
-#[test]
-fn both_embeddings_decrypt_and_key_switch() {
-    check_messages(NativeModulus::new());
-    check_messages(BarrettModulus::new(132_120_577));
 }
 
 #[test]

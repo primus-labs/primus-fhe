@@ -117,7 +117,7 @@ These low-level operations deliberately omit some checks. Invalid inputs may sil
 
 Workspaces provide reusable scratch, without validating key, basis, table or modulus identity. Overwriting external products initialize their buffers, so valid calls need no reset; accumulating APIs require valid existing output. GLWE external-product workspace `with_rebound` temporarily changes decomposition depth while preserving the GLWE shape and restores the original layout after the call; `resize` can change buffer sizes.
 
-Batch external products and k-CMux check iterator counts; buffer-length checks vary by operation, and some are debug assertions only. An invalid later pair or panicking iterator can leave partial output or scratch; discard the result, then reuse the workspace in a valid call. The method documentation specifies the exact checks and write boundaries.
+Batch external products and k-CMux check iterator counts. NLEV sums and NGSW k-CMux validate buffer lengths for each streamed pair. GGSW k-CMux relies on the caller to provide complete buffer layouts, with debug diagnostics for length mismatches. An invalid later pair or panicking iterator can leave partial output or scratch. Discard the result and reuse the workspace in a valid call. The method documentation specifies the exact checks and write boundaries.
 
 CMux selection requires encrypted bit controls; k-CMux requires at most one active control. Ternary `cmux_ternary_monomial_to` uses mutually exclusive bits `s⁺, s⁻`, with ideal rotation `X^(exponent * (s⁺-s⁻))`. The exponent must be in `0..2N`; zero copies the input exactly. Controls must share the key, basis and transform conventions; Fourier controls use native-torus scale and a matching native basis. Noise growth and decryptability belong to higher layers.
 
@@ -169,5 +169,7 @@ Default features are empty: coefficient storage, layouts and basic arithmetic do
 Each target declares the representations and concrete FFT implementations it needs. Mixed-backend comparisons require all corresponding features; Cargo skips the entire target when any requirement is missing.
 
 ## Tests and benchmarks
+
+The `gadget_operations` integration target covers coefficient and transformed external products, fused sums, and multi-way and ternary CMux. Run it with `cargo test -p primus_lattice --test gadget_operations --features ntt,rustfft,tfhe-fft`.
 
 Validation commands are in the workspace [testing guide](../../guides/development/testing.md). The [benchmark guide](benches/README.md) lists independently runnable targets and their endpoints; measure complete PBS and sequential evaluation-key access in the upper layers.

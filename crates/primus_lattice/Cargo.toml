@@ -70,24 +70,12 @@ required-features = ["rns"]
 
 # Targets declare the representations and concrete FFT engines they exercise.
 [[test]]
-name = "cmux_k"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
-name = "external_product"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
-name = "external_product_sum"
+name = "gadget_operations"
 required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "fourier"
 required-features = ["rustfft", "tfhe-fft"]
-
-[[test]]
-name = "ternary_cmux"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "polynomial_products"

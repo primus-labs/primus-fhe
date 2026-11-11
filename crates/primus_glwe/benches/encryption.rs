@@ -4,7 +4,8 @@
 //!
 //! Cases use u64, binary keys, noise sigma 3.2 and plaintext modulus 16;
 //! NTT uses q = 1_125_899_906_826_241, Fourier uses the native torus.
-//! These are regression workloads, not matched-security backend comparisons.
+//! Rank one covers the full operation set; rank two tracks secret encryption
+//! and batches of constant GGSWs. These are regression workloads.
 //!
 //! cargo bench -p primus_glwe --bench encryption --features ntt,rustfft
 //! cargo bench -p primus_glwe --bench encryption --features ntt,rustfft -- encrypt_ggsw_to
@@ -55,11 +56,6 @@ fn ntt_encryption(c: &mut Criterion) {
             &ntt,
             &mut rng,
         );
-        let pk = NttGlwePublicKey::generate(&sk, params.encryption_parameters(), &ntt, &mut rng);
-        let mut public_workspace = NttGlwePublicEncryptWorkspace::new(poly_length);
-        let ephemeral = params
-            .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
-            .unwrap();
         let mut ciphertext = sk.encrypt_message(
             &message,
             &params,
@@ -69,7 +65,7 @@ fn ntt_encryption(c: &mut Criterion) {
         );
         sk.decrypt_message_to(&ciphertext, &mut plaintext, &params, &ntt);
         assert_eq!(plaintext.as_ref(), message.as_ref());
-        let decrypt_input = ciphertext.clone();
+        let decrypt_input = (dimension == 1).then(|| ciphertext.clone());
         let gadget = GlevParameters::with_glwe_params(
             &params,
             DecompositionConfig {
@@ -78,8 +74,6 @@ fn ntt_encryption(c: &mut Criterion) {
             },
         );
         let mut gadget_workspace = NttGlweGadgetEncryptWorkspace::new(gadget.size());
-        let mut glev = NttGlevCiphertext::<Vec<u64>>::zero(gadget.glev_len());
-        let mut ggsw = NttGgswCiphertext::<Vec<u64>>::zero(gadget.ggsw_len());
         let mut group = c.benchmark_group(format!("glwe/ntt/k{dimension}_n{n}"));
         group.bench_function("encrypt_sk_to", |b| {
             b.iter(|| {
@@ -94,110 +88,120 @@ fn ntt_encryption(c: &mut Criterion) {
                 black_box(ciphertext.as_ref());
             })
         });
-        group.bench_function("encrypt_pk_to", |b| {
-            b.iter(|| {
-                pk.encrypt_message_to(
-                    black_box(&message),
-                    &mut ciphertext,
-                    black_box(&params),
-                    &ephemeral,
-                    PlaintextEmbedding::Unsigned,
-                    &ntt,
-                    &mut rng,
-                    &mut public_workspace,
-                );
-                black_box(ciphertext.as_ref());
-            })
-        });
-        group.bench_function("decrypt_to", |b| {
-            b.iter(|| {
-                sk.decrypt_message_to(
-                    black_box(&decrypt_input),
-                    &mut plaintext,
-                    black_box(&params),
-                    &ntt,
-                );
-                black_box(plaintext.as_ref());
-            })
-        });
-        let mut coefficients = GlweCiphertext::<Vec<u64>>::zero(params.glwe_len());
-        let mut coefficient_scratch = Zeroizing::new(vec![0; n]);
-        sk.encrypt_message_coeff_to(
-            &message,
-            &mut coefficients,
-            &params,
-            PlaintextEmbedding::Unsigned,
-            &ntt,
-            &mut rng,
-            &mut coefficient_scratch,
-        );
-        sk.decrypt_message_coeff_to(
-            &coefficients,
-            &mut plaintext,
-            &params,
-            &ntt,
-            &mut coefficient_scratch,
-        );
-        assert_eq!(plaintext.as_ref(), message.as_ref());
-        let coefficient_decrypt_input = coefficients.clone();
-        group.bench_function("encrypt_coeff_to", |b| {
-            b.iter(|| {
-                sk.encrypt_message_coeff_to(
-                    black_box(&message),
-                    &mut coefficients,
-                    black_box(&params),
-                    PlaintextEmbedding::Unsigned,
-                    &ntt,
-                    &mut rng,
-                    &mut coefficient_scratch,
-                );
-                black_box(coefficients.as_ref());
-            })
-        });
-        group.bench_function("decrypt_coeff_to", |b| {
-            b.iter(|| {
-                sk.decrypt_message_coeff_to(
-                    black_box(&coefficient_decrypt_input),
-                    &mut plaintext,
-                    black_box(&params),
-                    &ntt,
-                    &mut coefficient_scratch,
-                );
-                black_box(plaintext.as_ref());
-            })
-        });
-        group.bench_function(
-            format!("encrypt_glev_to/log_base{LOG_BASE}_levels{LEVELS}"),
-            |b| {
+        if let Some(decrypt_input) = decrypt_input {
+            let pk =
+                NttGlwePublicKey::generate(&sk, params.encryption_parameters(), &ntt, &mut rng);
+            let mut public_workspace = NttGlwePublicEncryptWorkspace::new(poly_length);
+            let ephemeral = params
+                .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
+                .unwrap();
+            let mut glev = NttGlevCiphertext::<Vec<u64>>::zero(gadget.glev_len());
+            let mut ggsw = NttGgswCiphertext::<Vec<u64>>::zero(gadget.ggsw_len());
+            group.bench_function("encrypt_pk_to", |b| {
                 b.iter(|| {
-                    sk.encrypt_glev_to(
+                    pk.encrypt_message_to(
                         black_box(&message),
-                        &mut glev,
-                        &gadget,
+                        &mut ciphertext,
+                        black_box(&params),
+                        &ephemeral,
+                        PlaintextEmbedding::Unsigned,
                         &ntt,
                         &mut rng,
-                        &mut gadget_workspace,
+                        &mut public_workspace,
                     );
-                    black_box(glev.as_ref());
+                    black_box(ciphertext.as_ref());
                 })
-            },
-        );
-        group.bench_function(
-            format!("encrypt_ggsw_to/log_base{LOG_BASE}_levels{LEVELS}"),
-            |b| {
+            });
+            group.bench_function("decrypt_to", |b| {
                 b.iter(|| {
-                    sk.encrypt_ggsw_to(
+                    sk.decrypt_message_to(
+                        black_box(&decrypt_input),
+                        &mut plaintext,
+                        black_box(&params),
+                        &ntt,
+                    );
+                    black_box(plaintext.as_ref());
+                })
+            });
+            let mut coefficients = GlweCiphertext::<Vec<u64>>::zero(params.glwe_len());
+            let mut coefficient_scratch = Zeroizing::new(vec![0; n]);
+            sk.encrypt_message_coeff_to(
+                &message,
+                &mut coefficients,
+                &params,
+                PlaintextEmbedding::Unsigned,
+                &ntt,
+                &mut rng,
+                &mut coefficient_scratch,
+            );
+            sk.decrypt_message_coeff_to(
+                &coefficients,
+                &mut plaintext,
+                &params,
+                &ntt,
+                &mut coefficient_scratch,
+            );
+            assert_eq!(plaintext.as_ref(), message.as_ref());
+            let coefficient_decrypt_input = coefficients.clone();
+            group.bench_function("encrypt_coeff_to", |b| {
+                b.iter(|| {
+                    sk.encrypt_message_coeff_to(
                         black_box(&message),
-                        &mut ggsw,
-                        &gadget,
+                        &mut coefficients,
+                        black_box(&params),
+                        PlaintextEmbedding::Unsigned,
                         &ntt,
                         &mut rng,
-                        &mut gadget_workspace,
+                        &mut coefficient_scratch,
                     );
-                    black_box(ggsw.as_ref());
+                    black_box(coefficients.as_ref());
                 })
-            },
-        );
+            });
+            group.bench_function("decrypt_coeff_to", |b| {
+                b.iter(|| {
+                    sk.decrypt_message_coeff_to(
+                        black_box(&coefficient_decrypt_input),
+                        &mut plaintext,
+                        black_box(&params),
+                        &ntt,
+                        &mut coefficient_scratch,
+                    );
+                    black_box(plaintext.as_ref());
+                })
+            });
+            group.bench_function(
+                format!("encrypt_glev_to/log_base{LOG_BASE}_levels{LEVELS}"),
+                |b| {
+                    b.iter(|| {
+                        sk.encrypt_glev_to(
+                            black_box(&message),
+                            &mut glev,
+                            &gadget,
+                            &ntt,
+                            &mut rng,
+                            &mut gadget_workspace,
+                        );
+                        black_box(glev.as_ref());
+                    })
+                },
+            );
+            group.bench_function(
+                format!("encrypt_ggsw_to/log_base{LOG_BASE}_levels{LEVELS}"),
+                |b| {
+                    b.iter(|| {
+                        sk.encrypt_ggsw_to(
+                            black_box(&message),
+                            &mut ggsw,
+                            &gadget,
+                            &ntt,
+                            &mut rng,
+                            &mut gadget_workspace,
+                        );
+                        black_box(ggsw.as_ref());
+                    })
+                },
+            );
+        }
 
         // One batch iteration models a short stream of BSK control entries.
         let constants = [0u64, 1, 0, 1, 1, 0, 1, 0];
@@ -262,7 +266,7 @@ fn fourier_encryption(c: &mut Criterion) {
             &mut decrypt_workspace,
         );
         assert_eq!(plaintext.as_ref(), message.as_ref());
-        let decrypt_input = ciphertext.clone();
+        let decrypt_input = (dimension == 1).then(|| ciphertext.clone());
         let gadget = GlevParameters::with_glwe_params(
             &params,
             DecompositionConfig {
@@ -271,8 +275,6 @@ fn fourier_encryption(c: &mut Criterion) {
             },
         );
 
-        let mut glev = FourierGlevCiphertext::<Vec<_>>::zero(gadget.fourier_glev_len());
-        let mut ggsw = FourierGgswCiphertext::<Vec<_>>::zero(gadget.fourier_ggsw_len());
         let mut group = c.benchmark_group(format!("glwe/fourier/k{dimension}_n{n}"));
         group.bench_function("encrypt_sk_to", |b| {
             b.iter(|| {
@@ -287,36 +289,52 @@ fn fourier_encryption(c: &mut Criterion) {
                 black_box(ciphertext.as_ref());
             })
         });
-        group.bench_function("decrypt_to", |b| {
-            b.iter(|| {
-                sk_decrypt.decrypt_message_to(
-                    black_box(&decrypt_input),
-                    &mut plaintext,
-                    black_box(&params),
-                    &mut fft,
-                    &mut decrypt_workspace,
-                );
-                black_box(plaintext.as_ref());
-            })
-        });
-        group.bench_function(
-            format!("encrypt_glev_to/log_base{LOG_BASE}_levels{LEVELS}"),
-            |b| {
+        if let Some(decrypt_input) = decrypt_input {
+            let mut glev = FourierGlevCiphertext::<Vec<_>>::zero(gadget.fourier_glev_len());
+            let mut ggsw = FourierGgswCiphertext::<Vec<_>>::zero(gadget.fourier_ggsw_len());
+            group.bench_function("decrypt_to", |b| {
                 b.iter(|| {
-                    sk.encrypt_glev_to(black_box(&message), &mut glev, &gadget, &mut fft, &mut rng);
-                    black_box(glev.as_ref());
+                    sk_decrypt.decrypt_message_to(
+                        black_box(&decrypt_input),
+                        &mut plaintext,
+                        black_box(&params),
+                        &mut fft,
+                        &mut decrypt_workspace,
+                    );
+                    black_box(plaintext.as_ref());
                 })
-            },
-        );
-        group.bench_function(
-            format!("encrypt_ggsw_to/log_base{LOG_BASE}_levels{LEVELS}"),
-            |b| {
-                b.iter(|| {
-                    sk.encrypt_ggsw_to(black_box(&message), &mut ggsw, &gadget, &mut fft, &mut rng);
-                    black_box(ggsw.as_ref());
-                })
-            },
-        );
+            });
+            group.bench_function(
+                format!("encrypt_glev_to/log_base{LOG_BASE}_levels{LEVELS}"),
+                |b| {
+                    b.iter(|| {
+                        sk.encrypt_glev_to(
+                            black_box(&message),
+                            &mut glev,
+                            &gadget,
+                            &mut fft,
+                            &mut rng,
+                        );
+                        black_box(glev.as_ref());
+                    })
+                },
+            );
+            group.bench_function(
+                format!("encrypt_ggsw_to/log_base{LOG_BASE}_levels{LEVELS}"),
+                |b| {
+                    b.iter(|| {
+                        sk.encrypt_ggsw_to(
+                            black_box(&message),
+                            &mut ggsw,
+                            &gadget,
+                            &mut fft,
+                            &mut rng,
+                        );
+                        black_box(ggsw.as_ref());
+                    })
+                },
+            );
+        }
 
         // One batch iteration models a short stream of BSK control entries.
         let constants = [0u64, 1, 0, 1, 1, 0, 1, 0];

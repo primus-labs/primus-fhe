@@ -17,18 +17,18 @@ fn ntt<T: FheUint, Table: NttTable<ValueT = T>>(
     c: &mut Criterion,
     q: T,
     log_b: u32,
-    log_n: u32,
     levels: usize,
 ) {
     let modulus = BarrettModulus::new(q);
-    let table = Table::new(PolyLength::new(1usize << log_n), modulus).unwrap();
-    let exponent = table.poly_length().get() / 3;
+    let ring_length = PolyLength::new(1024);
+    let table = Table::new(ring_length, modulus).unwrap();
     let basis = ApproxSignedBasis::new(
         Some(q),
         DecompositionBaseLog::new(log_b),
         Some(DecompositionLevelCount::new(levels)),
     );
-    let poly_length = table.poly_length().get();
+    let poly_length = ring_length.get();
+    let exponent = poly_length / 3;
     let input = Ntru::new(
         (0..poly_length)
             .map(|i| T::as_from(i as u64 * 0x9e37_79b9 + 1) % q)
@@ -42,12 +42,11 @@ fn ntt<T: FheUint, Table: NttTable<ValueT = T>>(
     .into_ntt_form(&table);
     let mut output = Ntru::new(vec![T::ZERO; poly_length]);
     let mut ntt_output = NttNtru::<Vec<T>>::zero(poly_length);
-    let mut workspace = NttNtruExternalProductWorkspace::new(PolyLength::new(poly_length));
+    let mut workspace = NttNtruExternalProductWorkspace::new(ring_length);
 
     let mut group = c.benchmark_group(format!(
-        "ntru/ntt/u{}/q{q}/n{}/logb{log_b}/l{levels}",
-        T::BITS,
-        table.poly_length().get()
+        "ntru/ntt/u{}/q{q}/n{poly_length}/logb{log_b}/l{levels}",
+        T::BITS
     ));
     group.throughput(Throughput::Elements(poly_length as u64));
     group.bench_function("external_product_coeff", |b| {
@@ -92,10 +91,8 @@ fn ntt<T: FheUint, Table: NttTable<ValueT = T>>(
 
 // Match the common PBS decomposition and specialized transform tables.
 fn benchmarks(c: &mut Criterion) {
-    for log_n in [10, 11] {
-        ntt::<u32, U32NttTable>(c, 132_120_577, 9, log_n, 3);
-        ntt::<u64, U64NttTable>(c, 1_125_899_906_826_241, 9, log_n, 5);
-    }
+    ntt::<u32, U32NttTable>(c, 132_120_577, 9, 3);
+    ntt::<u64, U64NttTable>(c, 1_125_899_906_826_241, 9, 5);
 }
 criterion_group! { name = benches; config = Criterion::default().sample_size(20).warm_up_time(std::time::Duration::from_secs(1)).measurement_time(std::time::Duration::from_secs(5)); targets = benchmarks }
 criterion_main!(benches);

@@ -17,6 +17,8 @@
 
 普通与 reverse trace 的输出尺度不同。投影和部分展开使用相同的零尾部消息，throughput 按输出消息数报告。Trace packing 使用展平 GLWE 秘密及间隔槽位；独立密钥 packing 使用连续槽位，应按所需操作比较这些端点。
 
+主要负载采用秩为一、N=1024。秩为二、N=4096 时补测私钥加密、批量常量 GGSW 生成、完整普通 trace 和 reverse trace，以及 scheme switching。两行 NTT scheme switching 分别使用平方密钥和通用密钥。Trace 使用 NTT 或 RustFFT，直接 Fourier 自同构在秩为一时比较 RustFFT 和 TFHE-FFT。
+
 ## 运行
 
 ```sh

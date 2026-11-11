@@ -144,12 +144,12 @@ fn ntt<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     group.finish();
 }
 
-// Match the common PBS decomposition and specialized transform tables.
+// Compare both word widths and retain a rank-two case. The u64 pair shows
+// the effect of ring size with the decomposition held fixed.
 fn benchmarks(c: &mut Criterion) {
-    for log_n in [10, 11] {
-        ntt::<u32, U32NttTable>(c, 132_120_577, 5, log_n, 5, 1);
-        ntt::<u64, U64NttTable>(c, 1_125_899_906_826_241, 23, log_n, 1, 1);
-    }
+    ntt::<u32, U32NttTable>(c, 132_120_577, 5, 10, 5, 1);
+    ntt::<u64, U64NttTable>(c, 1_125_899_906_826_241, 23, 10, 1, 1);
+    ntt::<u64, U64NttTable>(c, 1_125_899_906_826_241, 23, 11, 1, 1);
     ntt::<u32, U32NttTable>(c, 132_120_577, 8, 10, 3, 2);
 }
 criterion_group! { name = benches; config = Criterion::default().sample_size(20).warm_up_time(std::time::Duration::from_secs(1)).measurement_time(std::time::Duration::from_secs(5)); targets = benchmarks }

@@ -113,33 +113,36 @@ fn bench_phases<T: FheUint, M: RingContext<T>>(
 }
 
 fn secret_key(c: &mut Criterion) {
-    // Keep the aligned baseline and a non-power-of-two mask with a SIMD tail.
-    for dimension in [512, 805] {
-        bench_domain(c, "native", NativeModulus::new(), dimension);
-        bench_domain(c, "explicit", BarrettModulus::new(132_120_577), dimension);
-        let params = LweParameters::new(
-            LweDimension::new(dimension),
-            4u64,
-            NativeModulus::new(),
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
-        bench_phases(
-            &mut c.benchmark_group(format!("lwe/u64/native/n{dimension}")),
-            &params,
-        );
-        let params = LweParameters::new(
-            LweDimension::new(dimension),
-            4u64,
-            BarrettModulus::new(1_125_899_906_826_241),
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
-        bench_phases(
-            &mut c.benchmark_group(format!("lwe/u64/explicit/n{dimension}")),
-            &params,
-        );
-    }
+    // Use one non-power-of-two mask for the regular workloads. The aligned
+    // case below isolates the phase kernel's SIMD tail cost.
+    let dimension = 805;
+    bench_domain(c, "native", NativeModulus::new(), dimension);
+    bench_domain(c, "explicit", BarrettModulus::new(132_120_577), dimension);
+    let params = LweParameters::new(
+        LweDimension::new(dimension),
+        4u64,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    bench_phases(&mut c.benchmark_group("lwe/u64/native/n805"), &params);
+    let params = LweParameters::new(
+        LweDimension::new(dimension),
+        4u64,
+        BarrettModulus::new(1_125_899_906_826_241),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    bench_phases(&mut c.benchmark_group("lwe/u64/explicit/n805"), &params);
+
+    let params = LweParameters::new(
+        LweDimension::new(512),
+        4u32,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    );
+    bench_phases(&mut c.benchmark_group("lwe/u32/native/n512"), &params);
 }
 criterion_group!(benches, secret_key);
 criterion_main!(benches);

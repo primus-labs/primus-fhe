@@ -17,8 +17,13 @@ use primus_reduce::RingContext;
 use rand::distr::Distribution;
 use rand::{SeedableRng, rngs::StdRng};
 
-fn bench_domain<M: RingContext<u32>>(c: &mut Criterion, name: &str, modulus: M) {
-    for log_basis in [2, 4] {
+fn bench_domain<M: RingContext<u32>>(
+    c: &mut Criterion,
+    name: &str,
+    modulus: M,
+    workloads: &[(u32, &[usize])],
+) {
+    for &(log_basis, counts) in workloads {
         let mut rng = StdRng::seed_from_u64(0xdec0_005e);
         let params = LweEncryptionParameters::new(
             LweDimension::new(800),
@@ -46,7 +51,7 @@ fn bench_domain<M: RingContext<u32>>(c: &mut Criterion, name: &str, modulus: M) 
             .sample_iter(&mut rng)
             .take(1025 * 16)
             .collect();
-        for count in [1, 16] {
+        for &count in counts {
             let input = &input[..1025 * count];
             let mut output = vec![0; 801 * count];
             let mut group = c.benchmark_group(format!(
@@ -80,8 +85,14 @@ fn bench_domain<M: RingContext<u32>>(c: &mut Criterion, name: &str, modulus: M) 
     }
 }
 fn key_switch(c: &mut Criterion) {
-    bench_domain(c, "native", NativeModulus::new());
-    bench_domain(c, "explicit", BarrettModulus::new(132_120_577));
+    bench_domain(c, "native", NativeModulus::new(), &[(2, &[1, 16])]);
+    // Compare decomposition depths in the explicit-modulus batch case.
+    bench_domain(
+        c,
+        "explicit",
+        BarrettModulus::new(132_120_577),
+        &[(2, &[1, 16]), (4, &[16])],
+    );
 }
 const CIPHERTEXT_MODULUS: u32 = 132_120_577;
 const OUTPUT_DIMENSION: usize = 800;

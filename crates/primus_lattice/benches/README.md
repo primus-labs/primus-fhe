@@ -21,6 +21,8 @@ One iteration runs one labeled workload with preallocated output and scratch; th
 
 Coefficient-output and transform-output products have different endpoints. The RNS BigUint case starts with a precomposed input, so its timing excludes CRT recomposition. Ternary fused/two-CMux cases share controls and input and return coefficients, but their decomposition and rounding errors need not match.
 
+The single-modulus targets use `N=1024` as the common size. `glwe_ntt` also measures `N=2048` for the same rank-one `u64` decomposition. Extraction compares full and compact GLWE masks at a nonzero index and includes the constant-term index for the compact mask.
+
 Fixtures use deterministic arithmetic data and reused working sets, not sampled encrypted controls or recommended secure parameters. Compare equivalent workloads on the same host, toolchain and features. These timings do not establish equal-security performance or sequential bootstrapping-key bandwidth; confirm gains in complete operations in the scheme/TFHE crates.
 
 ## Commands

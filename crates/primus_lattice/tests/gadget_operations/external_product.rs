@@ -2,17 +2,17 @@
 //! Nonzero products exercise the arithmetic; zero products must clear dirty
 //! outputs without retaining contributions from the preceding call.
 
+use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_fft::{Complex64, FftEngine, FftTable};
 use primus_lattice::GlweDimension;
 use primus_lattice::nlev::NttNlev;
 use primus_lattice::{
     GadgetSize, GlweSize,
-    ggsw::{FourierGgswOwned, Ggsw},
+    ggsw::FourierGgswOwned,
     glwe::{FourierGlwe, Glwe},
     ngsw::{FourierNgswOwned, Ngsw},
-    nlev::{FourierNlevOwned, Nlev},
+    nlev::FourierNlevOwned,
     ntru::{FourierNtru, Ntru, NttNtru},
     workspace::{
         FourierGlweExternalProductWorkspace, FourierNtruExternalProductWorkspace,
@@ -25,24 +25,22 @@ use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
+use super::{N, POLY_LENGTH, noiseless_nlev, unit_ggsw};
+
 // A diagonal gadget for one is an identity external product. Applying a zero
 // gadget afterwards must clear both a nonzero output and the reused accumulator.
-fn fourier_ggsw_workspace_reuse<Table: FftTable>() {
-    let fft = Table::new(PolyLength::new(32));
-    let mut engine = FftEngine::new(&fft);
+pub(super) fn check_fourier_ggsw<Table: FftTable>(fft: &Table) {
+    let mut engine = FftEngine::new(fft);
     let components = 3;
-    let n = fft.poly_length().get();
     let basis = ApproxSignedBasis::<u32>::new(None, DecompositionBaseLog::new(8), None);
-    let levels = basis.level_count().get();
-    let mut gadget = Ggsw::new(vec![0u32; components * levels * components * n]);
-    for row in 0..components {
-        for (level, scalar) in basis.scalar_iter().enumerate() {
-            gadget.as_mut()[((row * levels + level) * components + row) * n] = scalar;
-        }
-    }
-    let mut key = FourierGgswOwned::zero(components * levels * components * fft.fourier_length());
+    let size = GadgetSize::new(
+        GlweSize::new(GlweDimension::new(components - 1), POLY_LENGTH),
+        basis.level_count(),
+    );
+    let gadget = unit_ggsw(size, &basis);
+    let mut key = FourierGgswOwned::zero(size.fourier_ggsw_len());
     gadget.write_fourier_form(&mut key, &mut engine);
-    let values: Vec<u32> = (0..components * n)
+    let values: Vec<u32> = (0..components * N)
         .map(|i| (i as u32).wrapping_mul(0x9e37_79b9))
         .collect();
     let input = Glwe::new(values.clone());
@@ -51,10 +49,7 @@ fn fourier_ggsw_workspace_reuse<Table: FftTable>() {
         Complex64::new(1.0, -1.0);
         components * fft.fourier_length()
     ]);
-    let mut workspace = FourierGlweExternalProductWorkspace::new(GadgetSize::new(
-        GlweSize::new(GlweDimension::new(components - 1), PolyLength::new(n)),
-        DecompositionLevelCount::new(levels),
-    ));
+    let mut workspace = FourierGlweExternalProductWorkspace::new(size);
     let zeros = vec![0; values.len()];
     for nonzero in [true, false] {
         if !nonzero {
@@ -82,19 +77,11 @@ fn fourier_ggsw_workspace_reuse<Table: FftTable>() {
 }
 
 #[test]
-fn fourier_ggsw_products_overwrite_dirty_output_and_workspace() {
-    fourier_ggsw_workspace_reuse::<RustFftTable>();
-    fourier_ggsw_workspace_reuse::<TfheFftTable>();
-}
-
-#[test]
 fn ntt_ntru_gadget_products_match_negacyclic_product() {
-    const LOG_N: u32 = 5;
-    const N: usize = 1 << LOG_N;
     const Q: u32 = 257;
 
     let modulus = BarrettModulus::new(Q);
-    let ntt = UintNttTable::<u32>::new(PolyLength::new(1usize << LOG_N), modulus).unwrap();
+    let ntt = UintNttTable::<u32>::new(POLY_LENGTH, modulus).unwrap();
     let basis = ApproxSignedBasis::new(Some(Q), DecompositionBaseLog::new(3), None);
 
     let alpha = Polynomial::<Vec<u32>>::new(
@@ -105,15 +92,7 @@ fn ntt_ntru_gadget_products_match_negacyclic_product() {
     );
     let mut beta = Polynomial::<Vec<u32>>::zero(N);
 
-    let make_nlev = |message: &Polynomial<Vec<u32>>, basis: &ApproxSignedBasis<u32>| {
-        let mut nlev = Nlev::<Vec<u32>>::zero(basis.level_count().get() * N);
-        for (scalar, mut level) in basis.scalar_iter().zip(nlev.iter_ntru_mut(N)) {
-            message.mul_scalar_to(scalar, &mut Polynomial(level.as_mut()), modulus);
-        }
-        nlev
-    };
-
-    let mut workspace = NttNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut workspace = NttNtruExternalProductWorkspace::new(POLY_LENGTH);
     let mut nlev_product = Ntru::new(vec![u32::MAX; N]);
     let input_ntru = Ntru::new(alpha.as_ref());
     let mut ngsw_product = Ntru::new(vec![u32::MAX; N]);
@@ -123,7 +102,7 @@ fn ntt_ntru_gadget_products_match_negacyclic_product() {
     // Nonzero then zero products must overwrite prior outputs and workspace state.
     for amplitude in [7, 0] {
         beta.as_mut()[3] = amplitude;
-        let coeff_nlev = make_nlev(&beta, &basis);
+        let coeff_nlev = noiseless_nlev(&beta, &basis, modulus);
         let coeff_ngsw = Ngsw::new(coeff_nlev.as_ref().to_vec());
         let ntt_nlev = coeff_nlev.into_ntt_form(&ntt);
         let ntt_ngsw = coeff_ngsw.into_ntt_form(&ntt);
@@ -203,14 +182,10 @@ fn ntt_ntru_gadget_products_match_negacyclic_product() {
 }
 
 // Both FFT backends must preserve torus scale at coefficient and Fourier endpoints.
-fn fourier_ntru_gadget_products<Table: FftTable>() {
-    const LOG_N: u32 = 5;
-    const N: usize = 1 << LOG_N;
-
+pub(super) fn check_fourier_ntru<Table: FftTable>(fft: &Table) {
     let modulus = NativeModulus::<u32>::new();
     let basis = ApproxSignedBasis::<u32>::new(None, DecompositionBaseLog::new(8), None);
-    let fft = Table::new(PolyLength::new(1usize << LOG_N));
-    let mut engine = FftEngine::new(&fft);
+    let mut engine = FftEngine::new(fft);
 
     let alpha = Polynomial::<Vec<u32>>::new(
         vec![
@@ -235,15 +210,7 @@ fn fourier_ntru_gadget_products<Table: FftTable>() {
     );
     let mut beta = Polynomial::<Vec<u32>>::zero(N);
 
-    let make_nlev = |message: &Polynomial<Vec<u32>>, basis: &ApproxSignedBasis<u32>| {
-        let mut nlev = Nlev::<Vec<u32>>::zero(basis.level_count().get() * N);
-        for (scalar, mut level) in basis.scalar_iter().zip(nlev.iter_ntru_mut(N)) {
-            message.mul_scalar_to(scalar, &mut Polynomial(level.as_mut()), modulus);
-        }
-        nlev
-    };
-
-    let mut workspace = FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut workspace = FourierNtruExternalProductWorkspace::new(POLY_LENGTH);
     let mut nlev_product = Ntru::new(vec![u32::MAX; N]);
     let input_ntru = Ntru::new(alpha.as_ref());
     let mut ngsw_product = Ntru::new(vec![u32::MAX; N]);
@@ -254,14 +221,13 @@ fn fourier_ntru_gadget_products<Table: FftTable>() {
     // Nonzero then zero products must overwrite prior outputs and workspace state.
     for amplitude in [1, 0] {
         beta.as_mut()[5] = amplitude;
-        let coeff_nlev = make_nlev(&beta, &basis);
+        let coeff_nlev = noiseless_nlev(&beta, &basis, modulus);
         let coeff_ngsw = Ngsw::new(coeff_nlev.as_ref().to_vec());
 
         let fourier_length = basis.level_count().get() * fft.fourier_length();
         let mut fourier_nlev = FourierNlevOwned::zero(fourier_length);
         coeff_nlev.write_fourier_form(&mut fourier_nlev, &mut engine);
-        let mut fourier_ngsw =
-            FourierNgswOwned::zero(basis.level_count().get() * fft.fourier_length());
+        let mut fourier_ngsw = FourierNgswOwned::zero(fourier_length);
         coeff_ngsw.write_fourier_form(&mut fourier_ngsw, &mut engine);
 
         if amplitude != 0 {
@@ -340,12 +306,6 @@ fn fourier_ntru_gadget_products<Table: FftTable>() {
         assert_eq!(ngsw_product.as_ref(), expected.as_ref());
     }
     assert_eq!([storage[0], storage[N / 2 + 1]], [guard; 2]);
-}
-
-#[test]
-fn fourier_ntru_gadget_products_match_negacyclic_product() {
-    fourier_ntru_gadget_products::<RustFftTable>();
-    fourier_ntru_gadget_products::<TfheFftTable>();
 }
 
 // Scalar digits and coefficient convolution independently check the eight

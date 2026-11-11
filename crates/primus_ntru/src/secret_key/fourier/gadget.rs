@@ -243,7 +243,9 @@ impl FourierNtruSecretKey {
 
     /// Adds the scaled message to exact native coefficients before the FFT,
     /// giving NGSW phase `f * g_l * message + e_l` up to FFT rounding.
-    fn encrypt_ngsw_kernel_to<T, Table, R>(
+    /// The caller validates complete operands and the key/parameter/FFT domain
+    /// and workspace.
+    pub(crate) fn encrypt_ngsw_kernel_to<T, Table, R>(
         &self,
         message: Polynomial<&[T]>,
         mut result: FourierNgswCiphertext<&mut [Complex64]>,

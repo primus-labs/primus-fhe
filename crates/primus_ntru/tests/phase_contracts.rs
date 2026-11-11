@@ -593,12 +593,20 @@ fn check_native_trace<Table: FftTable>() {
         &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
     );
     let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
-    // Repeat all eight-bit parity masks across the ring at three ranges.
-    // The number of cases stays fixed when the supported ring length increases.
+    // Repeat parity masks across the ring near zero, midrange and wraparound.
+    // Singleton bits and their complements isolate each position. Alternating
+    // and grouped bits exercise the interaction of several odd coefficients.
+    let masks = [0x00u8, 0xff, 0x55, 0xaa, 0x0f, 0xf0, 0x33, 0xcc]
+        .into_iter()
+        .chain((0..8).flat_map(|i| {
+            let bit = 1u8 << i;
+            [bit, !bit]
+        }));
     let parity_inputs = [0, ring.0 / 2 - 2, ring.0 - 2]
         .into_iter()
         .flat_map(|base| {
-            (0..1usize << 8)
+            masks
+                .clone()
                 .map(move |bits| std::array::from_fn(|i| base + ((bits >> (i % 8)) & 1) as i128))
         });
     for input in trace_inputs(ring).into_iter().chain(parity_inputs) {

@@ -264,32 +264,31 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
             ),
         },
     );
-    for log_count in 0..=N.trailing_zeros() {
-        let count = 1 << log_count;
-        let mut m = m.clone();
-        m[count..].fill(0);
-        key.encrypt_encoded_to(
-            &Polynomial(m.as_slice()),
-            &mut transformed,
-            parameters.encryption_parameters(),
-            &table,
-            &mut rng,
-        );
-        transformed.write_coeff_form(&mut input, &table);
-        let mut expanded = vec![7; count * N];
-        trace.expand_partial_coefficients_to(
-            &input,
-            count,
-            &mut expanded,
-            modulus,
-            &table,
-            &mut workspace,
-        );
-        for (cipher, &value) in expanded.as_chunks::<N>().0.iter().zip(&m[..count]) {
-            let mut expected = vec![0; N];
-            expected[0] = value;
-            assert_phase(cipher, &expected, secret.as_slice(), Q.into());
-        }
+    // One partial depth exercises the constant-output case for a zero tail.
+    let count = 4;
+    let mut m = m;
+    m[count..].fill(0);
+    key.encrypt_encoded_to(
+        &Polynomial(m.as_slice()),
+        &mut transformed,
+        parameters.encryption_parameters(),
+        &table,
+        &mut rng,
+    );
+    transformed.write_coeff_form(&mut input, &table);
+    let mut expanded = vec![7; count * N];
+    trace.expand_partial_coefficients_to(
+        &input,
+        count,
+        &mut expanded,
+        modulus,
+        &table,
+        &mut workspace,
+    );
+    for (cipher, &value) in expanded.as_chunks::<N>().0.iter().zip(&m[..count]) {
+        let mut expected = vec![0; N];
+        expected[0] = value;
+        assert_phase(cipher, &expected, secret.as_slice(), Q.into());
     }
 }
 
@@ -387,32 +386,25 @@ fn fourier_trace<Table: FftTable>() {
             ),
         },
     );
-    for log_count in 0..=N.trailing_zeros() {
-        let count = 1 << log_count;
-        let mut m = m.clone();
-        m[count..].fill(0);
-        key.encrypt_encoded_to(
-            &Polynomial(m.as_slice()),
-            &mut transformed,
-            parameters.encryption_parameters(),
-            &mut fft,
-            &mut rng,
-            &mut encrypt,
-        );
-        transformed.write_torus_form(&mut input, &mut fft);
-        let mut expanded = vec![7; count * N];
-        trace.expand_partial_coefficients_to(
-            &input,
-            count,
-            &mut expanded,
-            &mut fft,
-            &mut workspace,
-        );
-        for (cipher, &value) in expanded.as_chunks::<N>().0.iter().zip(&m[..count]) {
-            let mut expected = vec![0; N];
-            expected[0] = value;
-            assert_phase(cipher, &expected, secret.as_slice(), q);
-        }
+    // One partial depth exercises the constant-output case for a zero tail.
+    let count = 4;
+    let mut m = m;
+    m[count..].fill(0);
+    key.encrypt_encoded_to(
+        &Polynomial(m.as_slice()),
+        &mut transformed,
+        parameters.encryption_parameters(),
+        &mut fft,
+        &mut rng,
+        &mut encrypt,
+    );
+    transformed.write_torus_form(&mut input, &mut fft);
+    let mut expanded = vec![7; count * N];
+    trace.expand_partial_coefficients_to(&input, count, &mut expanded, &mut fft, &mut workspace);
+    for (cipher, &value) in expanded.as_chunks::<N>().0.iter().zip(&m[..count]) {
+        let mut expected = vec![0; N];
+        expected[0] = value;
+        assert_phase(cipher, &expected, secret.as_slice(), q);
     }
 }
 

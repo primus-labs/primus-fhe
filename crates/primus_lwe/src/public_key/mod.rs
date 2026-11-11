@@ -7,7 +7,7 @@ use primus_data::DataMut;
 use primus_distr::{DiscreteGaussian, sample_sparse_ternary_values_to};
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
-use primus_lattice::lwe::Lwe;
+use primus_lattice::lwe::{Lwe, LweIterMut};
 use primus_reduce::RingContext;
 use rand::distr::Uniform;
 
@@ -107,15 +107,8 @@ impl<T: FheUint> LwePublicKey<T> {
             .checked_mul(row_len)
             .expect("LWE public-key storage length overflow");
         let mut data = vec![T::ZERO; length];
-        for row in data.chunks_exact_mut(row_len) {
-            secret_key.encrypt_encoded_to(
-                T::ZERO,
-                &mut Lwe::new(row),
-                modulus,
-                uniform,
-                noise,
-                rng,
-            );
+        for mut row in LweIterMut::new(&mut data, row_len) {
+            secret_key.encrypt_mask_body(T::ZERO, row.a_b_mut(), modulus, uniform, noise, rng);
         }
         Self {
             data,

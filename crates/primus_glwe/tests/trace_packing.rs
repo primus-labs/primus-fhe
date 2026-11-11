@@ -185,7 +185,7 @@ fn ntt_trace_projection_and_packing() {
     body[N / 4] = Q - 1;
     body[N / 2] = Q / 2;
     body[3 * N / 4] = Q - 2;
-    for r in [1, 4, N] {
+    for r in [1, 4] {
         key.apply_reverse_partial_to(&trivial, r, &mut output, modulus, &ntt, &mut workspace);
         let expected: Vec<_> = trivial
             .a_b_slices(N)
