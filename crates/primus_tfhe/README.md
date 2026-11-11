@@ -21,7 +21,6 @@ Here t is the input message modulus, N the ring length and k the output count. O
 | Boolean gates | Rounded 0/1 with t=4 | Boolean LWE ready for chaining; `BooleanEvaluator` |
 | CBS followed by CMux | Padded input or GLWE MSB bits; bit-valued F over the whole domain | GGSW/NGSW control selects an encrypted ring candidate; `CbsEvaluator` |
 | One-hot CBS | One padded chunk, t=2M | NLev/NGSW selectors; [NTRU one-hot](../primus_tfhe_ntru/README.md#one-hot-cbs) |
-| High-precision lookup | Separately encrypted chunks of uniform width | Independently chosen output chunk count; separate [NTRU LUT repository](../../../primus_high_prec_lut/README.md) |
 
 ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotation resolution for output count; MVB retains step-one resolution but its factors amplify noise. Scaled numeric flags, Boolean LWEs and gadget controls have different encodings and cannot be interchanged directly.
 
@@ -32,15 +31,15 @@ ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotat
 | [GLWE parameters and clients](../primus_tfhe_glwe/README.md) | [GLWE NTT](../primus_tfhe_glwe_ntt/README.md) | [GLWE Fourier](../primus_tfhe_glwe_fourier/README.md) |
 | [NTRU parameters and clients](../primus_tfhe_ntru/README.md) | [NTRU NTT](../primus_tfhe_ntru_ntt/README.md) | [NTRU Fourier](../primus_tfhe_ntru_fourier/README.md) |
 
-| Blind-rotation mode | PBS / ManyLUT | CBS | Factorized MVB | One-hot / high-precision LUT |
+| Blind-rotation mode | PBS / ManyLUT | CBS | Factorized MVB | One-hot CBS |
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | Both PBS orders | Yes | Yes | Not provided |
 | GLWE sparse fixed-weight binary | Both PBS orders | Yes | Yes | Not provided |
 | GLWE block binary | Both PBS orders | Yes | Yes | Not provided |
 | NTRU classic binary/ternary | Yes | Yes | Yes | Yes |
 | NTRU sparse fixed-weight binary | Yes | Yes | Yes | Yes |
-| NTRU NTT block binary | Yes | Yes | Yes | One-hot; LUT integration pending |
-| NTRU Fourier block binary (u64) | Yes | Yes | Yes | One-hot; LUT integration pending |
+| NTRU NTT block binary | Yes | Yes | Yes | Yes |
+| NTRU Fourier block binary (u64) | Yes | Yes | Yes | Yes |
 
 All four backends provide secret-key and LWE public-key clients. Fourier supports RustFFT and TFHE-FFT with Native ring moduli only. Example configurations are arithmetic teaching fixtures, without assessed security or failure probability. NTRU's external LWE secret is independent of its ring secret; only the ring secret undergoes invertibility and Fourier inverse-stability screening.
 

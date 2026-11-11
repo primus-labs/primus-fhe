@@ -244,9 +244,7 @@ split require u64. Ordinary classic and sparse BR support u32 and u64.
 Only the selected representation is stored. Conversion precision still
 determines the represented error. SS reconstructs coefficients before returning ordinary
 Fourier NGSW controls; BR-internal CMux follows the BR precision. Consumer
-operations need their own precision budget. The external `primus_high_prec_lut`
-repository's `guides/development/lookup-contracts.md` covers public lifting,
-selection and post-selector rotations.
+operations need their own precision budget.
 
 Fused residuals differ from Separate, so the binary per-stage recurrence cannot
 be reused unchanged. See [`NttNtruProjectionKey`](../../crates/primus_ntru/src/scheme_switch/projection.rs)
@@ -303,11 +301,7 @@ BR quantization uses step W, not MW. If its actual quantized phase satisfies `u_
 
 NLEV→NGSW scheme switching preserves the complete output basis and adds f/f²-dependent errors; see [CBS parameters](../../crates/primus_tfhe_ntru/src/circuit_bootstrap.rs). Budget them at the smallest output gadget scale and at the eventual consumer.
 
-Full one-hot APIs produce all M coefficient NLEVs or transformed NGSWs. Compact NGSW APIs omit branch zero for consumers of the form `C0 + sum_{r>0} delta_r*(Cr-C0)`. They skip its projection/scheme switch, not shared BR, and do not widen the guard. The fused consumer sums all external-product errors; sequential CMux estimates cannot simply be reused. Fourier rounds after the sum, so ciphertext coefficients can differ from separately converted products. The first public lookup layer still needs all M NLEVs.
-
-The external `primus_high_prec_lut` repository's `guides/development/lookup-contracts.md`
-defines the complete selection tree, first-layer lifting, coefficient rotations
-and shared-error accounting for that consumer.
+Full one-hot APIs produce all M coefficient NLEVs or transformed NGSWs. Compact NGSW APIs omit branch zero for consumers of the form `C0 + sum_{r>0} delta_r*(Cr-C0)`. They skip its projection/scheme switch, not shared BR, and do not widen the guard. The fused consumer sums all external-product errors; sequential CMux estimates cannot simply be reused. Fourier rounds after the sum, so ciphertext coefficients can differ from separately converted products.
 
 ## Factorized MVB
 

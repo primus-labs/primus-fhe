@@ -32,7 +32,7 @@ Start with an operation config from [experimental](src/experimental.rs). `PbsCon
 
 ## Operation examples
 
-All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow; high-precision lookup runs from the separate `primus_high_prec_lut` repository root.
+All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow.
 
 | Workflow | Config in `experimental` | Complete example |
 | --- | --- | --- |
@@ -43,7 +43,6 @@ All examples use u64 and prepare reusable state outside the request loop. Replac
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [ntru_ntt_circuit_bootstrap](examples/ntru_ntt_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_ntt_mvb_thresholds](examples/ntru_ntt_mvb_thresholds.rs) |
 | One-hot CBS → four-way record selection | `CLASSIC_ONE_HOT_U64` | [ntru_ntt_one_hot](examples/ntru_ntt_one_hot.rs) |
-| High-precision integer lookup | Separate LUT repository's `NTT_LOW_PREC_C4_O4_DFR128_LOOKUP_U64` | [ntt_lookup](../../../primus_high_prec_lut/examples/ntt_lookup.rs) |
 
 Ordinary PBS/ManyLUT and MVB use `context.try_generate_keys(rng)`. Bind `client.external_lwe_secret_key()` to `context.encryptor`; use `pbs_decryptor` for Rounded PBS/ManyLUT output and `mvb_decryptor` for Scaled MVB output. Public-key input uses `public_encryptor`. Clients receive no LUT or manual codec.
 
@@ -130,12 +129,6 @@ one_hot.cmux_k_to(
 The fused operation computes `C0 + sum_r delta_r*(Cr-C0)` with one inverse transform. Controls must encrypt mutually exclusive bits with the bound basis, secret and transform representation; candidates must share f, Q and encoding. Budget the sum of all external-product errors, not serial CMux estimates. The [one-hot evaluator contract](src/circuit_bootstrap/one_hot_workflow.rs) specifies layouts and write/error behavior.
 
 Candidates in the example use independent Scaled t_ring=8 and occupy ring coefficients, not SIMD slots. NLev output is coefficient-domain at Q and needs `write_ntt_form` before public-polynomial lifting; NGSW output is already in NTT representation. Single-control `cmux_to` and `external_product_to` remain available for other consumers.
-
-## High-precision lookup
-
-Use the separate repository’s [primus_tfhe_ntru_lut](../../../primus_high_prec_lut/README.md) for uniform-width input/output chunks with independent counts. Its `NttHighPrecLutContext` prepares integer clients, complete keys and evaluation; callers do not assemble lifting or return workspaces. The [ntt_lookup example](../../../primus_high_prec_lut/examples/ntt_lookup.rs) evaluates a piecewise fee from 16 input bits to 16 output bits.
-
-The LUT workflow combines one-hot CBS, a fixed complete selection tree, aggregated negative rotations and independent LWE return. Recommended configs use classic BR; sparse is supported when explicitly selected. Geometry, public-table costs and numerical limits belong to the LUT crate.
 
 ## Features
 

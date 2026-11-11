@@ -21,7 +21,6 @@ GLWE 和 NTRU 共用的 LWE 客户端、LUT 编译、编码契约、PBS trait �
 | Boolean 门 | t=4 下的 Rounded 0/1 | 可串联的 Boolean LWE；`BooleanEvaluator` |
 | CBS 后接 CMux | Padded 输入或 GLWE MSB bit；F 在整个域上取 bit 值 | GGSW/NGSW 控制选择加密环候选；`CbsEvaluator` |
 | One-hot CBS | 一个 padded chunk，t=2M | NLev/NGSW selectors；[NTRU one-hot](../primus_tfhe_ntru/README.zh_CN.md#one-hot-cbs) |
-| 高精度查表 | 多个独立加密、统一位宽的 chunk | 可独立指定输出 chunk 数；独立的 [NTRU LUT 仓库](../../../primus_high_prec_lut/README.zh_CN.md) |
 
 ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分辨率换取输出数量；MVB 保留步长 1，但因子会放大噪声。Scaled 数值标志、Boolean LWE 和 gadget 控制使用不同编码，不能直接互换。
 
@@ -32,15 +31,15 @@ ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分�
 | [GLWE 参数与客户端](../primus_tfhe_glwe/README.zh_CN.md) | [GLWE NTT](../primus_tfhe_glwe_ntt/README.zh_CN.md) | [GLWE Fourier](../primus_tfhe_glwe_fourier/README.zh_CN.md) |
 | [NTRU 参数与客户端](../primus_tfhe_ntru/README.zh_CN.md) | [NTRU NTT](../primus_tfhe_ntru_ntt/README.zh_CN.md) | [NTRU Fourier](../primus_tfhe_ntru_fourier/README.zh_CN.md) |
 
-| 盲旋转模式 | PBS / ManyLUT | CBS | 分解式 MVB | One-hot / 高精度 LUT |
+| 盲旋转模式 | PBS / ManyLUT | CBS | 分解式 MVB | One-hot CBS |
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | GLWE sparse fixed-weight binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | GLWE block binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | NTRU classic binary/ternary | 支持 | 支持 | 支持 | 支持 |
 | NTRU sparse fixed-weight binary | 支持 | 支持 | 支持 | 支持 |
-| NTRU NTT block binary | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
-| NTRU Fourier block binary（u64） | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
+| NTRU NTT block binary | 支持 | 支持 | 支持 | 支持 |
+| NTRU Fourier block binary（u64） | 支持 | 支持 | 支持 | 支持 |
 
 四后端均提供私钥及 LWE 公钥客户端。Fourier 支持 RustFFT 和 TFHE-FFT，环模数仅支持 Native。示例配置用于算术教学，未评估安全性及失败概率。NTRU 的外部 LWE 秘密独立于环秘密，只有环秘密需要可逆性和 Fourier 逆稳定性筛选。
 

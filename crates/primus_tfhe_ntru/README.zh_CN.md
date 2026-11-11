@@ -98,8 +98,6 @@ Lift 保留自身生成参数，并引入自身的分解和加密误差；Fourie
 
 令 S=N/M、A=N/(2MW)。正确选择要求量化相位 `u_bar=S*m+W*e mod 2N` 满足 `-A<=e<A`，窗口左闭右开。e 包含输入噪声、编码舍入及逐坐标量化误差；形状检查不能证明该保护区条件或输出可解码。见 [one-hot 推导](../../guides/development/bootstrapping-contracts.md#one-hot-cbs)。
 
-独立仓库中的[高精度 LUT 库](../../../primus_high_prec_lut/README.zh_CN.md)处理多个输入 chunk 和表多项式，默认采用 classic BR，sparse 可显式选择。
-
 ## NTRU→LWE 返回
 
 普通 PBS/MVB evaluator 已处理返回。独立系数域结果使用本家族重导出的 `primus_ntru::LweReturnEvaluator` 和 `LweReturnBatchWorkspace`。通过 `LweReturnEvaluator::new(server.key_switching_key(), q_modulus)` 绑定服务端返回密钥与目标 q，按需准备标量或批量 scratch。单系数、共享输入前缀及不同输入流的用法与数值条件见 [NTRU 返回流程与契约](../primus_ntru/README.zh_CN.md#独立-lwe-返回)。

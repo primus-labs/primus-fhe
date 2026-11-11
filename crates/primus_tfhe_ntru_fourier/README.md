@@ -32,7 +32,7 @@ Start with an operation config from [experimental](src/experimental.rs). `PbsCon
 
 ## Operation examples
 
-All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow; high-precision lookup runs from the separate `primus_high_prec_lut` repository root.
+All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow.
 
 | Workflow | Config in `experimental` | Complete example |
 | --- | --- | --- |
@@ -43,7 +43,6 @@ All examples use u64 and prepare reusable state outside the request loop. Replac
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [ntru_fourier_circuit_bootstrap](examples/ntru_fourier_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_fourier_mvb_thresholds](examples/ntru_fourier_mvb_thresholds.rs) |
 | Split one-hot CBS → four-way record selection | `CLASSIC_ONE_HOT_U64` + split40 / `PairedTrace` | [ntru_fourier_one_hot](examples/ntru_fourier_one_hot.rs) |
-| High-precision integer lookup | Separate LUT repository's `FOURIER_LOW_PREC_C4_O4_DFR128_LOOKUP_U64` | [fourier_lookup](../../../primus_high_prec_lut/examples/fourier_lookup.rs) |
 
 Ordinary PBS/ManyLUT and MVB use `context.try_generate_keys(rng)`. Bind `client.external_lwe_secret_key()` to `context.encryptor`; use `pbs_decryptor` for Rounded PBS/ManyLUT output and `mvb_decryptor` for Scaled MVB output. Public-key input uses `public_encryptor`. Clients receive no LUT or manual codec.
 
@@ -101,7 +100,7 @@ Generate the complete CBS bundle through `try_generate_circuit_bootstrap_keys` a
 
 Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }` (under `config.pbs` for CBS). Use u64 and a logical dimension divisible by that positive block width; `AtMostOne` allows empty blocks and adds a dummy, while `ExactlyOne` has one `1` per block with no dummy. The exact native generator writes every bit control and any required dummy directly in coefficient form: first-block NLEV lifts the public LUT, later NGSW rotates the ciphertext. Native aggregation is exact modulo 2^64. With split BR, the canonical aggregate is split and transformed once per block; negacyclic signs and carries are resolved before splitting. Ordinary and split external products each require a numerical error budget. PBS, ManyLUT, MVB, CBS and single-input one-hot use the existing factories and workspace.
 
-Select BR precision through `CbsConfig.fourier_precision.blind_rotation`; PBS-only contexts use ordinary BR. Trace and SS precision remain independent, including split trace/SS with the supported projection strategies. Only the selected aggregate spectra are allocated; split conversion reuses product scratch. Standalone high-precision LUT integration is separate. Context construction rejects u32 Block before preparing the transform table. One-hot `new_pair_workspace` / `with_pair` support Sparse and Block, including split Block BR; classic resources return no pair workspace. Defaults and presets are unchanged; block security and complete DFR are unassessed.
+Select BR precision through `CbsConfig.fourier_precision.blind_rotation`; PBS-only contexts use ordinary BR. Trace and SS precision remain independent, including split trace/SS with the supported projection strategies. Only the selected aggregate spectra are allocated; split conversion reuses product scratch. Context construction rejects u32 Block before preparing the transform table. One-hot `new_pair_workspace` / `with_pair` support Sparse and Block, including split Block BR; classic resources return no pair workspace. Defaults and presets are unchanged; block security and complete DFR are unassessed.
 
 ## One-hot CBS
 
@@ -122,12 +121,6 @@ one_hot.cmux_k_to(
 The fused operation computes `C0 + sum_r delta_r*(Cr-C0)` with one inverse transform. Controls must encrypt mutually exclusive bits with the bound basis, secret and transform representation; candidates must share f, Q and encoding. Budget the sum of all external-product errors, not serial CMux estimates. Fourier rounding occurs after the sum, so ciphertext coefficients need not match a sequence of CMux calls. The [one-hot evaluator contract](src/circuit_bootstrap/one_hot_workflow.rs) specifies layouts and write/error behavior.
 
 Candidates in the example use independent Scaled t_ring=8 and occupy ring coefficients, not SIMD slots. NLev output is coefficient-domain at Q and needs `write_fourier_form` before public-polynomial lifting; NGSW output is already in Fourier representation. Single-control `cmux_to` and `external_product_to` remain available for other consumers.
-
-## High-precision lookup
-
-Use the separate repository’s [primus_tfhe_ntru_lut](../../../primus_high_prec_lut/README.md) for uniform-width input/output chunks with independent counts. Its `FourierHighPrecLutContext` prepares integer clients, complete keys and evaluation; callers do not assemble lifting or return workspaces. The [fourier_lookup example](../../../primus_high_prec_lut/examples/fourier_lookup.rs) evaluates a piecewise fee from 16 input bits to 16 output bits.
-
-The LUT workflow combines one-hot CBS, a fixed complete selection tree, aggregated negative rotations and independent LWE return. Recommended configs use classic BR; sparse is supported when explicitly selected. Geometry, public-table costs and numerical limits belong to the LUT crate.
 
 ## Features
 
@@ -192,7 +185,7 @@ let config = CbsConfig {
 Pass this config to `TfheContext::try_from_cbs_config`, then use the same key and
 evaluator factories. Callers do not provide limb buffers or scratch. For a
 trace-only split experiment, keep `Separate` and set only
-`config.fourier_precision.trace`. Lookup uses `HighPrecLutConfig.one_hot`.
+`config.fourier_precision.trace`.
 
 Split requires native u64; split BR supports classic binary and block binary.
 Ordinary binary/ternary/sparse BR, and u64 Block BR, may accompany split trace or SS.

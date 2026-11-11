@@ -263,11 +263,3 @@ PRIMUS_PBS_CASE=tfhe-fft/high cargo bench -p primus_tfhe_glwe_fourier --bench pb
 ```
 
 算法、参数和完整计时边界见[跨方案比较](../performance/README.zh_CN.md#tfhe-comparisons)。
-
-## 独立应用仓库
-
-OMR 和高精度查表是独立应用仓库，通过 path 依赖使用同级 `primus-fhe`。
-在各自根目录执行验证和基准命令。
-
-- `primus_omr/README.zh_CN.md` 说明 two-stage 检测、board 吞吐和 encode/digest/recovery 验证。
-- `primus_high_prec_lut/guides/development/testing.md` 说明后端 features、公开表创建、完整求值、one-hot 与 primitive 计时边界。

@@ -102,8 +102,6 @@ Borrow branch views with `nlev_selectors`, `ngsw_selectors` or `nonzero_ngsw_sel
 
 Let S=N/M and A=N/(2MW). Correct selection requires quantized phase `u_bar=S*m+W*e mod 2N` with `-A<=e<A`: the window is left-closed/right-open. e includes input noise, encoding rounding and per-coordinate quantization; shape checks prove neither this guard nor output decryptability. See the [one-hot derivation](../../guides/development/bootstrapping-contracts.md#one-hot-cbs).
 
-The separate repository’s [high-precision LUT crate](../../../primus_high_prec_lut/README.md) handles multiple input chunks and table polynomials, with classic as the default BR and sparse available explicitly.
-
 ## NTRU→LWE returns
 
 Ordinary PBS/MVB evaluators handle returns. For independent coefficient-domain results, this family re-exports `primus_ntru::LweReturnEvaluator` and `LweReturnBatchWorkspace`. Bind the server's return key and target q with `LweReturnEvaluator::new(server.key_switching_key(), q_modulus)`; prepare scalar or batch scratch as needed. See the [NTRU return workflow and numerical contract](../primus_ntru/README.md#independent-lwe-return) for single coefficients, shared-input prefixes and different-input streams.

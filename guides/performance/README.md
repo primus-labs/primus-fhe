@@ -68,8 +68,8 @@ NTT CBS performance presets use `PairedTrace`; the default configuration uses
 `Separate`. Fourier fusion and pairing require split trace and scheme switching,
 and NLEV-only or dual outputs use separate operations. Historical NTT paired
 trace reduced the measured trace-plus-switching projection at higher key and
-scratch costs than `Separate`. Fourier complete one-hot and LUT results were
-mixed, including cases where faster projection did not reduce request time.
+scratch costs than `Separate`. Complete Fourier one-hot results varied by configuration, even when the
+projection alone was faster.
 Compare the complete request and its error budget before choosing a strategy.
 [Projection and precision contract](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
 

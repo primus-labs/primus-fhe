@@ -78,7 +78,7 @@ For independent u32 or u64 inputs sharing one key and LUT, the default-capacity 
 
 Keep the context, keys and compiled programs across requests. `_to` methods reuse evaluator scratch and caller outputs; concurrent requests need separate mutable evaluators. MVB programs stay bound to their context. `KeyGenerator::try_generate_blind_rotation_key(client, rng)` generates only BR material using the context's `config.method`; independent components must use the same actual secrets and transform representation. Advanced material composition and per-call borrowing contracts are documented on [KeyGenerator](src/key.rs), [Evaluator](src/evaluator.rs) and [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs). Context factories prepare the default workflow directly. For borrowed CBS, compile the program first, then bind it with the chosen gadget parameters and circuit key through `CircuitBootstrapEvaluator::try_new`.
 
-BR-only consumers such as OMR can use `BlindRotationKey::try_generate` with the input secret and target GGSW parameters, without preparing a PBS return domain. See its [generation contract](src/key.rs).
+BR-only consumers can use `BlindRotationKey::try_generate` with the input secret and target GGSW parameters, without preparing a PBS return domain. See its [generation contract](src/key.rs).
 
 ## Features
 
@@ -102,8 +102,6 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and workflow decryption checks are untimed. The ManyLUT/CBS targets do not include the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. Timing boundaries and comparison limits are in the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
 `cbs_identity` uses a benchmark-local derived comparison configuration, not a teaching preset or an exact reproduction of the author protocol. It checks both bits with real depth-one CMux consumption before measurement; a failure aborts the run. These finite fixtures do not establish security, failure probability or deeper-tree precision; see the [parameter mapping and validation scope](../../guides/performance/README.md#tfhe-comparisons).
-
-Two-stage OMR clue detection and its `classic_two_stage` / `sparse_two_stage` benchmarks live in the separate [primus_omr](../../../primus_omr/README.md) repository. Run them from that repository’s root.
 
 ## Further reading
 

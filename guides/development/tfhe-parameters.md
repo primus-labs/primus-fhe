@@ -15,10 +15,6 @@ Start from the concrete backend's `experimental` operation config. Examples fix 
 | NTRU NTT | [experimental.rs](../../crates/primus_tfhe_ntru_ntt/src/experimental.rs) | [Examples](../../crates/primus_tfhe_ntru_ntt/README.md#operation-examples) |
 | NTRU Fourier | [experimental.rs](../../crates/primus_tfhe_ntru_fourier/src/experimental.rs) | [Examples](../../crates/primus_tfhe_ntru_fourier/README.md#operation-examples) |
 
-Application parameters are maintained in the external repositories. See
-`primus_omr/README.md` for two-stage presets and
-`primus_high_prec_lut/guides/development/parameters.md` for lookup presets and model limits.
-
 Here t is the message modulus, not the number of padded inputs: a front-half input at t=32 has 16 values. Input and output message moduli may differ. PBS/ManyLUT outputs are Rounded, MVB outputs are Scaled, and CBS outputs use gadget scaling rather than an ordinary output codec.
 
 | Config | Teaching workload and message domains |

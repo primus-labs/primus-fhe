@@ -32,7 +32,7 @@ let context = TfheContext::<u64, Table, _>::try_from_pbs_config(config)?;
 
 ## 操作示例
 
-示例均使用 u64，在请求循环外准备可复用状态。替换快速开始命令中的示例名即可运行其他本库流程，高精度查表示例请在独立的 `primus_high_prec_lut` 仓库根目录运行。
+示例均使用 u64，在请求循环外准备可复用状态。替换快速开始命令中的示例名即可运行其他本库流程。
 
 | 流程 | `experimental` 配置 | 完整示例 |
 | --- | --- | --- |
@@ -43,7 +43,6 @@ let context = TfheContext::<u64, Table, _>::try_from_pbs_config(config)?;
 | CBS 谓词 → CMux → 环加法 → LWE | `CLASSIC_CBS_U64` | [ntru_ntt_circuit_bootstrap](examples/ntru_ntt_circuit_bootstrap.rs) |
 | 同一输入产生 17 个数值阈值标志 | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_ntt_mvb_thresholds](examples/ntru_ntt_mvb_thresholds.rs) |
 | One-hot CBS → 四路记录选择 | `CLASSIC_ONE_HOT_U64` | [ntru_ntt_one_hot](examples/ntru_ntt_one_hot.rs) |
-| 高精度整数查表 | 独立 LUT 仓库的 `NTT_LOW_PREC_C4_O4_DFR128_LOOKUP_U64` | [ntt_lookup](../../../primus_high_prec_lut/examples/ntt_lookup.rs) |
 
 普通 PBS/ManyLUT 和 MVB 使用 `context.try_generate_keys(rng)`。将 `client.external_lwe_secret_key()` 绑定到 `context.encryptor`；Rounded PBS/ManyLUT 输出用 `pbs_decryptor`，Scaled MVB 输出用 `mvb_decryptor`。公钥输入使用 `public_encryptor`，客户端不接收 LUT 或手工 codec。
 
@@ -130,12 +129,6 @@ one_hot.cmux_k_to(
 融合运算通过一次逆变换计算 `C0 + sum_r delta_r*(Cr-C0)`。控制须以已绑定的 basis、秘密和变换表示加密互斥 bit，候选须共享 f、Q 和编码。误差预算应覆盖全部外积误差之和，不能使用顺序 CMux 的估计。布局及写入/错误行为见 [one-hot evaluator 契约](src/circuit_bootstrap/one_hot_workflow.rs)。
 
 示例候选使用独立 Scaled t_ring=8，占用环系数而非 SIMD 槽。NLev 输出为 Q 下系数域，公开多项式提升前须用 `write_ntt_form` 转换；NGSW 输出已在 NTT 表示。其他消费方可使用单控制的 `cmux_to` 和 `external_product_to`。
-
-## 高精度查表
-
-独立仓库中的 [primus_tfhe_ntru_lut](../../../primus_high_prec_lut/README.zh_CN.md) 用于统一位宽、输入输出数量独立的 chunk。其 `NttHighPrecLutContext` 准备整数客户端、完整密钥和求值，调用方无需组合提升或返回工作区。[ntt_lookup 示例](../../../primus_high_prec_lut/examples/ntt_lookup.rs)将 16 位输入映射为 16 位分段费用结果。
-
-LUT 流程组合 one-hot CBS、固定完整选表树、聚合负向旋转和独立 LWE 返回。推荐配置采用 classic BR，显式选择时也支持 sparse；几何、公开表成本及数值限制由 LUT crate 说明。
 
 ## Features
 

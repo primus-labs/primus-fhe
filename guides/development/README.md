@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > [Primus FHE](../../README.md) is experimental. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Choose the lowest-level crate that owns your operation. For complete TFHE applications, begin with a backend's examples; lower-level composition is optional. OMR and high-precision lookup are sibling repositories; the links below use that layout. The [workspace map](../../README.md#workspace-map) lists the core crates.
+Choose the lowest-level crate that owns your operation. For complete TFHE applications, begin with a backend's examples; lower-level composition is optional. The [workspace map](../../README.md#workspace-map) lists the core crates.
 
 ## Choose an entry point
 
@@ -21,8 +21,6 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 | BGV coefficient/slot encryption, multiplication, relin, rotation and levels | [primus_bgv](../../crates/primus_bgv/README.md) |
 | PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) or [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md) |
 | One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
-| Functions on encrypted multi-chunk integers | External `primus_high_prec_lut` repository |
-| OMR detection, digest and recovery | External `primus_omr` repository |
 
 ## Read across library boundaries
 
@@ -43,7 +41,6 @@ The index is bilingual; the topic language is shown below. External tools mainta
 | Native BFV/BGV Hybrid QP keys, partitions, exact correction and collective roles | [Native Hybrid keys](native-hybrid-keys.md) (English) |
 | Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
 | Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |
-| Offline NTRU CBS noise scenarios and gadget search | `tools/parameter_selection/ntru_cbs/README.md` in the external `primus_high_prec_lut` repository |
 | Tests, examples, features and benchmark commands | [Testing guide](testing.md) (中文) |
 
 Performance decisions and measurements are in the [performance guide](../performance/README.md). Contributor rules are in [AGENTS.md](../../AGENTS.md).

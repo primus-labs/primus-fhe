@@ -78,7 +78,7 @@ Sparse BR 须在 `config.method` 中显式选择 `BlindRotationMethod::Sparse`�
 
 重复请求保留 context、密钥和已编译程序，`_to` 方法复用 evaluator scratch 及调用方输出；并发请求需要独立的可变 evaluator。MVB 程序保持与其 context 绑定。`KeyGenerator::try_generate_blind_rotation_key(client, rng)` 根据 context 的 `config.method` 仅生成 BR 材料；独立组件须使用相同的实际秘密和变换表示。独立材料组合及逐调用借用契约见 [KeyGenerator](src/key.rs)、[Evaluator](src/evaluator.rs) 和 [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs)，默认流程无需手工组合资源。借用资源执行 CBS 时，先编译程序，再通过 `CircuitBootstrapEvaluator::try_new` 绑定所选 gadget 参数与 circuit key。
 
-OMR 等只消费 BR 的组合流程可以通过 `BlindRotationKey::try_generate`，从输入秘密及目标 GGSW 参数直接建钥，无需准备 PBS 返回域；见[建钥契约](src/key.rs)。
+只消费 BR 的组合流程可以通过 `BlindRotationKey::try_generate`，从输入秘密及目标 GGSW 参数直接建钥，无需准备 PBS 返回域；见[建钥契约](src/key.rs)。
 
 ## Features
 
@@ -102,8 +102,6 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和工作流解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。只有 fixed-weight classic/sparse PBS 配对仅改变 BR 算法，dense 用例使用不同参数。计时范围与比较限制见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
 
 `cbs_identity` 使用仅在 bench 中定义的派生比较配置，不是教学预设或作者协议的原样复现。测量前检查 bit 0/1 的真实深度 1 CMux 消费，失败直接报错。这些有限 fixture 不证明安全性、失败率或更深树的精度；见[参数映射和验证范围](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
-
-OMR 的两阶段 clue 检测及 `classic_two_stage` / `sparse_two_stage` 基准位于独立的 [primus_omr](../../../primus_omr/README.zh_CN.md) 仓库，请在该仓库根目录运行。
 
 ## 进一步阅读
 

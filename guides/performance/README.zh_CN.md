@@ -34,7 +34,7 @@ Fourier GLWE 求值材料先生成 native 系数行，再进行变换。升级�
 
 ## NTRU 投影
 
-生成密钥和准备 scratch 前选择投影策略。NTT CBS 性能预设使用 `PairedTrace`，默认配置使用 `Separate`。Fourier 融合和配对要求 split trace 和 scheme switching，NLEV-only 或 dual 输出仍分开执行。历史 NTT 配对实验以更多密钥和 scratch 换取更快的 trace 加换钥投影。Fourier 完整 one-hot 和 LUT 的结果方向不一，局部投影加速有时没有降低请求耗时。选策略时同时比较完整请求与其误差预算。 [投影与精度契约](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+生成密钥和准备 scratch 前选择投影策略。NTT CBS 性能预设使用 `PairedTrace`，默认配置使用 `Separate`。Fourier 融合和配对要求 split trace 和 scheme switching，NLEV-only 或 dual 输出仍分开执行。历史 NTT 配对实验以更多密钥和 scratch 换取更快的 trace 加换钥投影。Fourier 完整 one-hot 的收益因配置而异，局部投影加速并不保证降低请求耗时。选策略时同时比较完整请求与其误差预算。 [投影与精度契约](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
 
 ## 历史证据
 
