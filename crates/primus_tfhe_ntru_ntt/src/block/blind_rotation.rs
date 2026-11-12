@@ -1,26 +1,48 @@
-//! Direct block aggregation with compulsory first-block public-LUT lifting.
+//! Direct block aggregation, public-LUT lift and NTT products.
 
 use std::ops::Range;
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
-use primus_lattice::ntru::Ntru;
+use primus_lattice::{
+    nlev::{Nlev, NlevIter},
+    ntru::Ntru,
+};
 use primus_modulus::BarrettModulus;
+use primus_ntru::{NlevParameters, NttNtruExternalProductWorkspace};
 use primus_ntt::MonomialNttTable;
+use primus_poly::Polynomial;
+use primus_reduce::ReduceOnceSlice;
 
 use super::BlockNtruBootstrappingKey;
-use crate::{
-    bootstrap::BlindRotationPairWorkspace,
-    grouped_rotation::{AggregationWorkspace, rotate_groups, rotate_groups_pair},
-};
+use crate::bootstrap::BlindRotationPairWorkspace;
 
-/// Consumes every block, including empty blocks and zero exponents. `scratch`
-/// initially contains the public rotated LUT. The first block's NLEV aggregate
-/// lifts that polynomial under f; subsequent NGSW aggregates rotate the encrypted
-/// accumulator with the same arithmetic. Omitting an empty first block would
-/// leave the public LUT unlifted. Final coefficient output stays in `current`.
-/// Key, basis, modulus, table and exponent/workspace layouts were bound upstream.
-pub(crate) fn rotate_blocks<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+/// Reusable aggregate and product scratch, independent of block geometry.
+pub(crate) struct AggregationWorkspace<T: FheUint> {
+    pub(crate) exponents: Vec<usize>,
+    aggregate: Vec<T>,
+    pub(crate) external_product: NttNtruExternalProductWorkspace<T>,
+}
+
+impl<T: FheUint> AggregationWorkspace<T> {
+    pub(crate) fn new(
+        parameters: &NlevParameters<T, BarrettModulus<T>>,
+        key: &BlockNtruBootstrappingKey<T>,
+    ) -> Self {
+        Self {
+            exponents: vec![0; key.input_dimension().get()],
+            aggregate: vec![T::ZERO; key.control_len()],
+            external_product: NttNtruExternalProductWorkspace::new(parameters.poly_length()),
+        }
+    }
+}
+
+/// The first block's NLEV aggregate lifts public P; later blocks actually hold
+/// `NGSW[H] = NLEV[f*H]` and act on ciphertexts. Their product arithmetic agrees,
+/// so the same loop consumes every block, including encrypted zeros and any
+/// dummy. On entry, `scratch` holds the public rotated LUT. The final
+/// coefficient-domain result stays in `current`.
+pub(crate) fn rotate_blocks<T, Table>(
     key: &BlockNtruBootstrappingKey<T>,
     workspace: &mut AggregationWorkspace<T>,
     current: &mut Ntru<Vec<T>>,
@@ -28,23 +50,44 @@ pub(crate) fn rotate_blocks<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     basis: &ApproxSignedBasis<T>,
     modulus: BarrettModulus<T>,
     ntt: &Table,
-) {
-    rotate_groups(
-        block_groups(key),
-        workspace,
-        current,
-        scratch,
-        basis,
-        modulus,
-        ntt,
-    );
+) where
+    T: FheUint,
+    Table: MonomialNttTable<ValueT = T>,
+{
+    let n = ntt.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [(
+                &workspace.exponents,
+                Nlev::new(workspace.aggregate.as_mut_slice()),
+            )],
+            n,
+            modulus,
+        );
+        let aggregate = Nlev::new(workspace.aggregate.as_mut_slice()).into_ntt_form(ntt);
+        aggregate.external_product_to(
+            &Polynomial(current.as_ref()),
+            scratch,
+            basis,
+            modulus,
+            ntt,
+            &mut workspace.external_product,
+        );
+        core::mem::swap(current, scratch);
+    }
 }
 
-/// Visits each contiguous block once for both inputs. Both current buffers
-/// hold the rotated public LUT on entry. The entire first block is consumed
-/// for both NLEV lifts, including an empty block.
-/// The owning evaluator established key, exponent and workspace compatibility.
-pub(crate) fn rotate_blocks_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+/// Aggregates each block's controls for both inputs before advancing, preserving
+/// each input's control order. Both current buffers initially hold independent
+/// public LUT rotations: the complete first block, including any dummy, lifts
+/// each through NLEV; later NGSW blocks use the same external-product arithmetic.
+/// Transform/product scratch is shared serially, with final results in the two
+/// current buffers. The caller established all key, exponent and buffer geometry.
+pub(crate) fn rotate_blocks_pair<T, Table>(
     key: &BlockNtruBootstrappingKey<T>,
     workspace: &mut AggregationWorkspace<T>,
     second: &mut BlindRotationPairWorkspace<T>,
@@ -52,35 +95,122 @@ pub(crate) fn rotate_blocks_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>
     basis: &ApproxSignedBasis<T>,
     modulus: BarrettModulus<T>,
     ntt: &Table,
-) {
-    rotate_groups_pair(
-        block_groups(key),
-        workspace,
-        second,
-        buffers,
-        basis,
-        modulus,
-        ntt,
-    );
+) where
+    T: FheUint,
+    Table: MonomialNttTable<ValueT = T>,
+{
+    let [current, scratch] = buffers;
+    let n = ntt.poly_length().get();
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [
+                (
+                    &workspace.exponents,
+                    Nlev::new(workspace.aggregate.as_mut_slice()),
+                ),
+                (
+                    &second.exponents,
+                    Nlev::new(second.aggregate.as_mut_slice()),
+                ),
+            ],
+            n,
+            modulus,
+        );
+        for (aggregate, current) in [
+            (&mut workspace.aggregate, &mut *current),
+            (&mut second.aggregate, &mut second.current),
+        ] {
+            let aggregate = Nlev::new(aggregate.as_mut_slice()).into_ntt_form(ntt);
+            aggregate.external_product_to(
+                &Polynomial(current.as_ref()),
+                scratch,
+                basis,
+                modulus,
+                ntt,
+                &mut workspace.external_product,
+            );
+            core::mem::swap(current, scratch);
+        }
+    }
 }
 
-/// Exposes each complete bit group, any mode-required dummy and its contiguous
-/// input coordinates; the direct-block layout needs no persistent index map.
-fn block_groups<T: FheUint>(
-    key: &BlockNtruBootstrappingKey<T>,
-) -> impl Iterator<Item = (Range<usize>, &[T])> {
-    let block_size = key.block_size();
-    let controls = key.controls();
-    let controls_per_block =
-        block_size + usize::from(key.occupancy() == primus_ntru::BlockOccupancy::AtMostOne);
-    controls
-        .as_slice()
-        .chunks_exact(controls_per_block * controls.control_len())
-        .enumerate()
-        .map(move |(block, data)| {
-            let start = block * block_size;
-            (start..start + block_size, data)
-        })
+/// Starts from the encrypted dummy when present, otherwise clears the aggregate,
+/// then adds every selector in key order. The iterator selects coordinates
+/// from each input's exponent slice. Pairing shares an accumulator traversal
+/// and includes zero exponents and encrypted zeros. An odd final selector uses
+/// the single-product kernel. For u64, pairs retain [0,2q) residues until one
+/// final normalization before NTT. Other widths retain canonical updates.
+/// The key and workspace establish complete, equally sized controls and
+/// canonical source residues.
+/// Instantiated only for one input or the fixed two-input window.
+#[inline]
+fn aggregate_controls<T: FheUint, const INPUTS: usize>(
+    indices: Range<usize>,
+    selections: &[T],
+    dummy: &[T],
+    mut inputs: [(&[usize], Nlev<&mut [T]>); INPUTS],
+    poly_length: usize,
+    modulus: BarrettModulus<T>,
+) {
+    let control_len = inputs[0].1.as_ref().len();
+    for (_, aggregate) in &mut inputs {
+        if dummy.is_empty() {
+            aggregate.as_mut().fill(T::ZERO);
+        } else {
+            aggregate.as_mut().copy_from_slice(dummy);
+        }
+    }
+    let mut controls = indices.zip(NlevIter::new(selections, control_len));
+    while let Some((first_index, first)) = controls.next() {
+        if let Some((second_index, second)) = controls.next() {
+            for (exponents, aggregate) in &mut inputs {
+                let exponent = exponents[first_index];
+                if T::BITS == 64 {
+                    primus_poly::lazy_add_mul_monomial_pair_assign(
+                        aggregate.as_mut(),
+                        first.as_ref(),
+                        exponent,
+                        second.as_ref(),
+                        exponents[second_index],
+                        poly_length,
+                        modulus,
+                    );
+                } else {
+                    aggregate.add_mul_monomial_pair_assign(
+                        &first,
+                        exponent,
+                        &second,
+                        exponents[second_index],
+                        poly_length,
+                        modulus,
+                    );
+                }
+            }
+        } else {
+            for (exponents, aggregate) in &mut inputs {
+                let exponent = exponents[first_index];
+                if T::BITS == 64 {
+                    primus_poly::lazy_add_mul_monomial_assign(
+                        aggregate.as_mut(),
+                        first.as_ref(),
+                        exponent,
+                        poly_length,
+                        modulus,
+                    );
+                } else {
+                    aggregate.add_mul_monomial_assign(&first, exponent, poly_length, modulus);
+                }
+            }
+        }
+    }
+    if T::BITS == 64 {
+        for (_, aggregate) in &mut inputs {
+            modulus.reduce_once_slice_assign(aggregate.as_mut());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -187,7 +317,7 @@ mod tests {
                     &parameters,
                 )
                 .unwrap();
-                let mut workspace = AggregationWorkspace::new(&parameters, key.controls());
+                let mut workspace = AggregationWorkspace::new(&parameters, &key);
                 for nonzero_exponents in [false, true] {
                     for (i, exponent) in workspace.exponents.iter_mut().enumerate() {
                         *exponent = if nonzero_exponents {

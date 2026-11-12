@@ -6,8 +6,8 @@ use super::OneHotCircuitBootstrapEvaluator;
 use crate::{
     Lwe,
     blind_rotation::RotationState,
+    block::{rotate_blocks_pair, rotate_blocks_split_pair},
     bootstrap::{BlindRotationPairWorkspace, BootstrapResources},
-    grouped_rotation::{rotate_groups_pair, rotate_groups_split_pair},
 };
 
 /// One prepared input from [`OneHotCircuitBootstrapEvaluator::with_pair`].
@@ -84,7 +84,7 @@ where
         }
     }
 
-    /// Blind-rotates two grouped inputs together, then consumes their projections
+    /// Blind-rotates two Block inputs together, then consumes their projections
     /// in input order. The callback receives index 0 then 1; each scoped view
     /// can write NLEV and/or nonzero NGSW and consumes no additional selector batch.
     /// Complete projection and any buffer consumption inside the callback before
@@ -93,7 +93,7 @@ where
     ///
     /// # Correctness
     /// Inherits [`Self::one_hot_to`]'s secrets, encoding, residue and noise contracts.
-    /// Each input retains its original group/selector order and arithmetic.
+    /// Each input retains its original block/selector order and arithmetic.
     ///
     /// # Panics
     /// Rejects classic resources, a foreign context, input dimensions or workspace
@@ -125,7 +125,7 @@ where
         );
     }
 
-    /// Prepares two independent BR results in group/control/input order.
+    /// Prepares two independent BR results in block/control/input order.
     /// The first remains in resources; the second remains in `second` until swapped.
     fn prepare_pair(
         &mut self,
@@ -190,8 +190,8 @@ where
             &mut resources.blind_rotation.scratch,
         ];
         match &mut resources.blind_rotation.rotation {
-            RotationState::Block { key, scratch } => rotate_groups_pair(
-                crate::block::blocks(key),
+            RotationState::Block { key, scratch } => rotate_blocks_pair(
+                key,
                 scratch,
                 second,
                 buffers,
@@ -199,8 +199,8 @@ where
                 &mut resources.fft,
             ),
             RotationState::BlockSplit { key, scratch } => {
-                rotate_groups_split_pair(
-                    crate::block::blocks(key),
+                rotate_blocks_split_pair(
+                    key,
                     scratch,
                     second,
                     buffers,

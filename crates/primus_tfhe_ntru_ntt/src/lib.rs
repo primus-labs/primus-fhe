@@ -90,7 +90,6 @@ mod context;
 mod error;
 mod evaluator;
 pub mod factorized;
-mod grouped_rotation;
 pub mod key;
 mod lookup_table;
 

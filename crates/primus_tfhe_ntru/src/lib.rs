@@ -11,7 +11,7 @@
 //! complete setup secrets; [`Encryptor`] and [`Decryptor`] borrow only the external
 //! message secret and bind its codec. Choose the NTT/Fourier
 //! backend for transform tables, key generation and evaluators.
-//! [`NtruBlindRotationControls`] provides the shared Block coefficient storage.
+//! [`BlockNtruBootstrappingKey`] owns the Block coefficient controls and their layout.
 //! Concrete backends provide experimental u64 operation/message configurations.
 //! This family supplies the shared numerical configuration types and sampling state.
 //! [`KeyGenerationError`] and [`TfheClientError`] report key generation and family
@@ -59,17 +59,15 @@ mod block;
 mod circuit_bootstrap;
 mod client;
 mod config;
-mod controls;
 mod error;
 mod key;
 mod lookup_table;
 mod one_hot;
 mod parameters;
 
-pub use block::BlockNtruBootstrappingKey;
+pub use block::{BlockNtruBootstrappingKey, BlockNtruKeyLayout};
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, PbsConfig};
-pub use controls::NtruBlindRotationControls;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
     TfheClientError, TfheKeyError, TfheParameterError,

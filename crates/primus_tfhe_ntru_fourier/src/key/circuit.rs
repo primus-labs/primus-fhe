@@ -165,7 +165,7 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         transformed: FourierNtruSecretKey,
-        layout: super::BlindRotationLayout,
+        layout: super::BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError> {
         let precision = operation.fourier_precision();

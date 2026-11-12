@@ -1,66 +1,344 @@
-//! Direct block aggregation with compulsory first-block public-LUT lifting.
+//! Direct block aggregation, public-LUT lift and Fourier products.
+
+use std::ops::Range;
 
 use primus_decompose::primitive::ApproxSignedBasis;
-use primus_fft::{FftEngine, FftTable, TorusFftValue};
-use primus_lattice::ntru::Ntru;
-use primus_ntru::FourierNtruSplitWorkspace;
+use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
+use primus_lattice::{
+    nlev::{FourierNlev, Nlev, NlevIter},
+    ntru::Ntru,
+};
+use primus_modulus::NativeModulus;
+use primus_ntru::{
+    FourierNtruExternalProductWorkspace, FourierNtruSplitGadget, FourierNtruSplitWorkspace,
+    NlevParameters,
+};
+use primus_poly::Polynomial;
 
 use super::BlockNtruBootstrappingKey;
-use crate::grouped_rotation::{
-    AggregationWorkspace, SplitAggregationWorkspace, rotate_groups, rotate_groups_split,
-};
+use crate::bootstrap::BlindRotationPairWorkspace;
 
-/// Consumes every block, including empty blocks and zero exponents. `scratch`
-/// initially contains the public rotated LUT. The first block's NLEV aggregate
-/// lifts that polynomial under f; subsequent NGSW aggregates rotate the encrypted
-/// accumulator with the same ordinary Fourier arithmetic. Omitting an empty first
-/// block would leave the public LUT unlifted. Output stays in `current`. Key,
-/// basis, FFT and exponent/workspace layouts were bound upstream. Ordinary FFT
-/// rounding remains part of the phase error; this is not a split-product path.
-pub(crate) fn rotate_blocks<T: TorusFftValue, Table: FftTable>(
+mod aggregation;
+
+/// Reusable aggregate and product scratch, independent of block geometry.
+pub(crate) struct AggregationWorkspace<T: TorusFftValue, Transformed = Vec<Complex64>> {
+    pub(crate) exponents: Vec<usize>,
+    aggregate: Vec<T>,
+    transformed: Transformed,
+    pub(crate) external_product: FourierNtruExternalProductWorkspace<T>,
+}
+
+impl<T: TorusFftValue> AggregationWorkspace<T> {
+    pub(crate) fn new(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        key: &BlockNtruBootstrappingKey<T>,
+    ) -> Self {
+        Self::with_transformed(
+            parameters,
+            key,
+            vec![Complex64::ZERO; parameters.fourier_nlev_len()],
+        )
+    }
+}
+
+impl<T: TorusFftValue> AggregationWorkspace<T, FourierNtruSplitGadget<T>> {
+    /// Allocates only the selected two-limb aggregate representation. Exact
+    /// native coefficients and product scratch are shared with the ordinary
+    /// layout; no permanent per-control Fourier material is retained.
+    pub(crate) fn new_split(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        key: &BlockNtruBootstrappingKey<T>,
+        low_bits: u32,
+    ) -> Self {
+        Self::with_transformed(
+            parameters,
+            key,
+            FourierNtruSplitGadget::zero(parameters.poly_length(), parameters.basis(), low_bits),
+        )
+    }
+}
+
+impl<T: TorusFftValue, Transformed> AggregationWorkspace<T, Transformed> {
+    /// Common geometry owns one coefficient aggregate and one product workspace;
+    /// the caller supplies exactly the Fourier representation used online.
+    fn with_transformed(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        key: &BlockNtruBootstrappingKey<T>,
+        transformed: Transformed,
+    ) -> Self {
+        Self {
+            exponents: vec![0; key.input_dimension().get()],
+            aggregate: vec![T::ZERO; key.control_len()],
+            transformed,
+            external_product: FourierNtruExternalProductWorkspace::new(parameters.poly_length()),
+        }
+    }
+}
+
+/// Split payload for block rotation using a two-limb Fourier product.
+pub(crate) type SplitAggregationWorkspace<T> = AggregationWorkspace<T, FourierNtruSplitGadget<T>>;
+
+/// `scratch` holds the rotated public LUT on entry. The first block's NLEV
+/// aggregate lifts it, then later `NGSW[H] = NLEV[f*H]` aggregates act on
+/// ciphertexts with the same product arithmetic. Every encrypted selector
+/// and dummy contributes, including zeros. The result stays in `current`.
+pub(crate) fn rotate_blocks<T, Table>(
     key: &BlockNtruBootstrappingKey<T>,
     workspace: &mut AggregationWorkspace<T>,
     current: &mut Ntru<Vec<T>>,
     scratch: &mut Ntru<Vec<T>>,
     basis: &ApproxSignedBasis<T>,
     fft: &mut FftEngine<'_, Table>,
-) {
-    rotate_groups(blocks(key), workspace, current, scratch, basis, fft);
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+{
+    let n = fft.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [(
+                &workspace.exponents,
+                Nlev::new(workspace.aggregate.as_mut_slice()),
+            )],
+            n,
+        );
+        let mut transformed = FourierNlev::new(workspace.transformed.as_mut_slice());
+        Nlev::new(workspace.aggregate.as_slice()).write_fourier_form(&mut transformed, fft);
+        transformed.external_product_to(
+            &Polynomial(current.as_ref()),
+            scratch,
+            basis,
+            fft,
+            &mut workspace.external_product,
+        );
+        core::mem::swap(current, scratch);
+    }
 }
 
-/// Preserves exact native aggregation, then canonically re-splits each complete
-/// aggregate before its product. This includes the compulsory first-block lift;
-/// no exponent, encrypted selector or dummy is omitted. Split precision belongs
-/// to the aggregate workspace and remains independent of trace/SS precision.
-pub(crate) fn rotate_blocks_split<T: TorusFftValue, Table: FftTable>(
+/// Exact native aggregation precedes canonical limb splitting. In particular,
+/// negacyclic signs and wrapping carries are applied before extracting low/high
+/// bits; rotating or adding already split spectra would miss limb carries.
+/// The first NLEV aggregate always lifts the public LUT, even for an empty block
+/// or zero exponents. Later NGSW aggregates use the same two-limb product. Product
+/// digits are dead while refreshing the gadget and are overwritten by the next
+/// decomposition; no additional coefficient scratch is required.
+pub(crate) fn rotate_blocks_split<T, Table>(
     key: &BlockNtruBootstrappingKey<T>,
     workspace: &mut SplitAggregationWorkspace<T>,
     current: &mut Ntru<Vec<T>>,
     scratch: &mut Ntru<Vec<T>>,
     fft: &mut FftEngine<'_, Table>,
     split: &mut FourierNtruSplitWorkspace<T>,
-) {
-    rotate_groups_split(blocks(key), workspace, current, scratch, fft, split);
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+{
+    let n = fft.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [(
+                &workspace.exponents,
+                Nlev::new(workspace.aggregate.as_mut_slice()),
+            )],
+            n,
+        );
+        workspace.transformed.set_from_coefficients(
+            &workspace.aggregate,
+            fft,
+            &mut workspace.external_product,
+        );
+        workspace.transformed.external_product_to(
+            current.as_ref(),
+            scratch.as_mut(),
+            fft,
+            &mut workspace.external_product,
+            split,
+        );
+        core::mem::swap(current, scratch);
+    }
 }
 
-/// Direct controls and masks share contiguous, equally sized block order. The
-/// complete key geometry was validated at construction, so no index table is
-/// needed and chunking never discards a partial block.
-pub(crate) fn blocks<T: TorusFftValue>(
+/// Aggregates a block for both inputs before advancing, preserving
+/// source order and each input's compulsory first-block public-LUT lift. Both
+/// current buffers contain their rotated public LUT on entry. Ordinary transforms
+/// and products run serially through one shared workspace; final results remain
+/// in the two current buffers, regardless of the number of blocks.
+pub(crate) fn rotate_blocks_pair<T, Table>(
     key: &BlockNtruBootstrappingKey<T>,
-) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
-    let block_size = key.block_size();
-    let controls = key.controls();
-    let controls_per_block =
-        block_size + usize::from(key.occupancy() == primus_ntru::BlockOccupancy::AtMostOne);
-    controls
-        .as_slice()
-        .chunks_exact(controls_per_block * controls.control_len())
-        .enumerate()
-        .map(move |(block, data)| {
-            let start = block * block_size;
-            (start..start + block_size, data)
-        })
+    workspace: &mut AggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    basis: &ApproxSignedBasis<T>,
+    fft: &mut FftEngine<'_, Table>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+{
+    let [current, scratch] = buffers;
+    let n = fft.poly_length().get();
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [
+                (
+                    &workspace.exponents,
+                    Nlev::new(workspace.aggregate.as_mut_slice()),
+                ),
+                (
+                    &second.exponents,
+                    Nlev::new(second.aggregate.as_mut_slice()),
+                ),
+            ],
+            n,
+        );
+        // First-block NLEV and later NGSW use the same product arithmetic.
+        for (aggregate, current) in [
+            (&mut workspace.aggregate, &mut *current),
+            (&mut second.aggregate, &mut second.current),
+        ] {
+            let mut transformed = FourierNlev::new(workspace.transformed.as_mut_slice());
+            Nlev::new(aggregate.as_slice()).write_fourier_form(&mut transformed, fft);
+            transformed.external_product_to(
+                &Polynomial(current.as_ref()),
+                scratch,
+                basis,
+                fft,
+                &mut workspace.external_product,
+            );
+            core::mem::swap(current, scratch);
+        }
+    }
+}
+
+/// Both native aggregates are complete before either is split. Each lane then
+/// overwrites the same low/high spectra and independently recovers its product
+/// before the other lane reuses those buffers. Native wrapping carries and
+/// negacyclic signs therefore precede canonical limb extraction, exactly as in
+/// single-input split BR. No second spectra or split/product workspace is kept.
+pub(crate) fn rotate_blocks_split_pair<T, Table>(
+    key: &BlockNtruBootstrappingKey<T>,
+    workspace: &mut SplitAggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    fft: &mut FftEngine<'_, Table>,
+    split: &mut FourierNtruSplitWorkspace<T>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+{
+    let [current, scratch] = buffers;
+    let n = fft.poly_length().get();
+    for (indices, selections, dummy) in key.blocks() {
+        aggregate_controls(
+            indices,
+            selections,
+            dummy,
+            [
+                (
+                    &workspace.exponents,
+                    Nlev::new(workspace.aggregate.as_mut_slice()),
+                ),
+                (
+                    &second.exponents,
+                    Nlev::new(second.aggregate.as_mut_slice()),
+                ),
+            ],
+            n,
+        );
+        for (aggregate, current) in [
+            (&workspace.aggregate, &mut *current),
+            (&second.aggregate, &mut second.current),
+        ] {
+            workspace.transformed.set_from_coefficients(
+                aggregate,
+                fft,
+                &mut workspace.external_product,
+            );
+            workspace.transformed.external_product_to(
+                current.as_ref(),
+                scratch.as_mut(),
+                fft,
+                &mut workspace.external_product,
+                split,
+            );
+            core::mem::swap(current, scratch);
+        }
+    }
+}
+
+/// Starts from the encrypted dummy when present, otherwise clears the aggregate,
+/// then adds every selector in key order. The iterator selects coordinates from
+/// each input's complete exponent slice. For u64, four controls share a
+/// coefficient traversal; u32 retains the pair path.
+/// Remaining controls use pairs and a possible single tail. No zero exponent
+/// or encrypted zero is skipped. The key/workspace establish complete, equally
+/// sized controls, and native wrapping preserves the coefficient representation.
+/// Instantiated only for one input or the fixed two-input window.
+#[inline]
+fn aggregate_controls<T: TorusFftValue, const INPUTS: usize>(
+    mut indices: Range<usize>,
+    selections: &[T],
+    dummy: &[T],
+    mut inputs: [(&[usize], Nlev<&mut [T]>); INPUTS],
+    poly_length: usize,
+) {
+    let modulus = NativeModulus::new();
+    let control_len = inputs[0].1.as_ref().len();
+    for (_, aggregate) in &mut inputs {
+        if dummy.is_empty() {
+            aggregate.as_mut().fill(T::ZERO);
+        } else {
+            aggregate.as_mut().copy_from_slice(dummy);
+        }
+    }
+    let mut controls = NlevIter::new(selections, control_len);
+    if T::BITS == 64 {
+        for _ in 0..indices.len() / 4 {
+            let indices: [usize; 4] =
+                core::array::from_fn(|_| indices.next().expect("complete control indices"));
+            let sources: [Nlev<&[T]>; 4] =
+                core::array::from_fn(|_| controls.next().expect("complete block controls"));
+            for (exponents, aggregate) in &mut inputs {
+                aggregation::add_four_rotations_assign(
+                    aggregate.as_mut(),
+                    sources.each_ref().map(|control| control.as_ref()),
+                    indices.map(|i| exponents[i]),
+                    poly_length,
+                );
+            }
+        }
+    }
+    // Finish the u64 tail (0..3 controls); u32 uses this pair/single loop for
+    // the whole block. Preserve source order and per-lane wrapping arithmetic.
+    let mut controls = indices.zip(controls);
+    while let Some((first_index, first)) = controls.next() {
+        let second = controls.next();
+        for (exponents, aggregate) in &mut inputs {
+            let exponent = exponents[first_index];
+            if let Some((second_index, ref second)) = second {
+                aggregate.add_mul_monomial_pair_assign(
+                    &first,
+                    exponent,
+                    second,
+                    exponents[second_index],
+                    poly_length,
+                    modulus,
+                );
+            } else {
+                aggregate.add_mul_monomial_assign(&first, exponent, poly_length, modulus);
+            }
+        }
+    }
 }
 
 #[cfg(all(test, any(feature = "rustfft", feature = "tfhe-fft")))]
@@ -220,14 +498,11 @@ mod tests {
                     let mut workspace = if let Some(low_bits) = split_bits {
                         OracleWorkspace::Split(AggregationWorkspace::new_split(
                             &parameters,
-                            key.controls(),
+                            &key,
                             low_bits,
                         ))
                     } else {
-                        OracleWorkspace::Ordinary(AggregationWorkspace::new(
-                            &parameters,
-                            key.controls(),
-                        ))
+                        OracleWorkspace::Ordinary(AggregationWorkspace::new(&parameters, &key))
                     };
                     let mut split = split_bits
                         .map(|_| FourierNtruSplitWorkspace::new(parameters.poly_length()));
@@ -306,8 +581,8 @@ mod tests {
                             let buffers = [&mut current, &mut scratch];
                             match &mut workspace {
                                 OracleWorkspace::Ordinary(workspace) => {
-                                    crate::grouped_rotation::rotate_groups_pair(
-                                        blocks(&key),
+                                    rotate_blocks_pair(
+                                        &key,
                                         workspace,
                                         &mut second,
                                         buffers,
@@ -316,8 +591,8 @@ mod tests {
                                     );
                                 }
                                 OracleWorkspace::Split(workspace) => {
-                                    crate::grouped_rotation::rotate_groups_split_pair(
-                                        blocks(&key),
+                                    rotate_blocks_split_pair(
+                                        &key,
                                         workspace,
                                         &mut second,
                                         buffers,

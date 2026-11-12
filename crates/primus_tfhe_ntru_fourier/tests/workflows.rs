@@ -392,8 +392,11 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
             candidates[1].as_view(),
             selected.as_mut_view(),
         );
-        ring_client.decrypt_to(&selected, &mut decoded);
-        assert_eq!(decoded, messages[usize::from(m >= 2)], "CBS input {m}");
+        assert_eq!(
+            ring_client.decrypt(&selected),
+            messages[usize::from(m >= 2)],
+            "CBS input {m}"
+        );
     }
 
     // Equal numeric domains do not establish the operation/resource identity.
@@ -936,11 +939,12 @@ fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
             .unwrap();
         let block = key.block_bootstrapping_key().unwrap();
         assert!(key.classic_controls().is_none());
-        assert_eq!(block.block_count(), 2);
-        for block_index in 0..2 {
-            let (range, coefficients) = block.block_data(block_index);
+        assert_eq!(block.blocks().len(), 2);
+        for (block_index, (range, controls, dummy)) in block.blocks().enumerate() {
             let occupied = support[range.clone()].iter().copied().sum::<u64>();
-            for (row, bit) in NlevIter::new(coefficients, control_len).zip(
+            let rows =
+                NlevIter::new(controls, control_len).chain(NlevIter::new(dummy, control_len));
+            for (row, bit) in rows.zip(
                 support[range]
                     .iter()
                     .copied()
@@ -996,16 +1000,8 @@ fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
         .try_generate_blind_rotation_key(&client, &mut split_rng)
         .unwrap();
     assert_eq!(
-        ordinary_key
-            .block_bootstrapping_key()
-            .unwrap()
-            .controls()
-            .as_slice(),
-        split_key
-            .block_bootstrapping_key()
-            .unwrap()
-            .controls()
-            .as_slice(),
+        ordinary_key.block_bootstrapping_key().unwrap().as_slice(),
+        split_key.block_bootstrapping_key().unwrap().as_slice(),
     );
     let next_ordinary = ordinary_rng.next_u64();
     assert_eq!(next_ordinary, split_rng.next_u64());
@@ -1032,11 +1028,7 @@ fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
             );
         }
         assert_eq!(
-            ordinary_key
-                .block_bootstrapping_key()
-                .unwrap()
-                .controls()
-                .as_slice(),
+            ordinary_key.block_bootstrapping_key().unwrap().as_slice(),
             reference
         );
         assert_eq!(replay.next_u64(), next_ordinary);

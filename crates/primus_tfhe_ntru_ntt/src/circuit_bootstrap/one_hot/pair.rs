@@ -1,4 +1,4 @@
-//! Fixed two-input grouped BR with a scoped projection capability.
+//! Fixed two-input Block BR with a scoped projection capability.
 
 use primus_integer::FheUint;
 use primus_ntt::MonomialNttTable;
@@ -83,9 +83,9 @@ where
     ///
     /// # Correctness
     /// Inherits [`Self::one_hot_to`]'s secrets, encoding, residue and noise contracts.
-    /// Each input retains its original group/selector order and arithmetic.
-    /// The complete first NLEV group lifts each public LUT, including an empty
-    /// first block; later groups use NGSW controls with the same product arithmetic.
+    /// Each input retains its original block/selector order and arithmetic.
+    /// The complete first NLEV block lifts each public LUT, including an empty
+    /// first block; later blocks use NGSW controls with the same product arithmetic.
     ///
     /// # Panics
     /// Rejects Classic resources, a foreign context, input dimensions or workspace
@@ -117,7 +117,7 @@ where
         );
     }
 
-    /// Prepares two independent BR results in group/pair/input order.
+    /// Prepares two independent BR results in block/pair/input order.
     /// The first remains in resources; the second remains in `second` until swapped.
     fn prepare_pair(
         &mut self,

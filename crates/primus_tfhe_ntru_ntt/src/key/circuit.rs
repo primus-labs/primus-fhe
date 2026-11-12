@@ -169,11 +169,11 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         transformed: NttNtruSecretKey<T>,
-        layout: super::BlindRotationLayout,
+        layout: super::BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError> {
         let blind_rotation =
-            self.generate_blind_rotation_key_with_main(client, &transformed, layout, rng)?;
+            self.generate_blind_rotation_key_with_main(client, &transformed, layout, rng);
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
             client.accumulator_ntru_secret_key(),
             &transformed,

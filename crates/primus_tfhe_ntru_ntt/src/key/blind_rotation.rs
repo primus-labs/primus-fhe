@@ -19,7 +19,7 @@ pub struct BlindRotationKey<T: FheUint> {
     pub(super) input_distribution: SecretKeyDistr,
 }
 
-/// Owning algorithm alternatives; grouped lifting is encoded in the first group.
+/// Owning algorithm alternatives; Block lifting is encoded in the first block.
 pub(super) enum Controls<T: FheUint> {
     // First coordinate: NLEV bit(s); remaining coordinates: NGSW bit(s).
     Classic {
@@ -46,7 +46,7 @@ impl<T: FheUint> BlindRotationKey<T> {
     }
 
     /// Borrows the classic initializer and binary/ternary control layout.
-    /// Returns `None` for grouped keys, whose first group performs lifting.
+    /// Returns `None` for Block keys, whose first block performs lifting.
     #[must_use]
     pub fn classic_controls(&self) -> Option<ClassicControls<'_, T>> {
         match self.bootstrapping_controls() {
@@ -114,8 +114,8 @@ impl<T: FheUint> BlindRotationKey<T> {
                             block_size: key.block_size(),
                             occupancy: key.occupancy(),
                         }
-                        && key.controls().input_dimension() == parameters.external_lwe_dimension()
-                        && key.controls().control_len() == parameters.blind_rotation().nlev_len()
+                        && key.input_dimension() == parameters.external_lwe_dimension()
+                        && key.control_len() == parameters.blind_rotation().nlev_len()
                 }
             }
     }
