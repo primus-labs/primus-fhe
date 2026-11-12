@@ -108,10 +108,11 @@ just schemes
 cargo run -p primus_bfv --example slots --features batching
 cargo run -p primus_bgv --example leveled_slots --features batching
 just bench-smoke primus_bfv multiplication --features batching
+cargo bench -p primus_bfv --bench multiplication --features batching -- 'HpsPOverQ/Hybrid' --test
 just bench-smoke primus_bgv leveled --features batching
 ```
 
-完整请求的计时边界见 [BFV multiplication](../../crates/primus_bfv/benches/multiplication.rs)、[BGV leveled](../../crates/primus_bgv/benches/leveled.rs) 和 [BGV workflow](../../crates/primus_bgv/benches/workflow.rs)。两方案的示例入口见 [BFV](../../crates/primus_bfv/README.zh_CN.md) 和 [BGV](../../crates/primus_bgv/README.zh_CN.md)。
+完整请求的计时边界见 [BFV multiplication](../../crates/primus_bfv/benches/multiplication.rs)、[BGV leveled](../../crates/primus_bgv/benches/leveled.rs) 和 [BGV workflow](../../crates/primus_bgv/benches/workflow.rs)。基准在计时前执行并校验一次请求。Criterion 过滤只选择计时用例，其他用例仍会准备资源并完成校验。两方案的示例入口见 [BFV](../../crates/primus_bfv/README.zh_CN.md) 和 [BGV](../../crates/primus_bgv/README.zh_CN.md)。
 
 Stable CI 通过 [独立消费者脚本](../../scripts/check_scheme_consumers.py) 的 `--check-only` 检查普通依赖和 feature 隔离。`just schemes` 还运行消费者示例，覆盖无 batching 的系数路径、带 batching 的槽路径，以及相应的 Radix 和 Hybrid 工作流。
 

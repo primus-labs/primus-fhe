@@ -1,36 +1,20 @@
 //! Complete native BFV coefficient evaluation and a switch to another secret.
+//! Run: cargo run -p primus_bfv --example leveled_coefficients
 
 use primus_bfv::evaluation::{
-    BfvAutomorphism, BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
+    BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
 };
-use primus_bfv::{
-    BfvClient, BfvContext, BfvParameters, ErrorDistribution, PlaintextEmbedding, SecretKeyDistr,
-};
+use primus_bfv::{BfvClient, BfvContext, BfvParameters, ErrorDistribution, SecretKeyDistr};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 const N: usize = 32;
 const P: u64 = 193;
 
-fn product(lhs: &[u64], rhs: &[u64]) -> Vec<u64> {
-    let mut output = vec![0i128; N];
-    for (i, &left) in lhs.iter().enumerate() {
-        for (j, &right) in rhs.iter().enumerate() {
-            output[(i + j) % N] +=
-                i128::from(left) * i128::from(right) * if i + j < N { 1 } else { -1 };
-        }
-    }
-    output
-        .iter()
-        .map(|value| value.rem_euclid(i128::from(P)) as u64)
-        .collect()
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Small deterministic demonstration parameters; these checks do not certify security.
+    // Small deterministic demonstration parameters.
     let moduli = [
         1_125_899_906_826_241,
         1_125_899_906_629_633,
@@ -58,49 +42,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bob = BfvClient::generate(&context, &mut rng);
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
+
+    // Each key is generated for the level at which its operation runs.
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
     let auto_key = alice.automorphism_key(1, 5, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
     let mut auto = BfvAutomorphism::try_new(&context, &auto_key)?;
     let mut switch = BfvKeySwitcher::try_new(&context, &switch_key)?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
-    let mut lower_evaluator = BfvEvaluator::new(&context, 1);
     let mut drop_first = BfvModulusSwitch::new(&context, 0);
     let mut drop_second = BfvModulusSwitch::new(&context, 1);
-    let a = Polynomial((0..N).map(|i| (7 * i as u64 + 1) % P).collect::<Vec<_>>());
-    let b = Polynomial((0..N).map(|i| (11 * i as u64 + 3) % P).collect::<Vec<_>>());
-    let mut one = Polynomial::<Vec<u64>>::zero(N);
-    one.as_mut()[0] = 1;
-    let mut encrypted_a = context.new_ciphertext(0);
-    let mut encrypted_b = context.new_ciphertext(0);
+    let mut a = context.new_plaintext();
+    let mut b = context.new_plaintext();
+    a.as_mut()[..2].copy_from_slice(&[1, 2]);
+    b.as_mut()[..2].copy_from_slice(&[1, 1]);
+    let encrypted_a = encryptor.encrypt_centered(&a, &mut rng);
+    let encrypted_b = encryptor.encrypt_centered(&b, &mut rng);
     let mut linear = context.new_ciphertext(0);
     let mut lower = context.new_ciphertext(1);
     let mut transformed = context.new_ciphertext(1);
     let mut switched = context.new_ciphertext(1);
     let mut lowest = context.new_ciphertext(2);
 
-    encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
-    encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
     multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
     multiplication.square_assign(&mut linear);
     drop_first.switch_to(&linear, &mut lower);
     auto.apply_to(&lower, &mut transformed);
     switch.switch_to(&transformed, &mut switched);
-    lower_evaluator.add_plain_assign(&mut switched, &one, PlaintextEmbedding::Centered);
     drop_second.switch_to(&switched, &mut lowest);
     let recovered = bob.decrypt(&lowest);
 
-    let ab = product(a.as_ref(), b.as_ref());
-    let squared = product(&ab, &ab);
-    let mut expected = vec![0; N];
-    for (degree, &value) in squared.iter().enumerate() {
-        let target = 5 * degree % (2 * N);
-        expected[target % N] = if target < N { value } else { (P - value) % P };
+    // ((1 + 2X)(1 + X))² = 1 + 6X + 13X² + 12X³ + 4X⁴.
+    let mut expected = [0; N];
+    for (degree, value) in [1, 6, 13, 12, 4].into_iter().enumerate() {
+        expected[5 * degree] = value;
     }
-    expected[0] = (expected[0] + 1) % P;
     assert_eq!(recovered.as_ref(), expected);
-    println!(
-        "Validated dense BFV (a*b)^2, relinearization, X->X^5, Alice->Bob switching, plaintext +1 and two prime drops (150-bit Q to 50-bit Q)."
-    );
+    println!("BFV: Bob recovered ((1 + 2X⁵)(1 + X⁵))² after two prime drops.");
     Ok(())
 }

@@ -217,10 +217,22 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
             .map(|i| ((i as i64 % 3) - 1).rem_euclid(T as i64) as u64)
             .collect::<Vec<_>>(),
     );
-    let expected = plaintext_product(a.as_ref(), b.as_ref());
+    let expected_product = plaintext_product(a.as_ref(), b.as_ref());
+    let expected_square = plaintext_product(a.as_ref(), a.as_ref());
+    let expected_followup = plaintext_product(&expected_square, b.as_ref());
     let mut left = client.encrypt_centered(&a, &mut rng);
     let mut right = client.encrypt_centered(&b, &mut rng);
     for external in 0..2 {
+        let ordinary_key = client
+            .relinearization_key(external, config(), &mut rng)
+            .unwrap();
+        let mut ordinary = BfvMultiplication::try_with_backend(
+            &context,
+            &ordinary_key,
+            BfvMultiplicationBackend::HpsPOverQ,
+        )
+        .unwrap();
+        let mut output = context.new_ciphertext(external);
         for working in external..3 {
             for hybrid in [false, true] {
                 let key = if hybrid {
@@ -239,11 +251,10 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
                     BfvLeveledMultiplication::try_new(&context, external, &key).unwrap();
                 assert_eq!(request.external_level(), external);
                 assert_eq!(request.working_level(), working);
-                let mut output = context.new_ciphertext(external);
                 request.multiply_to(&left, &right, &mut output);
                 assert_eq!(
                     client.decrypt_at_level(&output, external).as_ref(),
-                    expected
+                    expected_product
                 );
                 let mut in_place = left.clone();
                 request.square_to(&left, &mut output);
@@ -251,23 +262,14 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
                 assert_eq!(output.as_ref(), in_place.as_ref());
                 assert_eq!(
                     client.decrypt_at_level(&output, external).as_ref(),
-                    plaintext_product(a.as_ref(), a.as_ref())
+                    expected_square
                 );
-                // A full-Q output is immediately accepted by ordinary full-Q
-                // operations; it has not silently become a short ciphertext.
-                let full_key = client
-                    .relinearization_key(external, config(), &mut rng)
-                    .unwrap();
-                let mut ordinary = BfvMultiplication::try_with_backend(
-                    &context,
-                    &full_key,
-                    BfvMultiplicationBackend::HpsPOverQ,
-                )
-                .unwrap();
+                // An ordinary request at the external level consumes the
+                // restored output directly.
                 ordinary.multiply_to(&output, &right, &mut in_place);
                 assert_eq!(
                     client.decrypt_at_level(&in_place, external).as_ref(),
-                    plaintext_product(&plaintext_product(a.as_ref(), a.as_ref()), b.as_ref())
+                    expected_followup
                 );
             }
         }

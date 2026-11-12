@@ -1,9 +1,6 @@
 //! Checked ordinary BFV square chain, with temporary internal modulus reduction.
-use primus_bfv::BfvClient;
 use primus_bfv::planning::{BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledRequest};
-use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
-use primus_poly::Polynomial;
+use primus_bfv::{BfvClient, ErrorDistribution, SecretKeyDistr};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -47,14 +44,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // External level stays zero throughout: (2+X) -> (2+X)^8.
-    let mut message = Polynomial::<Vec<u64>>::zero(context.parameters().poly_length().get());
+    let mut message = context.new_plaintext();
     message.as_mut()[..2].copy_from_slice(&[2, 1]);
     let mut ciphertext = context.new_ciphertext(0);
     encryptor.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
     for operation in &mut operations {
         operation.square_assign(&mut ciphertext);
     }
-    let mut recovered = Polynomial::<Vec<u64>>::zero(message.as_ref().len());
+    let mut recovered = context.new_plaintext();
     client.decrypt_to(&ciphertext, &mut recovered);
     let coefficients = [256, 1024, 1792, 1792, 1120, 448, 112, 16, 1];
     assert_eq!(&recovered.as_ref()[..9], &coefficients);

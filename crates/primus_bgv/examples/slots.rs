@@ -46,14 +46,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut factor = context.new_plaintext();
     let mut output = context.new_ciphertext(0);
     let capacity = batching.slot_capacity();
-    batching.encode_to(&vec![1; capacity], one.as_mut());
+    batching.encode_to(&[1; N], one.as_mut());
 
     // n=N: encode directly into context-owned plaintext shapes.
     // Both requests reuse the encoder, keys, evaluator and ciphertext output.
     for (offset, scalar) in [(0, 3), (1, 5)] {
         let values = (0..capacity).map(|i| i as u64 + offset).collect::<Vec<_>>();
         batching.encode_to(&values, input.as_mut());
-        batching.encode_to(&vec![scalar; capacity], factor.as_mut());
+        batching.encode_to(&[scalar; N], factor.as_mut());
         let mut encrypted = encryptor.encrypt_centered(&input, &mut rng);
         evaluator.add_plain_assign(&mut encrypted, &one, PlaintextEmbedding::Centered);
         evaluator.mul_plain_to(

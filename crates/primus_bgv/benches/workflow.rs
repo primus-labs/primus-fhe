@@ -1,14 +1,17 @@
-//! One complete packed request with all resources/output prepared outside timing.
+//! Run: cargo bench -p primus_bgv --bench workflow --features batching
+//!
+//! One packed linear request with prepared keys, plaintext operands and buffers.
+
+use std::hint::black_box;
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use primus_bgv::evaluation::BgvEvaluator;
 use primus_bgv::{BgvClient, BgvContext, BgvParameters, ErrorDistribution, PlaintextEmbedding};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 fn bench(c: &mut Criterion) {
     const N: usize = 1024;
@@ -37,10 +40,10 @@ fn bench(c: &mut Criterion) {
     let mut small = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];
     let mut slots = vec![0; SLOTS];
-    let mut input = Polynomial::<Vec<u64>>::zero(N);
-    let mut addend = Polynomial::<Vec<u64>>::zero(N);
-    let mut multiplier = Polynomial::<Vec<u64>>::zero(N);
-    let mut recovered = Polynomial::<Vec<u64>>::zero(N);
+    let mut input = context.new_plaintext();
+    let mut addend = context.new_plaintext();
+    let mut multiplier = context.new_plaintext();
+    let mut recovered = context.new_plaintext();
     batching.encode_to(&offsets, &mut small);
     batching.embed_to(&small, addend.as_mut());
     batching.encode_to(&factors, &mut small);
@@ -52,29 +55,23 @@ fn bench(c: &mut Criterion) {
     let mut evaluator = BgvEvaluator::new(&context, 0);
     let mut ciphertext = context.new_ciphertext(0);
     let mut output = context.new_ciphertext(0);
-    {
-        let mut request = || {
-            batching.encode_to(black_box(&values), &mut small);
-            batching.embed_to(&small, input.as_mut());
-            encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-            evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
-            evaluator.mul_plain_to(
-                &ciphertext,
-                &multiplier,
-                &mut output,
-                PlaintextEmbedding::Centered,
-            );
-            client.decrypt_at_level_to(&output, 0, &mut recovered);
-            batching.extract_to(recovered.as_ref(), &mut small);
-            batching.decode_to(&small, &mut slots, &mut scratch);
-            black_box(&slots);
-        };
-        request();
-        c.bench_function(
-            "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
-            |b| b.iter(&mut request),
+    let mut request = |slots: &mut [u64]| {
+        batching.encode_to(black_box(&values), &mut small);
+        batching.embed_to(&small, input.as_mut());
+        encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
+        evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
+        evaluator.mul_plain_to(
+            &ciphertext,
+            &multiplier,
+            &mut output,
+            PlaintextEmbedding::Centered,
         );
-    }
+        client.decrypt_at_level_to(&output, 0, &mut recovered);
+        batching.extract_to(recovered.as_ref(), &mut small);
+        batching.decode_to(&small, slots, &mut scratch);
+        black_box(slots);
+    };
+    request(&mut slots);
     for i in 0..SLOTS {
         assert_eq!(
             slots[i],
@@ -85,6 +82,10 @@ fn bench(c: &mut Criterion) {
             }
         );
     }
+    c.bench_function(
+        "bgv_n1024_subring256/public_encrypt_linear_recover_slots",
+        |b| b.iter(|| request(&mut slots)),
+    );
 }
 criterion_group!(benches, bench);
 criterion_main!(benches);

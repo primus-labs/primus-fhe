@@ -12,8 +12,7 @@ use rand::{SeedableRng, rngs::StdRng};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args_os().nth(1).is_some() {
         return Err(
-            "slots takes no options; see leveled_slots for encrypted multiplication/rotation"
-                .into(),
+            "slots takes no options. See ciphertext_multiplication for encrypted products.".into(),
         );
     }
     const N: usize = 32;
@@ -43,23 +42,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut message = context.new_plaintext();
     batching.encode_to(&values, message.as_mut());
     let mut offset = context.new_plaintext();
-    batching.encode_to(&vec![1; capacity], offset.as_mut());
+    batching.encode_to(&[1; N], offset.as_mut());
     let mut factors = vec![0; capacity];
     let mut factor = context.new_plaintext();
-    let mut shifted = context.new_ciphertext(0);
     let mut product = context.new_ciphertext(0);
     for scalar in [3, 5] {
         factors.fill(scalar);
         batching.encode_to(&factors, factor.as_mut());
-        let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
-        evaluator.add_plain_to(
-            &encrypted_message,
+        let mut encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
+        evaluator.add_plain_assign(
+            &mut encrypted_message,
             &offset,
-            &mut shifted,
             PlaintextEmbedding::Centered,
         );
         evaluator.mul_plain_to(
-            &shifted,
+            &encrypted_message,
             &factor,
             &mut product,
             PlaintextEmbedding::Centered,
