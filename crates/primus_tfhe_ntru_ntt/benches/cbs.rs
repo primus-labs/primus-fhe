@@ -2,16 +2,17 @@
 //! Parameters and comparison limits: guides/development/testing.md#tfhe-benchmarks
 //! One iteration is one server request. Setup and correctness checks are untimed.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
+use primus_lattice::lwe::Lwe;
 use primus_ntt::U64NttTable as Table;
 use primus_tfhe_ntru_ntt::{Evaluator, TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 type Word = u64;
 
 fn benchmark(c: &mut Criterion) {
-    let engine = "ntt";
     let config = experimental::CLASSIC_CBS_U64;
     let context = TfheContext::<Word, Table, _>::try_from_cbs_config(config).unwrap();
     // Client: keys, inputs and candidate ciphertexts are all prepared outside timing.
@@ -48,15 +49,8 @@ fn benchmark(c: &mut Criterion) {
     let (mut cbs, resources) = cbs.into_parts();
     let mut evaluator =
         Evaluator::try_from_resources(&context, resources, server.server_key()).unwrap();
-    for message in [1, 3] {
-        encryptor
-            .encrypt_padded_to(message, input.as_mut_view(), &mut rng)
-            .unwrap();
-        cbs.circuit_bootstrap_to(
-            input.as_view(),
-            &mut control,
-            evaluator.bootstrap_resources_mut(),
-        );
+    let mut evaluate = |input: Lwe<&[Word]>, returned: Lwe<&mut [Word]>| {
+        cbs.circuit_bootstrap_to(input, &mut control, evaluator.bootstrap_resources_mut());
         cbs.cmux_to(
             &control,
             &candidates[0],
@@ -64,29 +58,23 @@ fn benchmark(c: &mut Criterion) {
             &mut selected,
             evaluator.bootstrap_resources_mut(),
         );
-        evaluator.return_ring_at_to(selected.as_view(), index, returned.as_mut_view());
+        evaluator.return_ring_at_to(selected.as_view(), index, returned);
+    };
+    for message in [1, 3] {
+        encryptor
+            .encrypt_padded_to(message, input.as_mut_view(), &mut rng)
+            .unwrap();
+        evaluate(input.as_view(), returned.as_mut_view());
         assert_eq!(
             decryptor.decrypt(returned.as_view()).unwrap(),
             messages[usize::from(message >= 2)][index]
         );
     }
-    let mut group = c.benchmark_group(format!("cbs/ntru/{engine}"));
-    group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
+    let mut group = c.benchmark_group("cbs/ntru/ntt");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("predicate_cmux_return/u64", |b| {
         b.iter(|| {
-            cbs.circuit_bootstrap_to(
-                black_box(input.as_view()),
-                &mut control,
-                evaluator.bootstrap_resources_mut(),
-            );
-            cbs.cmux_to(
-                &control,
-                &candidates[0],
-                &candidates[1],
-                &mut selected,
-                evaluator.bootstrap_resources_mut(),
-            );
-            evaluator.return_ring_at_to(selected.as_view(), index, returned.as_mut_view());
+            evaluate(black_box(input.as_view()), returned.as_mut_view());
             black_box(returned.as_view());
         })
     });
@@ -97,15 +85,11 @@ fn benchmark(c: &mut Criterion) {
     );
 }
 
-fn benchmarks(c: &mut Criterion) {
-    benchmark(c);
-}
-
 criterion::criterion_group! {
     name = benches;
     config = criterion::Criterion::default().sample_size(20)
         .warm_up_time(std::time::Duration::from_secs(1))
         .measurement_time(std::time::Duration::from_secs(3));
-    targets = benchmarks
+    targets = benchmark
 }
 criterion::criterion_main!(benches);

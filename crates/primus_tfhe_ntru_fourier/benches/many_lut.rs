@@ -6,11 +6,12 @@
 
 #[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 mod workloads {
+    use std::hint::black_box;
+
     use criterion::{Criterion, Throughput};
     use primus_fft::FftTable;
     use primus_tfhe_ntru_fourier::{TfheContext, experimental};
     use rand::{SeedableRng, rngs::StdRng};
-    use std::hint::black_box;
 
     type Word = u64;
 
@@ -54,7 +55,7 @@ mod workloads {
             }
         }
         let mut group = c.benchmark_group(format!("many_lut/ntru/{engine}"));
-        group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
+        group.throughput(Throughput::Elements(1));
         group.bench_function("grade_flag/u64", |b| {
             b.iter(|| {
                 evaluator.apply_interleaved_lookup_table_to(

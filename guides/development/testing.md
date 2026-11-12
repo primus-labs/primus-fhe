@@ -149,10 +149,10 @@ cargo bench -p 'primus_tfhe_*_ntt' -p 'primus_tfhe_*_fourier' --bench pbs -- 'cl
 | `many_lut` | 一次盲旋转及多项 LWE 返回 |
 | `mvb` | 一次完整 factorized MVB，返回多项阈值结果 |
 | `cbs` | 自定义谓词的 CBS → 实际 CMux → 单系数 LWE 返回（`predicate_cmux_return`） |
-| `cbs_identity`（GLWE） | G1 NTT、G2 Fourier CMUX2/CMUX3 派生参数，bit 0/1；分别测 CBS→GSW 和 CBS＋CMux，显式选择 padded/MSB |
+| `cbs_identity`（GLWE） | G1 NTT、G2 Fourier CMUX2/CMUX3 派生参数，padded/MSB 的 bit 0/1，计时到变换域 GGSW |
 | `one_hot`（仅 NTRU） | 生成非零 NGSW selectors，再执行多路 CMux |
 
-Fourier 引擎按前面的 feature 规则选择。GLWE Fourier 的 `cbs_identity` 需要启用 `split-trace` 才注册 Split35 用例。函数、消息空间和当前配置见 [TFHE 参数目录](tfhe-parameters.md#current-backend-benchmarks) 及对应 benchmark 文件。历史结果的适用范围见[性能指南](../performance/README.zh_CN.md)。
+Fourier 引擎按前面的 feature 规则选择。GLWE Fourier 的 `cbs_identity` 需要启用 `split-trace` 才注册 Split35 用例。两个 `cbs_identity` 目标在计时前通过实际 CMux 检查 GGSW 的消费结果。函数、消息空间和当前配置见 [TFHE 参数目录](tfhe-parameters.md#current-backend-benchmarks) 及对应 benchmark 文件。历史结果的适用范围见[性能指南](../performance/README.zh_CN.md)。
 
 Criterion 过滤器只控制采样，`bench_function` 外的准备和校验仍会执行。带独立配置选择的目标可用文件头记录的环境变量限制准备范围。例如 `cbs_identity` 的输入编码和模数域选择见 [NTT](../../crates/primus_tfhe_glwe_ntt/benches/cbs_identity.rs) 与 [Fourier](../../crates/primus_tfhe_glwe_fourier/benches/cbs_identity.rs) 文件。
 

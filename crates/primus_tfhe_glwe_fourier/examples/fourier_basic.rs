@@ -1,8 +1,7 @@
 //! Combine two encrypted inputs and apply two successive LUTs with classic PBS.
 //!
 //! Run: `cargo run --release -p primus_tfhe_glwe_fourier --example fourier_basic`
-//! To use TfheFftTable alone, switch the Table import and this target's
-//! required-features to tfhe-fft, then add `--no-default-features --features tfhe-fft`.
+//! This example uses RustFFT, enabled by default.
 //! Arithmetic profiles: guides/development/tfhe-parameters.md (not security presets).
 
 use primus_fft::RustFftTable as Table;

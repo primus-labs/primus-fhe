@@ -5,6 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput};
+use primus_lattice::lwe::Lwe;
 use primus_ntt::U64NttTable as Table;
 use primus_tfhe_glwe_ntt::{Evaluator, TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
@@ -49,15 +50,8 @@ fn benchmark(c: &mut Criterion) {
     let mut control = cbs.allocate_output();
     let (mut cbs, resources) = cbs.into_parts();
     let mut evaluator = Evaluator::try_from_resources(resources, server.server_key()).unwrap();
-    for message in [1, 3] {
-        encryptor
-            .encrypt_to(message, input.as_mut_view(), &mut rng)
-            .unwrap();
-        cbs.circuit_bootstrap_to(
-            input.as_view(),
-            &mut control,
-            evaluator.bootstrap_resources_mut(),
-        );
+    let mut evaluate = |input: Lwe<&[Word]>, output: Lwe<&mut [Word]>| {
+        cbs.circuit_bootstrap_to(input, &mut control, evaluator.bootstrap_resources_mut());
         cbs.cmux_to(
             &control,
             &candidates[0],
@@ -65,7 +59,13 @@ fn benchmark(c: &mut Criterion) {
             &mut selected,
             evaluator.bootstrap_resources_mut(),
         );
-        evaluator.return_ring_at_to(selected.as_view(), index, returned.as_mut_view());
+        evaluator.return_ring_at_to(selected.as_view(), index, output);
+    };
+    for message in [1, 3] {
+        encryptor
+            .encrypt_to(message, input.as_mut_view(), &mut rng)
+            .unwrap();
+        evaluate(input.as_view(), returned.as_mut_view());
         assert_eq!(
             decryptor.decrypt(returned.as_view()).unwrap(),
             messages[usize::from(message >= 2)][index]
@@ -80,19 +80,7 @@ fn benchmark(c: &mut Criterion) {
     group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
     group.bench_function("predicate_cmux_return/u64", |b| {
         b.iter(|| {
-            cbs.circuit_bootstrap_to(
-                black_box(input.as_view()),
-                &mut control,
-                evaluator.bootstrap_resources_mut(),
-            );
-            cbs.cmux_to(
-                &control,
-                &candidates[0],
-                &candidates[1],
-                &mut selected,
-                evaluator.bootstrap_resources_mut(),
-            );
-            evaluator.return_ring_at_to(selected.as_view(), index, returned.as_mut_view());
+            evaluate(black_box(input.as_view()), returned.as_mut_view());
             black_box(returned.as_view());
         })
     });
@@ -103,15 +91,11 @@ fn benchmark(c: &mut Criterion) {
     );
 }
 
-fn benchmarks(c: &mut Criterion) {
-    benchmark(c);
-}
-
 criterion::criterion_group! {
     name = benches;
     config = criterion::Criterion::default().sample_size(20)
         .warm_up_time(std::time::Duration::from_secs(1))
         .measurement_time(std::time::Duration::from_secs(3));
-    targets = benchmarks
+    targets = benchmark
 }
 criterion::criterion_main!(benches);

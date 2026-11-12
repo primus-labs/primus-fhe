@@ -6,6 +6,8 @@
 
 #[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 mod workloads {
+    use std::hint::black_box;
+
     use criterion::{Criterion, Throughput};
     use primus_fft::{FftTable, TorusFftValue};
     use primus_lwe::LweDimension;
@@ -18,7 +20,6 @@ mod workloads {
         PbsConfig, PbsMessageConfig, TfheContext, experimental,
     };
     use rand::{SeedableRng, rngs::StdRng};
-    use std::hint::black_box;
 
     /// The u32 fixture follows the documented dense profile; never truncate a u64 config.
     fn dense_u32() -> PbsConfig<u32, PowOf2Modulus<u32>> {
@@ -85,7 +86,7 @@ mod workloads {
             );
         }
         let mut group = c.benchmark_group(format!("pbs/ntru/{engine}"));
-        group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
+        group.throughput(Throughput::Elements(1));
         group.bench_function(case, |b| {
             b.iter(|| {
                 evaluator.apply_lookup_table_to(

@@ -1,17 +1,24 @@
-//! Compute grade and flag with one ManyLUT, then combine their encrypted outputs.
+//! Compute grade and flag with one Block ManyLUT, then combine their encrypted outputs.
 //!
 //! Run: `cargo run --release -p primus_tfhe_ntru_ntt --example ntru_ntt_many_lut`
 //! Arithmetic profiles: guides/development/tfhe-parameters.md (not security presets).
 
+use primus_ntru::{BlockOccupancy, SecretKeyDistr};
 use primus_ntt::U64NttTable as Table;
-use primus_tfhe_ntru_ntt::{PbsMessageConfig, TfheContext, experimental};
+use primus_tfhe_ntru_ntt::{BlindRotationMethod, TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
 
 type Word = u64;
 
 fn main() {
     // Rounded input t=16 (padded 0..8), output t=8: the domains are independent.
-    let config = experimental::CLASSIC_MANY_LUT_U64;
+    // Direct Block blind rotation uses one selected position per eight-element block.
+    let mut config = experimental::CLASSIC_MANY_LUT_U64;
+    config.method = BlindRotationMethod::Block;
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 8,
+        occupancy: BlockOccupancy::ExactlyOne,
+    };
     let context = TfheContext::<Word, Table, _>::try_from_pbs_config(config).unwrap();
 
     // Client: keep client_key secret; give only server_key to the server.
@@ -59,30 +66,4 @@ fn main() {
         assert_eq!(result, expected);
         println!("x={message}: code={result}");
     }
-
-    // Another service uses the same keys/context with Rounded messages 8→16.
-    // Client: select matching input and output domains without building codecs.
-    let messages = PbsMessageConfig::new(8).with_output_modulus(16);
-    let encryptor = context
-        .encryptor_with_message_modulus(external_secret, messages.input_modulus)
-        .unwrap();
-    let decryptor = context
-        .pbs_decryptor_with_message_modulus(external_secret, messages.output_modulus)
-        .unwrap();
-    encryptor
-        .encrypt_padded_to(3, input.as_mut_view(), &mut rng)
-        .unwrap();
-
-    // Server: compile the new price function; reuse the evaluator and output.
-    let price_lut = context
-        .pbs_lookup_table_compiler_with_messages(messages)
-        .unwrap()
-        .compile_fn(|x| (2 * x + 1) as Word)
-        .unwrap();
-    evaluator.apply_lookup_table_to(input.as_view(), &price_lut, code.as_mut_view());
-
-    // Client: only the final ciphertext comes back.
-    let price = decryptor.decrypt(code.as_view()).unwrap();
-    assert_eq!(price, 7);
-    println!("price = 2*x + 1 (messages 8 -> 16); x=3: price={price}");
 }

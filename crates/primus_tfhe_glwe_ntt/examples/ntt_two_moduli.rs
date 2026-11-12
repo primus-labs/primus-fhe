@@ -1,9 +1,9 @@
-//! Two PBS calls with independent small-LWE q and ring Q, in either PBS order.
+//! Chain two Block PBS calls with independent small-LWE q and ring Q in either order.
 //! Run: `cargo run --release -p primus_tfhe_glwe_ntt --example ntt_two_moduli`
 //! Demonstration parameters only; no security or failure-probability claim.
 
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use primus_glwe::{GlweDimension, SecretKeyDistr};
+use primus_glwe::{BlockOccupancy, GlweDimension, SecretKeyDistr};
 use primus_lwe::LweDimension;
 use primus_modulus::PowOf2Modulus;
 use primus_ntt::U64NttTable;
@@ -16,12 +16,16 @@ use rand::{SeedableRng, rngs::StdRng};
 
 fn main() {
     // Small controls live at q=1024; all ring keys and LUT coefficients use Q.
-    // This G1-inspired geometry uses padded t=4, not the author's MSB encoding.
+    // Block BR uses one binary selector per coefficient in contiguous blocks.
+    // AtMostOne also permits empty blocks. The small-LWE dimension is a multiple of four.
     let config = PbsConfig::<u64, PowOf2Modulus<u64>> {
         small_lwe: LweConfig {
-            dimension: LweDimension::new(571),
+            dimension: LweDimension::new(576),
             cipher_modulus: ModulusConfig::Explicit(1024),
-            secret_key_distr: SecretKeyDistr::UniformBinary,
+            secret_key_distr: SecretKeyDistr::BlockBinary {
+                block_size: 4,
+                occupancy: BlockOccupancy::AtMostOne,
+            },
             noise_standard_deviation: 3.2,
         },
         ring_modulus: ModulusConfig::Explicit(18_014_398_509_404_161),
@@ -35,7 +39,6 @@ fn main() {
             },
             noise_standard_deviation: 3.2,
         },
-        // Auxiliary ring-KS choice for this example, not an author parameter.
         key_switching: GadgetEncryptionConfig {
             decomposition: DecompositionConfig {
                 log_basis: DecompositionBaseLog::new(8),
@@ -43,7 +46,7 @@ fn main() {
             },
             noise_standard_deviation: 3.2,
         },
-        method: BlindRotationMethod::Classic,
+        method: BlindRotationMethod::Block,
         messages: PbsMessageConfig::new(4),
         order: PbsOrder::BootstrapKeyswitch,
     };

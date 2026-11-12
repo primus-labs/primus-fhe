@@ -44,6 +44,9 @@ fixtures with different input and consumer contracts from the teaching presets.
 Historical cross-library PBS, CBS and EBS used different parameter profiles
 and provide functional reference points. [Comparison commands](../development/testing.md#glwe-functional-comparison-benchmarks) · [Current benchmark parameters](../development/tfhe-parameters.md#current-backend-benchmarks)
 
+The former `cbs_identity` cases ending at CMux are reproducible from commit
+`dc3a663e`. The current `cbs` workload includes the LWE return.
+
 Measure single-input and batched Block blind rotation separately. Their
 performance depends on block geometry, occupancy and workload. Measure the
 complete CBS, CMux and return path even when a scheme-switching kernel is faster

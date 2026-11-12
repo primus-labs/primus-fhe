@@ -119,7 +119,7 @@ The crate-local benchmarks consume the operation configs but measure the followi
 | `many_lut` | `CLASSIC_MANY_LUT_U64`: one two-output PBS returning grade and flag; no subsequent code-combining addition. |
 | `mvb` | `CLASSIC_THRESHOLD_MVB_U64`: one factorized request returning all 17 threshold flags. |
 | `cbs` | `CLASSIC_CBS_U64`: predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE; no extra ring addition. NTT names include `n866_N2048` to separate the revised config from old n800/N1024 results. The `predicate_cmux_return` workload includes return cost and is not the former `predicate_cmux` measurement. |
-| GLWE `cbs_identity` | Benchmark-local G1 NTT / G2 Fourier comparison configs; padded/MSB identity CBS, with separate CBS-only and CBS＋CMux cases. Fourier ordinary/Split35 select the trace representation. |
+| GLWE `cbs_identity` | Benchmark-local G1 NTT and G2 Fourier comparison configs. Each padded or MSB bit is bootstrapped to a transform-domain GGSW. CMux validates the result before timing. Fourier ordinary/Split35 select the trace representation. |
 | GLWE `modulus_domains` | Benchmark-local q=Q/q1024, both PBS orders; NTT and TFHE-FFT. |
 | `one_hot` | NTRU `CLASSIC_ONE_HOT_U64`: three nonzero NGSWs and four-way CMux at t_ring=8. |
 

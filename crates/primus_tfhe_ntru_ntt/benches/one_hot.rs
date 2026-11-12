@@ -2,16 +2,18 @@
 //! Parameters and comparison limits: guides/development/testing.md#tfhe-benchmarks
 //! One iteration is one server request. Setup and correctness checks are untimed.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
+use primus_lattice::lwe::Lwe;
+use primus_ntru::NtruCiphertext;
 use primus_ntt::U64NttTable as Table;
 use primus_tfhe_ntru_ntt::{TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 type Word = u64;
 
 fn benchmark(c: &mut Criterion) {
-    let engine = "ntt";
     let config = experimental::CLASSIC_ONE_HOT_U64;
     let context = TfheContext::<Word, Table, _>::try_from_cbs_config(config).unwrap();
     // Client: keys, inputs and candidate ciphertexts are all prepared outside timing.
@@ -38,31 +40,28 @@ fn benchmark(c: &mut Criterion) {
     let mut selected = context.allocate_accumulator_ciphertext();
     let mut evaluator = context.one_hot_evaluator(&server).unwrap();
     let mut selectors = evaluator.allocate_nonzero_ngsw_output();
-    for message in [0, 3] {
-        encryptor
-            .encrypt_padded_to(message, input.as_mut_view(), &mut rng)
-            .unwrap();
-        evaluator.one_hot_nonzero_ngsw_to(input.as_view(), &mut selectors);
+    let mut evaluate = |input: Lwe<&[Word]>, selected: NtruCiphertext<&mut [Word]>| {
+        evaluator.one_hot_nonzero_ngsw_to(input, &mut selectors);
         evaluator.cmux_k_to(
             evaluator.nonzero_ngsw_selectors(&selectors),
             candidates[0].as_view(),
             &candidates[1..],
-            selected.as_mut_view(),
+            selected,
         );
+    };
+    for message in [0, 3] {
+        encryptor
+            .encrypt_padded_to(message, input.as_mut_view(), &mut rng)
+            .unwrap();
+        evaluate(input.as_view(), selected.as_mut_view());
         ring_client.decrypt_to(&selected, &mut decoded);
         assert_eq!(decoded, messages[message as usize]);
     }
-    let mut group = c.benchmark_group(format!("one_hot/ntru/{engine}"));
-    group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
+    let mut group = c.benchmark_group("one_hot/ntru/ntt");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("select4/u64", |b| {
         b.iter(|| {
-            evaluator.one_hot_nonzero_ngsw_to(black_box(input.as_view()), &mut selectors);
-            evaluator.cmux_k_to(
-                evaluator.nonzero_ngsw_selectors(&selectors),
-                candidates[0].as_view(),
-                &candidates[1..],
-                selected.as_mut_view(),
-            );
+            evaluate(black_box(input.as_view()), selected.as_mut_view());
             black_box(selected.as_view());
         })
     });
@@ -71,15 +70,11 @@ fn benchmark(c: &mut Criterion) {
     assert_eq!(decoded, messages[3]);
 }
 
-fn benchmarks(c: &mut Criterion) {
-    benchmark(c);
-}
-
 criterion::criterion_group! {
     name = benches;
     config = criterion::Criterion::default().sample_size(20)
         .warm_up_time(std::time::Duration::from_secs(1))
         .measurement_time(std::time::Duration::from_secs(3));
-    targets = benchmarks
+    targets = benchmark
 }
 criterion::criterion_main!(benches);

@@ -2,6 +2,8 @@
 //! Parameters and comparison limits: guides/development/testing.md#tfhe-benchmarks
 //! One iteration is one server request. Setup and correctness checks are untimed.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
 use primus_integer::FheUint;
 use primus_lwe::LweDimension;
@@ -15,7 +17,6 @@ use primus_tfhe_ntru_ntt::{
     PbsConfig, PbsMessageConfig, TfheContext, experimental,
 };
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 /// The u32 fixture follows the documented dense profile; never truncate a u64 config.
 fn dense_u32() -> PbsConfig<u32, PowOf2Modulus<u32>> {
@@ -49,7 +50,6 @@ fn dense_u32() -> PbsConfig<u32, PowOf2Modulus<u32>> {
 /// Prepare one complete PBS at its actual word, modulus and return domain.
 fn measure<Word: FheUint, Table: MonomialNttTable<ValueT = Word>>(
     c: &mut Criterion,
-    engine: &str,
     case: &str,
     config: PbsConfig<Word, PowOf2Modulus<Word>>,
 ) {
@@ -81,8 +81,8 @@ fn measure<Word: FheUint, Table: MonomialNttTable<ValueT = Word>>(
             Word::as_from((3 * message + 1) % 16)
         );
     }
-    let mut group = c.benchmark_group(format!("pbs/ntru/{engine}"));
-    group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
+    let mut group = c.benchmark_group("pbs/ntru/ntt");
+    group.throughput(Throughput::Elements(1));
     group.bench_function(case, |b| {
         b.iter(|| {
             evaluator.apply_lookup_table_to(
@@ -101,8 +101,8 @@ fn measure<Word: FheUint, Table: MonomialNttTable<ValueT = Word>>(
 }
 
 fn benchmarks(c: &mut Criterion) {
-    measure::<u32, U32NttTable>(c, "ntt", "classic_dense/u32", dense_u32());
-    measure::<u64, U64NttTable>(c, "ntt", "classic_dense/u64", experimental::CLASSIC_PBS_U64);
+    measure::<u32, U32NttTable>(c, "classic_dense/u32", dense_u32());
+    measure::<u64, U64NttTable>(c, "classic_dense/u64", experimental::CLASSIC_PBS_U64);
 }
 
 criterion::criterion_group! {
