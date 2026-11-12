@@ -115,3 +115,51 @@ fn key_generation_boundaries() {
     context.evaluator(server.server_key()).unwrap();
     context.circuit_bootstrap_evaluator(&server).unwrap();
 }
+
+/// Independent BR setup owns the raw coefficient check before encrypting rows.
+#[test]
+fn raw_classic_rejects_invalid_secret_before_sampling() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    use primus_glwe::{NttGlweGadgetEncryptWorkspace, NttGlweSecretKey};
+    use primus_lwe::LweSecretKey;
+    use primus_tfhe_glwe_ntt::key::BlindRotationKey;
+    use rand::Rng;
+
+    let config = config::<u32>(BlindRotationMethod::Classic);
+    let context = TfheContext::<u32, U32NttTable>::try_from_pbs_config(config).unwrap();
+    let parameters = context.parameters();
+    let gadget = parameters.blind_rotation_params();
+    let client = ClientKey::generate(parameters, &mut StdRng::seed_from_u64(117));
+    let ring = NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), context.table());
+    let mut workspace = NttGlweGadgetEncryptWorkspace::new(gadget.size());
+    let mut rng = StdRng::seed_from_u64(118);
+
+    for distribution in [
+        SecretKeyDistr::UniformBinary,
+        SecretKeyDistr::UniformTernary,
+    ] {
+        let mut coefficients = vec![0; parameters.small_lwe().dimension().get()];
+        coefficients[0] = 2;
+        let secret = LweSecretKey::new(
+            coefficients,
+            distribution,
+            parameters.small_lwe().cipher_modulus(),
+        );
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                BlindRotationKey::try_generate(
+                    &secret,
+                    &ring,
+                    gadget,
+                    BlindRotationMethod::Classic,
+                    context.table(),
+                    &mut rng,
+                    &mut workspace,
+                )
+            }))
+            .is_err()
+        );
+    }
+    assert_eq!(rng.next_u64(), StdRng::seed_from_u64(118).next_u64());
+}

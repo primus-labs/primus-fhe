@@ -18,7 +18,6 @@ use super::PbsOrder;
 pub struct PbsEvaluationParameters<T: FheUint, M: RingContext<T>> {
     pub(super) small_dimension: LweDimension,
     pub(super) small_modulus: Option<T>,
-    pub(super) small_secret_distr: crate::SecretKeyDistr,
     pub(super) ring_to_small: Option<ModulusSwitch<T>>,
     pub(super) rotation_modulus_switch: RotationModulusSwitch<T>,
     pub(super) pbs_order: PbsOrder,
@@ -34,17 +33,14 @@ impl<T: FheUint, M: RingContext<T>> PbsEvaluationParameters<T, M> {
         &self,
         parameters: &GlweKeySwitchingParameters<T, M>,
     ) -> Result<(), crate::KeyGenerationError> {
-        let glwe = self.blind_rotation_params();
+        let expected = self.glwe_key_switching();
         let output = parameters.output();
-        if parameters.input_dimension() != glwe.dimension()
-            || output.poly_length() != glwe.poly_length()
-            || output.dimension().get()
-                != self
-                    .small_dimension
-                    .get()
-                    .div_ceil(glwe.poly_length().get())
-            || output.cipher_modulus().explicit_value() != self.ring_modulus().explicit_value()
-            || output.secret_key_distr() != self.small_secret_distr
+        let expected_output = expected.output();
+        if parameters.input_dimension() != expected.input_dimension()
+            || output.glwe_size() != expected_output.glwe_size()
+            || output.cipher_modulus().explicit_value()
+                != expected_output.cipher_modulus().explicit_value()
+            || output.secret_key_distr() != expected_output.secret_key_distr()
         {
             return Err(crate::KeyGenerationError::IncompatibleKeySwitchingParameters);
         }

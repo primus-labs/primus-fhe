@@ -97,11 +97,12 @@ impl<T: FheUint> BlindRotationKey<T> {
             input_modulus,
             method,
         )?;
-        // A raw owning secret has not passed the context's ClientKey boundary.
-        // Only this Block branch scans it here; prepared context generation uses
-        // the already validated path below, avoiding a second full secret scan.
-        if let BlindRotationLayout::Block(layout) = &layout {
-            crate::block::validate_secret(input, layout)?;
+        // Raw input has not passed the context's ClientKey boundary.
+        match &layout {
+            BlindRotationLayout::Classic => {
+                NttGlweBootstrappingKey::assert_input_supported(input, parameters.poly_length());
+            }
+            BlindRotationLayout::Block(layout) => crate::block::validate_secret(input, layout)?,
         }
         Ok(Self::generate_with_layout(
             input, output, parameters, layout, table, rng, workspace,
@@ -319,11 +320,7 @@ where
     ) -> Result<(ClientKey<T>, ServerKey<T>), KeyGenerationError> {
         let layout = self.prepare_blind_rotation()?;
         let client_key = ClientKey::generate(self.context.parameters(), rng);
-        let transformed = NttGlweSecretKey::from_coeff_secret_key(
-            client_key.glwe_secret_key(),
-            self.context.table(),
-        );
-        let server_key = self.generate_server_key_with_main(&client_key, transformed, layout, rng);
+        let server_key = self.generate_server_key(&client_key, layout, rng);
         Ok((client_key, server_key))
     }
 
@@ -340,11 +337,7 @@ where
     ) -> Result<ServerKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let transformed = NttGlweSecretKey::from_coeff_secret_key(
-            client_key.glwe_secret_key(),
-            self.context.table(),
-        );
-        Ok(self.generate_server_key_with_main(client_key, transformed, layout, rng))
+        Ok(self.generate_server_key(client_key, layout, rng))
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
@@ -368,19 +361,21 @@ where
         )
     }
 
-    /// Consumes the accepted accumulator transform for BR, then releases it before
-    /// allocating KS rows. The caller established client compatibility by sampling or
-    /// validation and prepared this transform with the context's table.
-    fn generate_server_key_with_main<R>(
+    /// Transforms the compatible accumulator secret for BR, then releases the
+    /// transform before allocating KS rows.
+    fn generate_server_key<R>(
         &mut self,
         client_key: &ClientKey<T>,
-        main_glwe_secret_key: NttGlweSecretKey<T>,
         layout: BlindRotationLayout<T>,
         rng: &mut R,
     ) -> ServerKey<T>
     where
         R: rand::Rng + rand::CryptoRng,
     {
+        let main_glwe_secret_key = NttGlweSecretKey::from_coeff_secret_key(
+            client_key.glwe_secret_key(),
+            self.context.table(),
+        );
         let blind_rotation_key = self.generate_blind_rotation_key_with_main(
             client_key,
             &main_glwe_secret_key,
@@ -411,14 +406,15 @@ where
     {
         let parameters = self.context.parameters();
         let padded_small_glwe_secret_key = client_key.padded_small_glwe_secret_key(parameters);
-        let padded_small_glwe_secret_key = NttGlweSecretKey::from_coeff_secret_key(
+        let padded_small_ntt = NttGlweSecretKey::from_coeff_secret_key(
             &padded_small_glwe_secret_key,
             self.context.table(),
         );
-        self.gadget.resize(key_switching.output_size());
+        drop(padded_small_glwe_secret_key);
+        // KS uses only the polynomial buffer, already sized to the common ring length.
         NttGlweKeySwitchingKey::generate(
             client_key.glwe_secret_key(),
-            &padded_small_glwe_secret_key,
+            &padded_small_ntt,
             key_switching,
             self.context.table(),
             rng,

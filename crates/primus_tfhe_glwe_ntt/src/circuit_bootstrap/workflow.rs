@@ -8,7 +8,7 @@ use primus_reduce::RingContext;
 use primus_tfhe::CircuitBootstrapLookupTable;
 
 use crate::{
-    CircuitBootstrapServerKey, Lwe, TfheContext, TfheEvaluationError,
+    CircuitBootstrapServerKey, Lwe, PbsOrder, TfheContext, TfheEvaluationError,
     bootstrap::BootstrapResources, circuit_bootstrap::CircuitBootstrapEvaluator,
 };
 
@@ -172,14 +172,26 @@ where
         {
             return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
-        let circuit_key = server_key.circuit_bootstrap_key();
+        let pbs = parameters.pbs_parameters();
         let circuit = super::key::CircuitBootstrapBinding::try_new(
-            self.parameters().evaluation(),
+            pbs.evaluation(),
             parameters.gadget(),
-            circuit_key,
+            server_key.circuit_bootstrap_key(),
             &lookup_table,
         )?;
-        let resources = server_key.bootstrap_resources(self)?;
+        // This evaluator stops at the ring output. Only KS→BR needs KS scratch.
+        let server_key = server_key.server_key();
+        let input_ks = (pbs.pbs_order() == PbsOrder::KeyswitchBootstrap).then(|| {
+            (
+                pbs.glwe_key_switching(),
+                server_key.glwe_key_switching_key(),
+            )
+        });
+        let resources = BootstrapResources::try_from_bound_keys(
+            self,
+            server_key.blind_rotation_key(),
+            input_ks,
+        )?;
         let operation = CircuitBootstrapEvaluator::from_binding(
             self.evaluation_context(),
             circuit,

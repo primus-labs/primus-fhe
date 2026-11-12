@@ -448,10 +448,14 @@ where
             context.cbs_parameters().unwrap().clone(),
         )
         .unwrap();
-        let mut other_resources = server.bootstrap_resources(&other).unwrap();
+        let mut other_evaluator = other.evaluator(server.server_key()).unwrap();
         control.as_mut().fill(Default::default());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            operation.circuit_bootstrap_to(input.as_view(), control, &mut other_resources);
+            operation.circuit_bootstrap_to(
+                input.as_view(),
+                control,
+                other_evaluator.bootstrap_resources_mut(),
+            );
         }));
         assert!(result.is_err());
         assert!(control.as_ref().iter().all(|v| *v == Default::default()));

@@ -142,7 +142,7 @@ where
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        self.gadget.resize(parameters.trace().size());
+        // Trace reuses the polynomial buffer. Scheme switching also needs level buffers.
         let trace = NttGlweTraceKey::generate(
             accumulator_secret,
             ntt_secret_key,

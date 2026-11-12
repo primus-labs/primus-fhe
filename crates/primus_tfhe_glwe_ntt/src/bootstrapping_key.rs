@@ -11,6 +11,7 @@ use primus_lattice::{
 use primus_lwe::LweSecretKey;
 use primus_ntt::NttTable;
 use primus_reduce::FieldContext;
+use primus_shape::PolyLength;
 use primus_tfhe_glwe::SecretKeyDistr;
 use zeroize::Zeroizing;
 
@@ -74,20 +75,41 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
         &self.data
     }
 
-    /// Generates an NTT bootstrapping key encrypting the binary coefficients or ternary
-    /// selector pairs of the input LWE secret under `output_secret_key`.
+    /// Checks the independent raw input before any control-row encryption.
+    pub(crate) fn assert_input_supported(input: &LweSecretKey<T>, poly_length: PolyLength) {
+        let distribution = input.distr();
+        assert!(
+            distribution.is_binary() || distribution.is_ternary(),
+            "bootstrapping requires a binary or ternary input LWE secret"
+        );
+        let ternary = distribution.is_ternary();
+        let minus_one = input.cipher_modulus_minus_one();
+        let invalid = input.as_ref().iter().fold(false, |invalid, &coefficient| {
+            invalid | ((coefficient > T::ONE) & !(ternary & (coefficient == minus_one)))
+        });
+        assert!(
+            !invalid,
+            "LWE secret coefficient is outside its declared support"
+        );
+        assert!(
+            T::try_from(2 * poly_length.get()).is_ok(),
+            "rotation domain must fit the input coefficient type"
+        );
+    }
+
+    /// Encrypts binary coefficients or ternary selector pairs of the accepted input.
     ///
     /// # Correctness
     ///
     /// The output secret key must use the supplied table's NTT roots and evaluation
     /// order; matching modulus metadata does not establish this representation.
+    /// The caller has checked input distribution, coefficient support and that
+    /// the rotation domain `2N` fits the coefficient type.
     ///
     /// # Panics
     ///
-    /// Panics on unsupported distributions or invalid secret coefficients, incompatible key/parameter
-    /// layouts or target key modulus, NTT length/modulus or gadget workspace,
-    /// key storage overflow, or a rotation domain `2N` not representable by the
-    /// input coefficient type.
+    /// Panics on incompatible key/parameter layouts or target key modulus,
+    /// NTT length/modulus or gadget workspace, or key storage overflow.
     pub(crate) fn generate_ntt<M, Table, R>(
         input_secret_key: &LweSecretKey<T>,
         output_secret_key: &NttGlweSecretKey<T>,
@@ -102,10 +124,6 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
         R: rand::Rng + rand::CryptoRng,
     {
         let input_distribution = input_secret_key.distr();
-        assert!(
-            input_distribution.is_binary() || input_distribution.is_ternary(),
-            "bootstrapping requires a binary or ternary input LWE secret"
-        );
         let input_dimension = LweDimension::new(input_secret_key.dimension());
         let control_count = input_dimension
             .get()
@@ -115,10 +133,6 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
         // erased on drop; the evaluation key retains only encrypted selectors.
         let mut selectors = Zeroizing::new(Vec::new());
         let plaintexts = if input_distribution.is_binary() {
-            assert!(
-                input_secret_key.as_ref().iter().all(|&x| x <= T::ONE),
-                "binary LWE secret coefficient is outside {{0, 1}}"
-            );
             input_secret_key.as_ref()
         } else {
             let minus_one = input_secret_key.cipher_modulus_minus_one();
@@ -128,10 +142,6 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
                 .iter()
                 .zip(selectors.as_chunks_mut::<2>().0.iter_mut())
             {
-                assert!(
-                    coefficient <= T::ONE || coefficient == minus_one,
-                    "ternary LWE secret coefficient is outside {{0, 1, q-1}}"
-                );
                 pair[0] = if coefficient == T::ONE {
                     T::ONE
                 } else {
@@ -145,11 +155,6 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
             }
             selectors.as_slice()
         };
-        let two_n = 2 * parameters.size().glwe_size().poly_length().get();
-        assert!(
-            T::try_from(two_n).is_ok(),
-            "rotation domain must fit the input coefficient type"
-        );
         let ggsw_len = parameters.ggsw_len();
         let total_len = control_count
             .checked_mul(ggsw_len)

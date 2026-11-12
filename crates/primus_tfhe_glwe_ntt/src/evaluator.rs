@@ -63,36 +63,13 @@ where
     T: FheUint,
     Table: MonomialNttTable<ValueT = T>,
 {
-    /// Creates an evaluator after checking the server-key layout.
-    ///
-    /// # Correctness
-    ///
-    /// The server key must use the NTT representation of `context.table()`:
-    /// primitive root, ordering and normalization must agree. Layout and modulus
-    /// checks do not establish transform or secret identity; see
-    /// [`primus_ntt::NttTable::new`].
-    pub fn try_new<LM: RingContext<T>>(
-        context: &'a TfheContext<T, Table, LM>,
-        server_key: &'a ServerKey<T>,
-    ) -> Result<Self, TfheEvaluationError> {
-        let parameters = context.parameters();
-        let key_switching = parameters.glwe_key_switching();
-        let key = server_key.glwe_key_switching_key();
-        let resources = BootstrapResources::try_from_bound_keys(
-            context,
-            server_key.blind_rotation_key(),
-            Some((key_switching, key)),
-        )?;
-        Ok(Self::from_resources(resources, key_switching, key))
-    }
-
     /// Binds independent BR and ring KS material for either PBS order.
     /// Checks layouts, input distribution and decomposition bases/moduli once.
     ///
     /// # Correctness
     /// Materials must use the same paired small/accumulator secrets and context
     /// transform representation; parameter checks cannot establish their identity.
-    /// Inherits [`Self::try_new`]'s transform requirements.
+    /// Inherits [`TfheContext::evaluator`]'s transform requirements.
     pub fn try_from_parts<LM: RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         key_switching: &crate::GlweKeySwitchingParameters<T>,
@@ -104,11 +81,7 @@ where
             blind_rotation_key,
             Some((key_switching, key_switching_key)),
         )?;
-        Ok(Self::from_resources(
-            resources,
-            key_switching,
-            key_switching_key,
-        ))
+        Ok(Self::from_resources(resources, key_switching_key))
     }
 
     /// Select the return once after the input/BR material has been bound.
@@ -116,13 +89,10 @@ where
     #[must_use]
     fn from_resources(
         resources: BootstrapResources<'a, T, Table>,
-        key_switching: &crate::GlweKeySwitchingParameters<T>,
         key: &'a NttGlweKeySwitchingKey<T>,
     ) -> Self {
         let return_key_switching = match resources.context.parameters().pbs_order() {
-            crate::PbsOrder::BootstrapKeyswitch => {
-                Some(KeySwitchingResources::new(key_switching, key))
-            }
+            crate::PbsOrder::BootstrapKeyswitch => Some(KeySwitchingResources::new(key)),
             crate::PbsOrder::KeyswitchBootstrap => None,
         };
         Self {
@@ -162,7 +132,7 @@ where
         let key = server_key.glwe_key_switching_key();
         crate::key::check_bound_glwe_key_switching_key(key_switching, key)?;
         resources.rebind_input_key_switching(key);
-        Ok(Self::from_resources(resources, key_switching, key))
+        Ok(Self::from_resources(resources, key))
     }
 
     /// Returns one coefficient of a coefficient-domain accumulator ciphertext.
@@ -369,11 +339,24 @@ where
     LM: RingContext<T>,
     Table: MonomialNttTable<ValueT = T>,
 {
-    /// Creates a programmable-bootstrap evaluator with reusable NTT workspace.
+    /// Checks the server-key layout and allocates a reusable PBS evaluator.
+    ///
+    /// # Correctness
+    ///
+    /// The server key must use this context's NTT roots, ordering and
+    /// normalization. Layout and modulus checks do not establish transform or
+    /// secret identity. See [`primus_ntt::NttTable::new`].
     pub fn evaluator<'a>(
         &'a self,
         server_key: &'a ServerKey<T>,
     ) -> Result<Evaluator<'a, T, Table>, TfheEvaluationError> {
-        Evaluator::try_new(self, server_key)
+        let key_switching = self.parameters().glwe_key_switching();
+        let key = server_key.glwe_key_switching_key();
+        let resources = BootstrapResources::try_from_bound_keys(
+            self,
+            server_key.blind_rotation_key(),
+            Some((key_switching, key)),
+        )?;
+        Ok(Evaluator::from_resources(resources, key))
     }
 }
