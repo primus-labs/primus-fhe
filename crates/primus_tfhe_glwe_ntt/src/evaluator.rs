@@ -350,10 +350,11 @@ where
         &'a self,
         server_key: &'a ServerKey<T>,
     ) -> Result<Evaluator<'a, T, Table>, TfheEvaluationError> {
-        let key_switching = self.parameters().glwe_key_switching();
+        let context = self.evaluation_context();
+        let key_switching = context.parameters().glwe_key_switching();
         let key = server_key.glwe_key_switching_key();
         let resources = BootstrapResources::try_from_bound_keys(
-            self,
+            context,
             server_key.blind_rotation_key(),
             Some((key_switching, key)),
         )?;

@@ -1,7 +1,7 @@
 //! NTT-domain bootstrapping-key storage and generation.
 
 use primus_decompose::primitive::ApproxSignedBasis;
-use primus_glwe::{GlevParameters, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey};
+use primus_glwe::{GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey};
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_lattice::{
@@ -9,8 +9,8 @@ use primus_lattice::{
     ggsw::{NttGgsw, NttGgswIter},
 };
 use primus_lwe::LweSecretKey;
+use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
-use primus_reduce::FieldContext;
 use primus_shape::PolyLength;
 use primus_tfhe_glwe::SecretKeyDistr;
 use zeroize::Zeroizing;
@@ -110,16 +110,15 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
     ///
     /// Panics on incompatible key/parameter layouts or target key modulus,
     /// NTT length/modulus or gadget workspace, or key storage overflow.
-    pub(crate) fn generate_ntt<M, Table, R>(
+    pub(crate) fn generate_ntt<Table, R>(
         input_secret_key: &LweSecretKey<T>,
         output_secret_key: &NttGlweSecretKey<T>,
-        parameters: &GlevParameters<T, M>,
+        parameters: &GgswParameters<T, BarrettModulus<T>>,
         ntt: &Table,
         rng: &mut R,
         context: &mut NttGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
-        M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {

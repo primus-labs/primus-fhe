@@ -6,7 +6,7 @@ use primus_glwe::{
 use primus_integer::FheUint;
 use primus_lwe::LweSecretKey;
 use primus_modulus::BarrettModulus;
-use primus_ntt::MonomialNttTable;
+use primus_ntt::NttTable;
 use primus_tfhe_glwe::{BlockBootstrappingKeyError, BlockGlweBootstrappingKey, BlockGlweKeyLayout};
 use zeroize::Zeroizing;
 
@@ -48,7 +48,7 @@ pub(crate) fn generate_with_layout<T: FheUint, Table, R>(
     workspace: &mut NttGlweGadgetEncryptWorkspace<T>,
 ) -> BlockGlweBootstrappingKey<T, BarrettModulus<T>>
 where
-    Table: MonomialNttTable<ValueT = T>,
+    Table: NttTable<ValueT = T>,
     R: rand::Rng + rand::CryptoRng,
 {
     let block_size = layout.block_size();

@@ -5,7 +5,7 @@ use primus_encoding::{PlaintextEmbedding, ScaledCodec};
 use primus_glwe::{GlweCiphertext, GlweParameters, GlweSecretKey, NttGlweSecretKey};
 use primus_integer::FheUint;
 use primus_modulus::BarrettModulus;
-use primus_ntt::MonomialNttTable;
+use primus_ntt::{MonomialNttTable, NttTable};
 use primus_poly::Polynomial;
 use primus_reduce::RingContext;
 use zeroize::Zeroizing;
@@ -14,28 +14,27 @@ use crate::{TfheClientError, TfheContext};
 
 /// Prepared private-key client for the accumulator GLWE domain.
 ///
-/// Owns one transformed accumulator secret and an N-coefficient scratch buffer,
-/// both erased on drop. The selected codec is bound once to the context's ring domain.
+/// Borrows the accumulator NTT table and owns one transformed accumulator secret
+/// and an N-coefficient scratch buffer, both erased on drop. The selected codec
+/// is bound once to the context's ring domain.
 /// Ciphertexts use coefficient representation and the accumulator secret, which
 /// differs from the external LWE domain used by [`crate::Encryptor`].
 /// Construction prepares all buffers; `encrypt_to` and `decrypt_to` do not allocate.
-pub struct AccumulatorClient<'a, T, Table, LM = primus_modulus::BarrettModulus<T>>
+pub struct AccumulatorClient<'a, T, Table>
 where
     T: FheUint,
-    LM: RingContext<T>,
-    Table: MonomialNttTable<ValueT = T>,
+    Table: NttTable<ValueT = T>,
 {
-    context: &'a TfheContext<T, Table, LM>,
+    table: &'a Table,
     parameters: GlweParameters<T, BarrettModulus<T>>,
     secret: NttGlweSecretKey<T>,
     scratch: Zeroizing<Vec<T>>,
 }
 
-impl<'a, T, Table, LM> AccumulatorClient<'a, T, Table, LM>
+impl<'a, T, Table> AccumulatorClient<'a, T, Table>
 where
     T: FheUint,
-    LM: RingContext<T>,
-    Table: MonomialNttTable<ValueT = T>,
+    Table: NttTable<ValueT = T>,
 {
     /// Binds only the accumulator secret and a Scaled message codec to the accumulator domain.
     /// Rejects an incompatible key or codec modulus before preparing the secret.
@@ -43,20 +42,22 @@ where
     /// # Correctness
     /// Imported accumulator coefficients must have unsigned magnitude below q;
     /// see [`NttGlweSecretKey::from_coeff_secret_key`]. Layout checks do not establish this bound.
-    pub fn try_new(
+    pub fn try_new<LM: RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         secret_key: &GlweSecretKey<T>,
         codec: ScaledCodec<T, BarrettModulus<T>>,
-    ) -> Result<Self, TfheClientError> {
-        context
-            .parameters()
-            .check_accumulator_secret_key(secret_key)?;
-        let parameters =
-            GlweParameters::try_from_glev(context.parameters().blind_rotation_params(), codec)
-                .map_err(|_| crate::ClientError::CodecModulusMismatch)?;
-        let secret = NttGlweSecretKey::from_coeff_secret_key(secret_key, context.table());
+    ) -> Result<Self, TfheClientError>
+    where
+        Table: MonomialNttTable,
+    {
+        let pbs = context.parameters();
+        pbs.check_accumulator_secret_key(secret_key)?;
+        let parameters = GlweParameters::try_from_glev(pbs.blind_rotation_params(), codec)
+            .map_err(|_| crate::ClientError::CodecModulusMismatch)?;
+        let table = context.table();
+        let secret = NttGlweSecretKey::from_coeff_secret_key(secret_key, table);
         Ok(Self {
-            context,
+            table,
             secret,
             scratch: Zeroizing::new(vec![T::ZERO; parameters.poly_length().get()]),
             parameters,
@@ -71,7 +72,7 @@ where
         message: &[T],
         rng: &mut R,
     ) -> GlweCiphertext<Vec<T>> {
-        let mut output = self.context.allocate_accumulator_ciphertext();
+        let mut output = GlweCiphertext::zero(self.parameters.glwe_len());
         self.encrypt_to(message, &mut output, rng);
         output
     }
@@ -94,7 +95,7 @@ where
             output,
             parameters,
             PlaintextEmbedding::Unsigned,
-            self.context.table(),
+            self.table,
             rng,
             &mut self.scratch,
         );
@@ -103,13 +104,7 @@ where
     /// Allocates and decodes all N coefficients. Inherits [`Self::decrypt_to`]'s contracts.
     #[must_use]
     pub fn decrypt<S: Data<Elem = T>>(&mut self, input: &GlweCiphertext<S>) -> Vec<T> {
-        let n = self
-            .context
-            .parameters()
-            .blind_rotation_params()
-            .poly_length()
-            .get();
-        let mut output = vec![T::ZERO; n];
+        let mut output = vec![T::ZERO; self.parameters.poly_length().get()];
         self.decrypt_to(input, &mut output);
         output
     }
@@ -129,7 +124,7 @@ where
             input,
             &mut Polynomial::new(output),
             parameters,
-            self.context.table(),
+            self.table,
             &mut self.scratch,
         );
     }
@@ -149,7 +144,7 @@ where
         &self,
         secret_key: &GlweSecretKey<T>,
         t_ring: T,
-    ) -> Result<crate::AccumulatorClient<'_, T, Table, LM>, crate::TfheClientError> {
+    ) -> Result<crate::AccumulatorClient<'_, T, Table>, crate::TfheClientError> {
         let codec = ScaledCodec::try_new(t_ring, self.parameters().ring_modulus())
             .map_err(crate::ClientError::from)?;
         crate::AccumulatorClient::try_new(self, secret_key, codec)

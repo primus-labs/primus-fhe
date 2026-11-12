@@ -88,7 +88,7 @@ struct CbsSelection<'a, T: FheUint, Table: MonomialNttTable<ValueT = T>, LM: Rin
     context: &'a TfheContext<T, Table, LM>,
     client: &'a ClientKey<T>,
     server: &'a CircuitBootstrapServerKey<T>,
-    ring_client: AccumulatorClient<'a, T, Table, LM>,
+    ring_client: AccumulatorClient<'a, T, Table>,
     messages: Vec<Vec<T>>,
     candidates: Vec<GlweCiphertext<Vec<T>>>,
     input: LweCiphertext<T>,
@@ -418,12 +418,16 @@ where
         encryptor
             .encrypt_to(T::as_from(m), input.as_mut_view(), rng)
             .unwrap();
-        operation.circuit_bootstrap_to(input.as_view(), control, pbs.bootstrap_resources_mut());
+        operation.circuit_bootstrap_to(
+            input.as_view(),
+            control.as_mut_view(),
+            pbs.bootstrap_resources_mut(),
+        );
         operation.cmux_to(
-            control,
-            &candidates[0],
-            &candidates[1],
-            selected,
+            control.as_view(),
+            candidates[0].as_view(),
+            candidates[1].as_view(),
+            selected.as_mut_view(),
             pbs.bootstrap_resources_mut(),
         );
         ring_client.decrypt_to(selected, decoded);
@@ -453,7 +457,7 @@ where
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             operation.circuit_bootstrap_to(
                 input.as_view(),
-                control,
+                control.as_mut_view(),
                 other_evaluator.bootstrap_resources_mut(),
             );
         }));

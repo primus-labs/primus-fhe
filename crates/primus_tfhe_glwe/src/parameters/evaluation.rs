@@ -76,6 +76,13 @@ impl<T: FheUint, M: RingContext<T>> PbsEvaluationParameters<T, M> {
         self.pbs_order
     }
 
+    /// Returns the logical LWE dimension consumed by blind rotation.
+    #[must_use]
+    #[inline]
+    pub fn small_lwe_dimension(&self) -> LweDimension {
+        self.small_dimension
+    }
+
     /// Returns the client-visible LWE dimension for the selected input role.
     #[must_use]
     #[inline]

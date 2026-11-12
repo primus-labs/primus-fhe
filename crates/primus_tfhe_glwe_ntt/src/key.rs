@@ -10,13 +10,13 @@ use primus_glwe::{
 use primus_integer::FheUint;
 use primus_lwe::LweSecretKey;
 use primus_modulus::BarrettModulus;
-use primus_ntt::MonomialNttTable;
+use primus_ntt::{MonomialNttTable, NttTable};
 use primus_reduce::{Modulus, RingContext};
-use primus_tfhe_glwe::{BlockGlweKeyLayout, ClientKey};
+use primus_tfhe_glwe::{BlockGlweKeyLayout, ClientKey, PbsEvaluationParameters};
 
 use crate::{
-    BlindRotationMethod, KeyGenerationError, PbsParameters, TfheContext,
-    block::BlockGlweBootstrappingKey, bootstrapping_key::NttGlweBootstrappingKey,
+    BlindRotationMethod, KeyGenerationError, TfheContext, block::BlockGlweBootstrappingKey,
+    bootstrapping_key::NttGlweBootstrappingKey,
 };
 
 /// Blind-rotation key selected when generating a server key.
@@ -85,7 +85,7 @@ impl<T: FheUint> BlindRotationKey<T> {
         workspace: &mut NttGlweGadgetEncryptWorkspace<T>,
     ) -> Result<Self, KeyGenerationError>
     where
-        Table: MonomialNttTable<ValueT = T>,
+        Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
         let modulus_minus_one = input.cipher_modulus_minus_one();
@@ -120,7 +120,7 @@ impl<T: FheUint> BlindRotationKey<T> {
         workspace: &mut NttGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
-        Table: MonomialNttTable<ValueT = T>,
+        Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
         workspace.resize(parameters.size());
@@ -135,13 +135,14 @@ impl<T: FheUint> BlindRotationKey<T> {
     }
 
     /// Validate the selected BR layout and input domain, independently of ring KS/CBS.
-    pub(crate) fn is_compatible<LM: RingContext<T>>(
+    pub(crate) fn is_compatible(
         &self,
-        parameters: &PbsParameters<T, LM>,
+        parameters: &PbsEvaluationParameters<T, BarrettModulus<T>>,
     ) -> bool {
+        let input_distribution = parameters.glwe_key_switching().output().secret_key_distr();
         let (dimension, input_modulus, size, basis, cipher_modulus) = match self {
             Self::Classic(key) => {
-                if key.input_distribution() != parameters.small_lwe().secret_key_distr() {
+                if key.input_distribution() != input_distribution {
                     return false;
                 }
                 (
@@ -153,7 +154,7 @@ impl<T: FheUint> BlindRotationKey<T> {
                 )
             }
             Self::Block(key) => {
-                if parameters.small_lwe().secret_key_distr()
+                if input_distribution
                     != (SecretKeyDistr::BlockBinary {
                         block_size: key.block_size(),
                         occupancy: key.occupancy(),
@@ -170,8 +171,8 @@ impl<T: FheUint> BlindRotationKey<T> {
                 )
             }
         };
-        dimension == (parameters.small_lwe().dimension())
-            && input_modulus == parameters.small_lwe().cipher_modulus_value()
+        dimension == parameters.small_lwe_dimension()
+            && input_modulus == parameters.small_modulus_value()
             && size == parameters.blind_rotation_params().size()
             && basis == parameters.blind_rotation_params().basis()
             && cipher_modulus == parameters.ring_modulus().explicit_value()

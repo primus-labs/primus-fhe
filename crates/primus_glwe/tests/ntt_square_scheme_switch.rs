@@ -158,7 +158,7 @@ fn square_matches_full_coefficient_oracle_with_offsets_and_residuals() {
                 let input = Glev::new(data);
                 let mut control = NttGgsw::new(vec![11; output.ggsw_len()]);
                 ep.with_rebound(key_params.size(), |ep| {
-                    key.apply_to(&input, &mut control, modulus, &table, ep)
+                    key.apply_to(input.as_view(), control.as_mut_view(), modulus, &table, ep)
                 });
                 assert_eq!(ep.size(), output.size());
                 let control = control.into_coeff_form(&table);

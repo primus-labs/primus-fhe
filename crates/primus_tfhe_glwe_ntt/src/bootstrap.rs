@@ -16,6 +16,7 @@ use crate::{
     blind_rotation::NttGlweBlindRotationWorkspace,
     block::{BlockGlweBlindRotationWorkspace, BlockGlweBootstrappingKey},
     bootstrapping_key::NttGlweBootstrappingKey,
+    context::EvaluationContext,
     key::BlindRotationKey,
 };
 
@@ -111,7 +112,7 @@ where
     T: FheUint,
     Table: MonomialNttTable<ValueT = T>,
 {
-    pub(crate) context: crate::context::EvaluationContext<'a, T, Table>,
+    pub(crate) context: EvaluationContext<'a, T, Table>,
     blind_rotation: BlindRotationResources<'a, T>,
     input: InputPreparation<'a, T>,
     // Coefficient GLWE under the accumulator secret after either BR order.
@@ -138,10 +139,10 @@ where
             &'a NttGlweKeySwitchingKey<T>,
         )>,
     ) -> Result<Self, TfheEvaluationError> {
+        let context = context.evaluation_context();
         if let Some((key_parameters, _)) = input_key_switching_key {
             context
                 .parameters()
-                .evaluation()
                 .check_key_switching_parameters(key_parameters)
                 .map_err(|_| TfheEvaluationError::IncompatibleGlweKeySwitchingKey)?;
         }
@@ -150,8 +151,8 @@ where
 
     /// Binds keys after complete Context or the independent boundary paired KS parameters.
     /// Checks actual BR/KS material before allocation, without rechecking saved parameters.
-    pub(crate) fn try_from_bound_keys<LM: RingContext<T>>(
-        context: &'a TfheContext<T, Table, LM>,
+    pub(crate) fn try_from_bound_keys(
+        context: EvaluationContext<'a, T, Table>,
         blind_rotation_key: &'a BlindRotationKey<T>,
         input_key_switching_key: Option<(
             &crate::GlweKeySwitchingParameters<T>,
@@ -172,7 +173,7 @@ where
         }
 
         Ok(Self {
-            context: context.evaluation_context(),
+            context,
             blind_rotation: match blind_rotation_key {
                 BlindRotationKey::Classic(key) => BlindRotationResources::Classic {
                     key,
@@ -190,7 +191,7 @@ where
                         input_key_switching_key.expect("KS→BR material was checked above");
                     InputPreparation::Keyswitch {
                         key_switching: KeySwitchingResources::new(key),
-                        small_lwe: LweCiphertext::zero(parameters.small_lwe().dimension().get()),
+                        small_lwe: LweCiphertext::zero(parameters.small_lwe_dimension().get()),
                     }
                 }
             },

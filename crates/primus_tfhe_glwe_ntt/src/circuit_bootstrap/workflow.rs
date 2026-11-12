@@ -49,9 +49,9 @@ where
     /// Writes gadget-scaled F(m), reusing all resources without allocating.
     /// Inherits [`CircuitBootstrapEvaluator::circuit_bootstrap_to`]'s input,
     /// noise, representation and exact-output-length contracts.
-    pub fn circuit_bootstrap_to(&mut self, input: Lwe<&[T]>, mut output: NttGgsw<&mut [T]>) {
+    pub fn circuit_bootstrap_to(&mut self, input: Lwe<&[T]>, output: NttGgsw<&mut [T]>) {
         self.operation
-            .circuit_bootstrap_to(input, &mut output, &mut self.resources);
+            .circuit_bootstrap_to(input, output, &mut self.resources);
     }
 
     /// Selects a coefficient-ring candidate with a bit control.
@@ -63,10 +63,10 @@ where
         control: NttGgsw<&[T]>,
         lhs: GlweCiphertext<&[T]>,
         rhs: GlweCiphertext<&[T]>,
-        mut output: GlweCiphertext<&mut [T]>,
+        output: GlweCiphertext<&mut [T]>,
     ) {
         self.operation
-            .cmux_to(&control, &lhs, &rhs, &mut output, &mut self.resources);
+            .cmux_to(control, lhs, rhs, output, &mut self.resources);
     }
 
     /// Multiplies a coefficient-ring ciphertext by a canonical integer control.
@@ -75,10 +75,10 @@ where
         &mut self,
         control: NttGgsw<&[T]>,
         input: GlweCiphertext<&[T]>,
-        mut output: GlweCiphertext<&mut [T]>,
+        output: GlweCiphertext<&mut [T]>,
     ) {
         self.operation
-            .external_product_to(&control, &input, &mut output, &mut self.resources);
+            .external_product_to(control, input, output, &mut self.resources);
     }
 
     /// Moves out operation state and resources for serial composition with PBS
@@ -172,9 +172,10 @@ where
         {
             return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
-        let pbs = parameters.pbs_parameters();
+        let context = self.evaluation_context();
+        let pbs = context.parameters();
         let circuit = super::key::CircuitBootstrapBinding::try_new(
-            pbs.evaluation(),
+            pbs,
             parameters.gadget(),
             server_key.circuit_bootstrap_key(),
             &lookup_table,
@@ -188,15 +189,11 @@ where
             )
         });
         let resources = BootstrapResources::try_from_bound_keys(
-            self,
+            context,
             server_key.blind_rotation_key(),
             input_ks,
         )?;
-        let operation = CircuitBootstrapEvaluator::from_binding(
-            self.evaluation_context(),
-            circuit,
-            lookup_table,
-        );
+        let operation = CircuitBootstrapEvaluator::from_binding(context, circuit, lookup_table);
         Ok(CbsEvaluator {
             operation,
             resources,

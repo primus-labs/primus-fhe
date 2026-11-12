@@ -137,6 +137,8 @@ Evaluation keys retain their layouts and decomposition bases. Construct the matc
 
 Generate scheme-switch keys with matching coefficient and transformed secrets for NTT, or with the prepared target encryptor for Fourier. Output gadget scaling follows the input GLev. The key basis controls decomposition and may differ from the output basis. Trace and scheme switching are separate operations. Rank-one NTT uses a square `GLev(s²)`; higher ranks and Fourier use full products. See [scheme switching](src/scheme_switch) and its [noise contract](../../guides/development/bootstrapping-contracts.md#ordinary-cbs-and-consumption).
 
+Pass `input.as_view()` and `output.as_mut_view()` to NTT scheme switching.
+
 ## Trace, projection and expansion
 
 `NttGlweTraceKey` and `FourierGlweTraceKey` operate on coefficient ciphertexts. Let `M` be the input message; target messages below omit evaluation noise.

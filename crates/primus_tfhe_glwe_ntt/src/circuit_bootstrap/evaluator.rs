@@ -1,7 +1,6 @@
 //! Patched NTT circuit bootstrapping using PBSManyLUT, reverse-trace projection, and scheme
 //! switching.
 
-use primus_data::{Data, DataMut};
 use primus_glwe::{GlevCiphertext, GlweCiphertext, NttGlweTraceWorkspace};
 use primus_integer::FheUint;
 use primus_lattice::ggsw::NttGgsw;
@@ -119,7 +118,7 @@ where
         resources: &mut BootstrapResources<'a, T, Table>,
     ) -> NttGgsw<Vec<T>> {
         let mut output = self.allocate_output();
-        self.circuit_bootstrap_to(input, &mut output, resources);
+        self.circuit_bootstrap_to(input, output.as_mut_view(), resources);
         output
     }
 
@@ -147,14 +146,12 @@ where
     /// configured external LWE dimension or the output length differs from the
     /// configured GGSW length, or resources belong to a different context.
     /// LUT parameters are fixed during construction.
-    pub fn circuit_bootstrap_to<S>(
+    pub fn circuit_bootstrap_to(
         &mut self,
         input: Lwe<&[T]>,
-        output: &mut NttGgsw<S>,
+        output: NttGgsw<&mut [T]>,
         resources: &mut BootstrapResources<'a, T, Table>,
-    ) where
-        S: DataMut<Elem = T>,
-    {
+    ) {
         resources.check_context(self.context);
         let parameters = self.circuit.parameters;
         let circuit_key = self.circuit.key;
@@ -204,7 +201,7 @@ where
         // CMUX can bind the same buffers to a different output decomposition.
         resources.with_external_product(parameters.scheme_switch().size(), |scratch| {
             circuit_key.scheme_switch_key().apply_to(
-                &self.traced,
+                self.traced.as_view(),
                 output,
                 context
                     .parameters()
@@ -235,19 +232,14 @@ where
     ///
     /// # Panics
     /// Panics before output writes on a different resource context or a wrong ciphertext length.
-    pub fn cmux_to<A, B, C, D>(
+    pub fn cmux_to(
         &mut self,
-        control: &NttGgsw<A>,
-        lhs: &GlweCiphertext<B>,
-        rhs: &GlweCiphertext<C>,
-        output: &mut GlweCiphertext<D>,
+        control: NttGgsw<&[T]>,
+        lhs: GlweCiphertext<&[T]>,
+        rhs: GlweCiphertext<&[T]>,
+        mut output: GlweCiphertext<&mut [T]>,
         resources: &mut BootstrapResources<'a, T, Table>,
-    ) where
-        A: Data<Elem = T>,
-        B: Data<Elem = T>,
-        C: Data<Elem = T>,
-        D: DataMut<Elem = T>,
-    {
+    ) {
         resources.check_context(self.context);
         let parameters = self.circuit.parameters;
         let context = resources.context;
@@ -269,9 +261,9 @@ where
         );
         resources.with_external_product(parameters.output_size(), |scratch| {
             control.cmux_to(
-                lhs,
-                rhs,
-                output,
+                &lhs,
+                &rhs,
+                &mut output,
                 parameters.output_basis(),
                 context
                     .parameters()
@@ -293,17 +285,13 @@ where
     ///
     /// # Panics
     /// Panics before output writes on a different resource context or a wrong ciphertext length.
-    pub fn external_product_to<A, B, C>(
+    pub fn external_product_to(
         &mut self,
-        control: &NttGgsw<A>,
-        input: &GlweCiphertext<B>,
-        output: &mut GlweCiphertext<C>,
+        control: NttGgsw<&[T]>,
+        input: GlweCiphertext<&[T]>,
+        mut output: GlweCiphertext<&mut [T]>,
         resources: &mut BootstrapResources<'a, T, Table>,
-    ) where
-        A: Data<Elem = T>,
-        B: Data<Elem = T>,
-        C: DataMut<Elem = T>,
-    {
+    ) {
         resources.check_context(self.context);
         let parameters = self.circuit.parameters;
         let context = resources.context;
@@ -319,8 +307,8 @@ where
         );
         resources.with_external_product(parameters.output_size(), |scratch| {
             control.external_product_to(
-                input,
-                output,
+                &input,
+                &mut output,
                 parameters.output_basis(),
                 context
                     .parameters()

@@ -51,12 +51,16 @@ fn benchmark(c: &mut Criterion) {
     let (mut cbs, resources) = cbs.into_parts();
     let mut evaluator = Evaluator::try_from_resources(resources, server.server_key()).unwrap();
     let mut evaluate = |input: Lwe<&[Word]>, output: Lwe<&mut [Word]>| {
-        cbs.circuit_bootstrap_to(input, &mut control, evaluator.bootstrap_resources_mut());
+        cbs.circuit_bootstrap_to(
+            input,
+            control.as_mut_view(),
+            evaluator.bootstrap_resources_mut(),
+        );
         cbs.cmux_to(
-            &control,
-            &candidates[0],
-            &candidates[1],
-            &mut selected,
+            control.as_view(),
+            candidates[0].as_view(),
+            candidates[1].as_view(),
+            selected.as_mut_view(),
             evaluator.bootstrap_resources_mut(),
         );
         evaluator.return_ring_at_to(selected.as_view(), index, output);
