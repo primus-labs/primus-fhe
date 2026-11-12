@@ -204,11 +204,11 @@ impl BatchingEncoder {
             "batching automorphism exponent must be odd"
         );
         self.assert_canonical(slots);
-        let modulus = (2 * n) as u64;
-        let exponent = (exponent % (2 * n)) as u64;
+        // 2n is a power of two, so the low bits of the wrapping product suffice.
+        let mask = 2 * n - 1;
         for (slot, value) in output.iter_mut().enumerate() {
-            let mapped_exponent = self.slot_exponent(slot) as u64 * exponent % modulus;
-            *value = slots[self.odd_exponent_to_slot[(mapped_exponent as usize - 1) / 2]];
+            let mapped_exponent = self.slot_exponent(slot).wrapping_mul(exponent) & mask;
+            *value = slots[self.odd_exponent_to_slot[(mapped_exponent - 1) / 2]];
         }
     }
 
@@ -252,12 +252,14 @@ impl BatchingEncoder {
             "batching coefficient output length mismatch"
         );
         let stride = self.embedding_stride(coefficients.len());
+        // Both ring lengths are powers of two, so the stride is as well.
+        let stride_mask = stride - 1;
         self.assert_canonical(coefficients);
         assert!(
             coefficients
                 .iter()
                 .enumerate()
-                .all(|(i, &value)| i % stride == 0 || value == 0),
+                .all(|(i, &value)| i & stride_mask == 0 || value == 0),
             "plaintext is outside the embedded subring"
         );
         for (value, &coefficient) in output.iter_mut().zip(coefficients.iter().step_by(stride)) {
