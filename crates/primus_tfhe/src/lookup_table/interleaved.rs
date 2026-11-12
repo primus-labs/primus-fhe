@@ -140,8 +140,9 @@ impl<T: FheUint> InterleavedLookupTable<T> {
         coefficient_modulus: Option<T>,
     ) -> bool {
         self.polynomial.as_ref().len() == poly_length.get()
-            && self.encoding.input_ciphertext_modulus == input_ciphertext_modulus
-            && self.encoding.coefficient_modulus == coefficient_modulus
+            && self
+                .encoding
+                .matches_ciphertext_moduli(input_ciphertext_modulus, coefficient_modulus)
     }
 
     /// Returns the interleaved encoded lookup-table polynomial.

@@ -66,32 +66,16 @@ where
         coefficient_modulus: M,
         output_codec: &RoundedCodec<T, OM>,
     ) -> Result<Self, LookupTableError> {
-        check_output_modulus(coefficient_modulus, output_codec)?;
+        if output_codec.ciphertext_modulus().explicit_value()
+            != coefficient_modulus.explicit_value()
+        {
+            return Err(LookupTableError::OutputModulusMismatch);
+        }
         Ok(Self {
             poly_length,
             input_plaintext_modulus: input_codec.plaintext_modulus(),
             input_ciphertext_modulus: input_codec.ciphertext_modulus(),
             coefficient_modulus,
-            output_codec: *output_codec,
-        })
-    }
-
-    /// Returns a compiler with a different output codec, keeping the input domain
-    /// and accumulator modulus. Rejects a mismatched ciphertext modulus here,
-    /// before any program is compiled. The supplied codec is copied.
-    pub fn try_with_output_codec<NM>(
-        self,
-        output_codec: &RoundedCodec<T, NM>,
-    ) -> Result<LookupTableCompiler<T, IM, M, NM>, LookupTableError>
-    where
-        NM: Modulus<ValueT = T> + ReduceAdd<T, Output = T>,
-    {
-        check_output_modulus(self.coefficient_modulus, output_codec)?;
-        Ok(LookupTableCompiler {
-            poly_length: self.poly_length,
-            input_plaintext_modulus: self.input_plaintext_modulus,
-            input_ciphertext_modulus: self.input_ciphertext_modulus,
-            coefficient_modulus: self.coefficient_modulus,
             output_codec: *output_codec,
         })
     }
@@ -247,21 +231,6 @@ where
 fn check_output_length(actual: usize, expected: usize) -> Result<(), LookupTableError> {
     if actual != expected {
         return Err(LookupTableError::DomainLengthMismatch { expected, actual });
-    }
-    Ok(())
-}
-
-fn check_output_modulus<T, M, OM>(
-    modulus: M,
-    codec: &RoundedCodec<T, OM>,
-) -> Result<(), LookupTableError>
-where
-    T: FheUint,
-    M: Modulus<ValueT = T>,
-    OM: Modulus<ValueT = T> + ReduceAdd<T, Output = T>,
-{
-    if codec.ciphertext_modulus().explicit_value() != modulus.explicit_value() {
-        return Err(LookupTableError::OutputModulusMismatch);
     }
     Ok(())
 }

@@ -172,8 +172,9 @@ impl<T: FheUint> FactorizedLookupTable<T> {
         coefficient_modulus: Option<T>,
     ) -> bool {
         self.common_polynomial.as_ref().len() == poly_length.get()
-            && self.encoding.input_ciphertext_modulus == input_ciphertext_modulus
-            && self.encoding.coefficient_modulus == coefficient_modulus
+            && self
+                .encoding
+                .matches_ciphertext_moduli(input_ciphertext_modulus, coefficient_modulus)
     }
 
     /// Returns V in coefficient form, ready to initialize blind rotation.
