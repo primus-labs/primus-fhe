@@ -9,7 +9,7 @@ Single-modulus GLWE keys and operations, with separate NTT and native-torus Four
 
 ## Quick start
 
-This u64 NTT example shows both ordinary messages and encoded/phase primitives. The calling crate directly depends on `primus_glwe` with `ntt` enabled, plus `primus_ntt`, `primus_poly`, `primus_modulus`, `primus_encoding` and `rand`. N=32 is a small functional fixture, not a security parameter.
+This u64 NTT example shows both ordinary messages and encoded/phase primitives. The calling crate directly depends on `primus_glwe` with `ntt` enabled, plus `primus_ntt`, `primus_poly`, `primus_shape`, `primus_modulus`, `primus_encoding` and `rand`. N=32 is a small functional fixture, not a security parameter.
 
 ```rust
 use primus_encoding::PlaintextEmbedding;

@@ -145,12 +145,12 @@ where
     /// Transforms one nonempty ordered prefix of this table's CRT limbs.
     ///
     /// With the `parallel` feature, N>=4096 and at least two limbs, this uses
-    /// at most four contiguous tasks in the current Rayon pool. Configure that
-    /// pool with `RAYON_NUM_THREADS` or `ThreadPool::install` to bound its total
-    /// thread count; the task cap does not resize the pool. Smaller inputs
-    /// and single-worker pools stay serial. Existing limbs are borrowed in
-    /// place; no ciphertext scratch or random sampling is introduced. Without
-    /// that feature no thread pool is initialized.
+    /// at most four contiguous tasks in the current Rayon pool. Configure the
+    /// default pool with `RAYON_NUM_THREADS`, or build a pool with
+    /// `ThreadPoolBuilder::num_threads` and select it with `ThreadPool::install`.
+    /// Smaller inputs and single-worker pools stay serial. Existing limbs are
+    /// borrowed in place; no ciphertext scratch or random sampling is introduced.
+    /// Without the `parallel` feature no thread pool is initialized.
     ///
     /// # Panics
     /// Rejects an empty, partial-limb or overlong prefix before writes.

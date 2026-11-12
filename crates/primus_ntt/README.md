@@ -100,8 +100,9 @@ Default features are empty. Specialized x86-64 tables select available scalar or
 
 `parallel` enables bounded scheduling for the checked DCRT prefix forward/inverse
 transforms: each prefix with N≥4096 and at least two limbs uses at most four
-contiguous tasks in the current Rayon pool. Bound the pool's total threads with
-`RAYON_NUM_THREADS` or `ThreadPool::install`; the task cap does not resize it.
+contiguous tasks in the current Rayon pool. Configure the default pool with
+`RAYON_NUM_THREADS`, or set an explicit pool's size with
+`ThreadPoolBuilder::num_threads` and select it with `ThreadPool::install`.
 This feature is off by default, leaving that NTT path serial without pool
 initialization. Random sampling is not parallelized.
 Eligible table construction prepares the current pool registry, but does not

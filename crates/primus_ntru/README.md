@@ -9,7 +9,7 @@ Scalar secret-key NTRU encryption and evaluation over `Z_q[X]/(X^N + 1)`. NTT us
 
 ## Quick start
 
-This u64 NTT example shows both ordinary messages and encoded/phase primitives. The calling crate directly depends on `primus_ntru` with `ntt` enabled, plus `primus_ntt`, `primus_poly`, `primus_modulus`, `primus_encoding` and `rand`. N=32 is a small functional fixture, not a security parameter.
+This u64 NTT example shows both ordinary messages and encoded/phase primitives. The calling crate directly depends on `primus_ntru` with `ntt` enabled, plus `primus_ntt`, `primus_poly`, `primus_shape`, `primus_modulus`, `primus_encoding` and `rand`. N=32 is a small functional fixture, not a security parameter.
 
 ```rust
 use primus_encoding::PlaintextEmbedding;

@@ -105,11 +105,16 @@ Independent workers use independent mutable evaluators.
 | `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | `try_new(&key,&gadget,&table)` |
 | `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | `try_new(&key,&hybrid_rns,&qp_table)` |
 
-Hybrid key generation checks both secrets and its error sampler against every
-QP modulus; evaluator preparation checks ordered QP and partitions. Conversion
-scratch has the larger ModUp/ModDown capacity because these phases are sequential;
-other simultaneously live buffers remain separate. Numerical contracts:
-[Hybrid RNS](../primus_rns/README.md#hybrid-rns), [key switching](src/key_switch).
+[Hybrid key generation](src/key_switch/hybrid/generation.rs) checks the input
+secret layout, both polynomial lengths, the ordered Q basis and QP table, and the
+error sampler's magnitude bound against every QP modulus. The caller must ensure
+that each signed coefficient in both secrets has magnitude below every QP
+modulus, including for imported keys. See
+[signed secret conversion](src/secret_key/dcrt/conversion.rs) for the bounded lift.
+Evaluator preparation checks the ordered QP basis and partitioning. Conversion
+scratch has the larger ModUp/ModDown capacity because these phases are sequential.
+Other simultaneously live buffers remain separate. See the [Hybrid RNS numerical
+contracts](../primus_rns/README.md#hybrid-rns).
 
 ## Trace and coefficient expansion
 

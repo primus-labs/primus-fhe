@@ -90,10 +90,14 @@ Client 生成密钥；evaluator 借用 key、算术参数和 table，自持可�
 | `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | `try_new(&key,&gadget,&table)` |
 | `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | `try_new(&key,&hybrid_rns,&qp_table)` |
 
-Hybrid 建钥按每个 QP 模数检查两份 secret 和误差 sampler 的支持；evaluator 准备
-检查有序 QP/partition。ModUp/ModDown 顺序执行，因此
-conversion scratch 容量取两者最大值；其他同时活跃 buffer 保持独立。数值契约见
-[Hybrid RNS](../primus_rns/README.zh_CN.md#hybrid-rns)和[密钥切换](src/key_switch)。
+[Hybrid 建钥](src/key_switch/hybrid/generation.rs)检查输入秘密布局、两份秘密的
+多项式长度、有序 Q 基和 QP 表，并检查误差采样器的幅度上界是否小于每个 QP 模数。
+调用方须保证两份秘密的每个有符号系数的绝对值小于每个 QP 模数，导入密钥也须
+满足此条件。提升范围见
+[有符号秘密转换](src/secret_key/dcrt/conversion.rs)。
+Evaluator 准备时检查有序 QP 基及其分区。ModUp 和 ModDown 顺序执行，因此转换
+工作区取两者所需容量的较大值。其他同时活跃的缓冲区保持独立。数值契约见
+[Hybrid RNS](../primus_rns/README.zh_CN.md#hybrid-rns)。
 
 ## Trace 与系数展开
 

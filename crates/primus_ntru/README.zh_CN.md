@@ -9,7 +9,7 @@
 
 ## 快速开始
 
-下面使用 u64 和 NTT 展示普通消息与 encoded/phase 两条路径。调用方直接依赖 `primus_ntru`（启用 `ntt`）、`primus_ntt`、`primus_poly`、`primus_modulus`、`primus_encoding` 和 `rand`。N=32 仅用于简短的功能示例，不是安全参数。
+下面使用 u64 和 NTT 展示普通消息与 encoded/phase 两条路径。调用方直接依赖 `primus_ntru`（启用 `ntt`）、`primus_ntt`、`primus_poly`、`primus_shape`、`primus_modulus`、`primus_encoding` 和 `rand`。N=32 仅用于简短的功能示例，不是安全参数。
 
 ```rust
 use primus_encoding::PlaintextEmbedding;

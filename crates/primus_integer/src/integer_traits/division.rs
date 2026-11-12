@@ -45,21 +45,29 @@ pub trait DivRemScalar: Sized {
     /// same number of limbs as the dividend and is fully overwritten, including
     /// any leading zero limbs. The returned remainder is less than `divisor`.
     ///
-    /// Callers must provide a non-empty dividend and an equally sized quotient
-    /// buffer. Implementations verify these internal contracts in debug builds.
-    ///
     /// # Panics
     ///
-    /// Panics if `divisor` is zero.
+    /// Panics if `divisor` is zero, before writing to `quotient`.
+    ///
+    /// # Correctness
+    ///
+    /// Provide a non-empty dividend and an equally sized quotient buffer.
+    /// The implementations assert these requirements in debug builds.
     fn div_rem_scalar(dividend: &[Self], divisor: Self, quotient: &mut [Self]) -> Self;
 }
 
 /// Division of a double-width dividend by a single-limb divisor.
-///
-/// Callers must ensure `hi < divisor`, which guarantees that the quotient fits
-/// in one limb. Implementations verify this internal contract in debug builds.
 pub trait DivWide: Sized {
     /// Computes `((hi << BITS) | lo) / divisor`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `divisor` is zero.
+    ///
+    /// # Correctness
+    ///
+    /// For a nonzero divisor, `hi < divisor` ensures the quotient fits in one
+    /// limb. The implementations assert this requirement in debug builds.
     #[must_use = "this returns the result of the operation, without modifying the original"]
     fn div_wide(lo: Self, hi: Self, divisor: Self) -> Self;
 }

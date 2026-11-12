@@ -98,9 +98,10 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
 
 默认 feature 集为空。专用 x86-64 table 在运行时选择可用的 scalar 或 SIMD 内核，无需启用可选的 `simd` feature；其他架构使用 scalar 实现。`simd` feature 启用依赖中的 portable-SIMD 支持，需要 nightly Rust。
 
-`parallel` 启用 checked DCRT prefix 正逆 NTT 的有界调度：每次 prefix 的 N≥4096
-且至少两条 limb 时，在当前 Rayon pool 中使用至多4个连续任务。总线程数须由
-`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制，任务上限不会调整 pool 大小。
+`parallel` 启用 checked DCRT prefix 正逆 NTT 的有界调度。每次 prefix 的 N≥4096
+且至少两条 limb 时，在当前 Rayon pool 中使用至多 4 个连续任务。通过
+`RAYON_NUM_THREADS` 配置默认线程池，或通过 `ThreadPoolBuilder::num_threads`
+设置自建线程池的线程数，再用 `ThreadPool::install` 选择该线程池。
 该 feature 默认关闭，此 NTT 路径保持串行且不初始化 pool；随机采样不并行。
 符合条件的table构造会准备当前pool registry，但不等待所有worker完成启动。
 仅测kernel分配时，应先同步配置好的pool，例如调用`ThreadPool::broadcast`；
