@@ -730,29 +730,3 @@ where
         }
     }
 }
-
-impl<T, Table, LM> TfheContext<T, Table, LM>
-where
-    T: TorusFftValue,
-    Table: FftTable,
-    LM: primus_reduce::RingContext<T>,
-{
-    /// Pairs independently bound resources and a gadget key with configured CBS
-    /// before compiling a default CBS/one-hot LUT or allocating projection storage.
-    pub(crate) fn check_circuit_bootstrap_binding(
-        &self,
-        resources: &crate::bootstrap::BootstrapResources<'_, T, Table>,
-        circuit_key: &CircuitBootstrapKey<T>,
-    ) -> Result<&crate::CbsParameters<T, LM>, crate::TfheEvaluationError> {
-        let parameters = self
-            .cbs_parameters()
-            .ok_or(crate::TfheEvaluationError::MissingCircuitBootstrapParameters)?;
-        if !resources.context.is_same(self.evaluation_context()) {
-            return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapParameters);
-        }
-        if !circuit_key.is_compatible(parameters) {
-            return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapKey);
-        }
-        Ok(parameters)
-    }
-}

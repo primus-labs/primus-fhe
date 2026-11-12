@@ -120,7 +120,7 @@ struct CbsSelection<'a, T: TorusFftValue, Table: FftTable, LM: RingContext<T>> {
     context: &'a TfheContext<T, Table, LM>,
     client: &'a ClientKey<T>,
     server: &'a CircuitBootstrapServerKey<T>,
-    ring_client: AccumulatorClient<'a, T, Table, LM>,
+    ring_client: AccumulatorClient<'a, T, Table>,
     messages: Vec<Vec<T>>,
     candidates: Vec<GlweCiphertext<Vec<T>>>,
     input: LweCiphertext<T>,
@@ -459,12 +459,16 @@ where
         encryptor
             .encrypt_to(T::as_from(m), input.as_mut_view(), rng)
             .unwrap();
-        operation.circuit_bootstrap_to(input.as_view(), control, pbs.bootstrap_resources_mut());
+        operation.circuit_bootstrap_to(
+            input.as_view(),
+            control.as_mut_view(),
+            pbs.bootstrap_resources_mut(),
+        );
         operation.cmux_to(
-            control,
-            &candidates[0],
-            &candidates[1],
-            selected,
+            control.as_view(),
+            candidates[0].as_view(),
+            candidates[1].as_view(),
+            selected.as_mut_view(),
             pbs.bootstrap_resources_mut(),
         );
         ring_client.decrypt_to(selected, decoded);
@@ -483,16 +487,21 @@ where
             T::as_from(m)
         );
 
-        // A numerically equal but separately owned context cannot replace the
-        // operation's bound resources, even when importing the same key material.
+        // Use the same secrets to isolate the context identity check. The BR/KS
+        // rows used by the second evaluator are generated with its own FFT table.
         let other = TfheContext::<T, Table, LM>::try_from_cbs_parameters(
             context.cbs_parameters().unwrap().clone(),
         )
         .unwrap();
-        let mut other_resources = server.bootstrap_resources(&other).unwrap();
+        let other_server = other.try_generate_server_key(client, rng).unwrap();
+        let mut other_evaluator = other.evaluator(&other_server).unwrap();
         control.as_mut().fill(Default::default());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            operation.circuit_bootstrap_to(input.as_view(), control, &mut other_resources);
+            operation.circuit_bootstrap_to(
+                input.as_view(),
+                control.as_mut_view(),
+                other_evaluator.bootstrap_resources_mut(),
+            );
         }));
         assert!(result.is_err());
         assert!(control.as_ref().iter().all(|v| *v == Default::default()));

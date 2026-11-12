@@ -1,12 +1,11 @@
 //! CBS material composed with the ordinary BR and KS server key.
 
 use primus_fft::{FftTable, TorusFftValue};
-use primus_glwe::FourierGlweEncryptor;
 use primus_reduce::RingContext;
 
 use crate::{
     CbsParameters, ClientKey, KeyGenerationError, KeyGenerator, ServerKey, TfheContext,
-    TfheEvaluationError, bootstrap::BootstrapResources, circuit_bootstrap::CircuitBootstrapKey,
+    circuit_bootstrap::CircuitBootstrapKey,
 };
 
 /// Complete CBS material with one BR key, one KS key and trace/scheme-switch keys.
@@ -46,19 +45,6 @@ impl<T: TorusFftValue> CircuitBootstrapServerKey<T> {
     pub fn into_parts(self) -> (ServerKey<T>, CircuitBootstrapKey<T>) {
         (self.server_key, self.circuit_bootstrap)
     }
-
-    /// Binds CBS input preparation and BR without allocating output-return scratch.
-    /// Bind the CBS evaluator separately with [`Self::circuit_bootstrap_key`].
-    /// Inherits [`BootstrapResources::try_new`]'s secret/transform requirements.
-    pub fn bootstrap_resources<'a, Table, LM: RingContext<T>>(
-        &'a self,
-        context: &'a TfheContext<T, Table, LM>,
-    ) -> Result<BootstrapResources<'a, T, Table>, TfheEvaluationError>
-    where
-        Table: FftTable,
-    {
-        context.bootstrap_resources_from_server_key(&self.server_key)
-    }
 }
 
 impl<T, Table, LM> KeyGenerator<'_, T, Table, LM>
@@ -91,16 +77,7 @@ where
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         let layout = self.prepare_blind_rotation()?;
         let client = ClientKey::generate(self.context.parameters(), rng);
-        let encryptor = FourierGlweEncryptor::try_new(
-            client.glwe_secret_key(),
-            self.context
-                .parameters()
-                .blind_rotation_params()
-                .encryption_parameters(),
-        )
-        .map_err(crate::error::glwe_encryption_error)?;
-        let server = self
-            .generate_circuit_server_with_accumulator(operation, &client, encryptor, layout, rng)?;
+        let server = self.generate_circuit_server(operation, &client, layout, rng)?;
         Ok((client, server))
     }
 
@@ -121,31 +98,23 @@ where
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let encryptor = FourierGlweEncryptor::try_new(
-            client.glwe_secret_key(),
-            self.context
-                .parameters()
-                .blind_rotation_params()
-                .encryption_parameters(),
-        )
-        .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_circuit_server_with_accumulator(operation, client, encryptor, layout, rng)
+        self.generate_circuit_server(operation, client, layout, rng)
     }
 
     /// The context owns this complete CBS operation; client compatibility and block
     /// geometry are already established. Share one coefficient encryption setup between BR and
     /// CBS, then release it before preparing the padded small secret for KS.
-    fn generate_circuit_server_with_accumulator<R>(
+    fn generate_circuit_server<R>(
         &mut self,
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
-        mut encryptor: FourierGlweEncryptor<'_, T>,
         layout: super::BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
+        let mut encryptor = self.prepare_accumulator(client.glwe_secret_key())?;
         let blind_rotation =
             self.generate_blind_rotation_key_with_accumulator(client, &mut encryptor, layout, rng);
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_accumulator(

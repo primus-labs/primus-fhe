@@ -5,6 +5,7 @@ use primus_ntru::{
     NttNtruProjectionKey, NttNtruSchemeSwitchKey, NttNtruSecretKey, NttNtruTraceKey,
 };
 use primus_ntt::MonomialNttTable;
+use primus_tfhe::{CbsInputEncoding, CircuitBootstrapLookupTable};
 
 use crate::{KeyGenerator, TfheContext, circuit_bootstrap::CbsGadgetParameters};
 
@@ -38,6 +39,30 @@ impl<T: FheUint> CircuitBootstrapKey<T> {
             .is_some_and(|parameters| !self.is_compatible(parameters))
         {
             return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapKey);
+        }
+        Ok(())
+    }
+
+    /// Checks the circuit material and a precompiled program before either CBS binding
+    /// allocates projection storage. The configured workflow also checks its message modulus.
+    pub(super) fn check_lookup_table<
+        Table: MonomialNttTable<ValueT = T>,
+        LM: primus_reduce::RingContext<T>,
+    >(
+        &self,
+        context: &TfheContext<T, Table, LM>,
+        lookup_table: &CircuitBootstrapLookupTable<T>,
+    ) -> Result<(), crate::TfheEvaluationError> {
+        self.check_parameters(context)?;
+        let pbs = context.parameters();
+        if lookup_table.input_encoding() != CbsInputEncoding::Padded
+            || !lookup_table.is_compatible(
+                pbs.poly_length(),
+                pbs.external_lwe().cipher_modulus_value(),
+                self.parameters.output_basis(),
+            )
+        {
+            return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
         Ok(())
     }
@@ -113,31 +138,5 @@ where
             parameters: parameters.clone(),
             projection,
         }
-    }
-}
-
-impl<T, Table, LM> TfheContext<T, Table, LM>
-where
-    T: FheUint,
-    Table: MonomialNttTable<ValueT = T>,
-    LM: primus_reduce::RingContext<T>,
-{
-    /// Pairs independently bound resources and a gadget key with configured CBS
-    /// before compiling a default CBS/one-hot LUT or allocating projection storage.
-    pub(crate) fn check_circuit_bootstrap_binding(
-        &self,
-        resources: &crate::bootstrap::BootstrapResources<'_, T, Table>,
-        circuit_key: &CircuitBootstrapKey<T>,
-    ) -> Result<&crate::CbsParameters<T, LM>, crate::TfheEvaluationError> {
-        let parameters = self
-            .cbs_parameters()
-            .ok_or(crate::TfheEvaluationError::MissingCircuitBootstrapParameters)?;
-        if !resources.context.is_same(self.evaluation_context()) {
-            return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapParameters);
-        }
-        if !circuit_key.is_compatible(parameters) {
-            return Err(crate::TfheEvaluationError::IncompatibleCircuitBootstrapKey);
-        }
-        Ok(parameters)
     }
 }

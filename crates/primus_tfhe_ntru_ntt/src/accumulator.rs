@@ -3,38 +3,38 @@
 use primus_data::{Data, DataMut};
 use primus_encoding::{PlaintextEmbedding, ScaledCodec};
 use primus_integer::FheUint;
+use primus_modulus::BarrettModulus;
 use primus_ntru::{
     NtruCiphertext, NtruParameters, NtruSecretKey, NttNtruCiphertext, NttNtruSecretKey,
 };
-use primus_ntt::MonomialNttTable;
+use primus_ntt::{MonomialNttTable, NttTable};
 use primus_poly::Polynomial;
+use primus_reduce::RingContext;
 
 use crate::{TfheClientError, TfheContext};
 
 /// Prepared private-key client for the accumulator NTRU domain.
 ///
-/// Owns one transformed accumulator secret and reusable conversion workspace,
-/// binding a message codec and borrowing the context that fixes its table and modulus.
+/// Borrows the accumulator NTT table and owns one transformed accumulator secret,
+/// a message codec and reusable conversion workspace.
 /// Ciphertexts use coefficient representation and the accumulator secret, which
 /// differs from the external LWE domain used by [`crate::Encryptor`].
 /// Construction prepares all buffers; `encrypt_to` and `decrypt_to` do not allocate.
-pub struct AccumulatorClient<'a, T, Table, LM = primus_modulus::BarrettModulus<T>>
+pub struct AccumulatorClient<'a, T, Table>
 where
     T: FheUint,
-    Table: MonomialNttTable<ValueT = T>,
-    LM: primus_reduce::RingContext<T>,
+    Table: NttTable<ValueT = T>,
 {
-    context: &'a TfheContext<T, Table, LM>,
-    parameters: NtruParameters<T, primus_modulus::BarrettModulus<T>>,
+    table: &'a Table,
+    parameters: NtruParameters<T, BarrettModulus<T>>,
     secret: NttNtruSecretKey<T>,
     transformed: NttNtruCiphertext<Vec<T>>,
 }
 
-impl<'a, T, Table, LM> AccumulatorClient<'a, T, Table, LM>
+impl<'a, T, Table> AccumulatorClient<'a, T, Table>
 where
     T: FheUint,
-    Table: MonomialNttTable<ValueT = T>,
-    LM: primus_reduce::RingContext<T>,
+    Table: NttTable<ValueT = T>,
 {
     /// Validates the key and Scaled codec modulus Q, then prepares the accumulator secret.
     /// Requires only the accumulator secret; its message codec is independent
@@ -44,24 +44,26 @@ where
     /// # Correctness
     /// Imported accumulator coefficients must have unsigned magnitude below Q;
     /// see [`NttNtruSecretKey::try_from_coeff_secret_key`]. Layout checks do not establish this bound.
-    pub fn try_new(
+    pub fn try_new<LM: RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         secret_key: &NtruSecretKey<T>,
-        codec: ScaledCodec<T, primus_modulus::BarrettModulus<T>>,
-    ) -> Result<Self, TfheClientError> {
-        context
-            .parameters()
-            .check_accumulator_secret_key(secret_key)?;
-        let parameters =
-            NtruParameters::try_from_nlev(context.parameters().blind_rotation(), codec)
-                .map_err(|_| crate::ClientError::CodecModulusMismatch)?;
+        codec: ScaledCodec<T, BarrettModulus<T>>,
+    ) -> Result<Self, TfheClientError>
+    where
+        Table: MonomialNttTable,
+    {
+        let pbs = context.parameters();
+        pbs.check_accumulator_secret_key(secret_key)?;
+        let parameters = NtruParameters::try_from_nlev(pbs.blind_rotation(), codec)
+            .map_err(|_| crate::ClientError::CodecModulusMismatch)?;
+        let table = context.table();
         let secret = NttNtruSecretKey::try_from_coeff_secret_key(
             secret_key,
             parameters.cipher_modulus(),
-            context.table(),
+            table,
         )?;
         Ok(Self {
-            context,
+            table,
             secret,
             transformed: NttNtruCiphertext::zero(parameters.poly_length().get()),
             parameters,
@@ -76,7 +78,7 @@ where
         message: &[T],
         rng: &mut R,
     ) -> NtruCiphertext<Vec<T>> {
-        let mut output = self.context.allocate_accumulator_ciphertext();
+        let mut output = NtruCiphertext::zero(self.parameters.poly_length().get());
         self.encrypt_to(message, &mut output, rng);
         output
     }
@@ -106,11 +108,10 @@ where
             &mut self.transformed,
             parameters,
             PlaintextEmbedding::Unsigned,
-            self.context.table(),
+            self.table,
             rng,
         );
-        self.transformed
-            .write_coeff_form(output, self.context.table());
+        self.transformed.write_coeff_form(output, self.table);
     }
 
     /// Allocates and decodes all N coefficients. Inherits [`Self::decrypt_to`]'s contracts.
@@ -139,12 +140,12 @@ where
             (n, n),
             "accumulator decryption layout mismatch"
         );
-        input.write_ntt_form(&mut self.transformed, self.context.table());
+        input.write_ntt_form(&mut self.transformed, self.table);
         self.secret.decrypt_message_to(
             &self.transformed,
             &mut Polynomial::new(output),
             parameters,
-            self.context.table(),
+            self.table,
         );
     }
 }
@@ -153,7 +154,7 @@ impl<T, Table, LM> TfheContext<T, Table, LM>
 where
     T: FheUint,
     Table: MonomialNttTable<ValueT = T>,
-    LM: primus_reduce::RingContext<T>,
+    LM: RingContext<T>,
 {
     /// Prepares private-key encryption/decryption in the accumulator ring domain.
     /// Builds Scaled encoding at ring Q for `t_ring`, independently of the
@@ -163,12 +164,12 @@ where
         &self,
         secret_key: &NtruSecretKey<T>,
         t_ring: T,
-    ) -> Result<crate::AccumulatorClient<'_, T, Table, LM>, TfheClientError> {
+    ) -> Result<AccumulatorClient<'_, T, Table>, TfheClientError> {
         let codec = ScaledCodec::try_new(
             t_ring,
             self.parameters().accumulator_ntru().cipher_modulus(),
         )
         .map_err(crate::ClientError::from)?;
-        crate::AccumulatorClient::try_new(self, secret_key, codec)
+        AccumulatorClient::try_new(self, secret_key, codec)
     }
 }

@@ -79,17 +79,7 @@ where
         circuit_key: &'a CircuitBootstrapKey<T>,
         lookup_table: CircuitBootstrapLookupTable<T>,
     ) -> Result<Self, TfheEvaluationError> {
-        let tfhe = context.parameters();
-        circuit_key.check_parameters(context)?;
-        if lookup_table.input_encoding() != primus_tfhe::CbsInputEncoding::Padded
-            || !lookup_table.is_compatible(
-                tfhe.poly_length(),
-                tfhe.external_lwe().cipher_modulus_value(),
-                circuit_key.parameters().output_basis(),
-            )
-        {
-            return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
-        }
+        circuit_key.check_lookup_table(context, &lookup_table)?;
         Ok(Self::from_lookup_table(
             context.evaluation_context(),
             circuit_key,

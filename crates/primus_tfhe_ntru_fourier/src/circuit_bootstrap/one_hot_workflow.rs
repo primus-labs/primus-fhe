@@ -2,6 +2,7 @@
 
 use primus_fft::{Complex64, FftTable, TorusFftValue};
 use primus_ntru::{FourierNgswCiphertext, NtruCiphertext};
+use primus_tfhe::TfheEvaluationError;
 
 use crate::{
     CircuitBootstrapServerKey, FourierNgswSelectors, Lwe, NlevSelectors, OneHotBootstrapError,
@@ -258,8 +259,14 @@ where
         server_key: &'a CircuitBootstrapServerKey<T>,
     ) -> Result<OneHotEvaluator<'a, T, Table>, OneHotBootstrapError> {
         let resources = server_key.bootstrap_resources(self)?;
-        let operation =
-            self.one_hot_evaluator_with_resources(&resources, server_key.circuit_bootstrap_key())?;
+        let parameters = self
+            .cbs_parameters()
+            .ok_or(TfheEvaluationError::MissingCircuitBootstrapParameters)?;
+        let operation = OneHotCircuitBootstrapEvaluator::try_new(
+            self,
+            server_key.circuit_bootstrap_key(),
+            parameters.input_codec(),
+        )?;
         Ok(OneHotEvaluator {
             operation,
             resources,

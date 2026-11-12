@@ -6,14 +6,18 @@ pub use circuit::CircuitBootstrapServerKey;
 use std::alloc::Layout;
 
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
-use primus_glwe::{FourierGlweEncryptor, FourierGlweKeySwitchingKey, SecretKeyDistr};
+use primus_glwe::{
+    FourierGlweEncryptor, FourierGlweKeySwitchingKey, GlweSecretKey, SecretKeyDistr,
+};
 use primus_modulus::NativeModulus;
 use primus_reduce::RingContext;
-use primus_tfhe_glwe::{BlockBootstrappingKeyError, BlockGlweKeyLayout, ClientKey};
+use primus_tfhe_glwe::{
+    BlockBootstrappingKeyError, BlockGlweKeyLayout, ClientKey, PbsEvaluationParameters,
+};
 
 use crate::{
-    BlindRotationMethod, GlweKeySwitchingParameters, KeyGenerationError, PbsParameters,
-    TfheContext, block::BlockGlweBootstrappingKey, bootstrapping_key::FourierGlweBootstrappingKey,
+    BlindRotationMethod, GlweKeySwitchingParameters, KeyGenerationError, TfheContext,
+    block::BlockGlweBootstrappingKey, bootstrapping_key::FourierGlweBootstrappingKey,
 };
 
 /// Blind-rotation key selected when generating a server key.
@@ -36,10 +40,10 @@ enum BlindRotationLayout<T: TorusFftValue> {
 }
 
 impl<T: TorusFftValue> BlindRotationKey<T> {
-    /// Validate the selected BR layout and input domain, independently of ring KS/CBS.
-    pub(crate) fn is_compatible<LM: RingContext<T>>(
+    /// Checks the selected BR layout and input domain before binding other material.
+    pub(crate) fn is_compatible(
         &self,
-        parameters: &PbsParameters<T, LM>,
+        parameters: &PbsEvaluationParameters<T, NativeModulus<T>>,
     ) -> bool {
         // Ring rows are native; the independent small-LWE q must also match.
         let (dimension, input_modulus, distribution, size, basis) = match self {
@@ -61,9 +65,10 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                 key.basis(),
             ),
         };
-        dimension == (parameters.small_lwe().dimension())
-            && input_modulus == parameters.small_lwe().cipher_modulus_value()
-            && distribution == parameters.small_lwe().secret_key_distr()
+        // The padded KS output parameters retain the logical small-LWE distribution.
+        dimension == parameters.small_lwe_dimension()
+            && input_modulus == parameters.small_modulus_value()
+            && distribution == parameters.glwe_key_switching().output().secret_key_distr()
             && size == parameters.blind_rotation_params().size()
             && basis == parameters.blind_rotation_params().basis()
     }
@@ -172,14 +177,7 @@ where
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let mut encryptor = FourierGlweEncryptor::try_new(
-            client_key.glwe_secret_key(),
-            self.context
-                .parameters()
-                .blind_rotation_params()
-                .encryption_parameters(),
-        )
-        .map_err(crate::error::glwe_encryption_error)?;
+        let mut encryptor = self.prepare_accumulator(client_key.glwe_secret_key())?;
         Ok(self.generate_blind_rotation_key_with_accumulator(
             client_key,
             &mut encryptor,
@@ -225,16 +223,7 @@ where
     {
         let layout = self.prepare_blind_rotation()?;
         let client_key = ClientKey::generate(self.context.parameters(), rng);
-        let encryptor = FourierGlweEncryptor::try_new(
-            client_key.glwe_secret_key(),
-            self.context
-                .parameters()
-                .blind_rotation_params()
-                .encryption_parameters(),
-        )
-        .map_err(crate::error::glwe_encryption_error)?;
-        let server_key =
-            self.generate_server_key_with_accumulator(&client_key, encryptor, layout, rng)?;
+        let server_key = self.generate_server_key(&client_key, layout, rng)?;
         Ok((client_key, server_key))
     }
 
@@ -254,15 +243,22 @@ where
     {
         client_key.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let encryptor = FourierGlweEncryptor::try_new(
-            client_key.glwe_secret_key(),
+        self.generate_server_key(client_key, layout, rng)
+    }
+
+    /// Prepares exact coefficient-ring products for the accumulator before sampling key rows.
+    pub(crate) fn prepare_accumulator<'key>(
+        &self,
+        secret_key: &'key GlweSecretKey<T>,
+    ) -> Result<FourierGlweEncryptor<'key, T>, KeyGenerationError> {
+        FourierGlweEncryptor::try_new(
+            secret_key,
             self.context
                 .parameters()
                 .blind_rotation_params()
                 .encryption_parameters(),
         )
-        .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_server_key_with_accumulator(client_key, encryptor, layout, rng)
+        .map_err(|error| crate::error::glwe_encryption_error(error).into())
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
@@ -299,19 +295,18 @@ where
         }
     }
 
-    /// Consumes the accepted accumulator encryption setup for BR, then releases it before
-    /// allocating KS rows. The caller established client compatibility by sampling or
-    /// validation and prepared exact products for the accepted target.
-    fn generate_server_key_with_accumulator<R>(
+    /// Prepares and uses the accumulator encryption setup for BR, then releases it before
+    /// allocating KS rows. The caller established client compatibility by sampling or validation.
+    fn generate_server_key<R>(
         &mut self,
         client_key: &ClientKey<T>,
-        mut encryptor: FourierGlweEncryptor<'_, T>,
         layout: BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<ServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
+        let mut encryptor = self.prepare_accumulator(client_key.glwe_secret_key())?;
         let blind_rotation_key = self.generate_blind_rotation_key_with_accumulator(
             client_key,
             &mut encryptor,

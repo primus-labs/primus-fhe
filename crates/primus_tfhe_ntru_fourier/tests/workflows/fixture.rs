@@ -53,7 +53,7 @@ pub(super) fn config<T: TorusFftValue>(
 
 /// Encrypted branch candidates and the coefficient buffers used to check selection.
 pub(super) struct RingSelection<'a, T: TorusFftValue, Table: FftTable> {
-    pub(super) client: AccumulatorClient<'a, T, Table, PowOf2Modulus<T>>,
+    pub(super) client: AccumulatorClient<'a, T, Table>,
     pub(super) messages: Vec<Vec<T>>,
     pub(super) candidates: Vec<NtruCiphertext<Vec<T>>>,
     pub(super) selected: NtruCiphertext<Vec<T>>,

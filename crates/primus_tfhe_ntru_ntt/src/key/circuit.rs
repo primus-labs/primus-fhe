@@ -91,7 +91,7 @@ where
         let layout = self.prepare_blind_rotation()?;
         let (client, transformed) = self.generate_client_key_with_main(rng)?;
         let server =
-            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng)?;
+            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng);
         Ok((client, server))
     }
 
@@ -131,7 +131,7 @@ where
             self.generate_public_lift_from_transformed(&transformed, parameters, rng)
         });
         let server =
-            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng)?;
+            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng);
         Ok((client, server, lift))
     }
 
@@ -149,15 +149,9 @@ where
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let transformed = NttNtruSecretKey::try_from_coeff_secret_key(
-            client.accumulator_ntru_secret_key(),
-            self.context
-                .parameters()
-                .accumulator_ntru()
-                .cipher_modulus(),
-            self.context.table(),
-        )?;
-        self.generate_circuit_server_with_main(operation, client, transformed, layout, rng)
+        let transformed =
+            self.transform_accumulator_secret(client.accumulator_ntru_secret_key())?;
+        Ok(self.generate_circuit_server_with_main(operation, client, transformed, layout, rng))
     }
 
     /// The context owns this complete CBS operation; client compatibility, the
@@ -171,7 +165,7 @@ where
         transformed: NttNtruSecretKey<T>,
         layout: super::BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError> {
+    ) -> CircuitBootstrapServerKey<T> {
         let blind_rotation =
             self.generate_blind_rotation_key_with_main(client, &transformed, layout, rng);
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
@@ -181,18 +175,11 @@ where
             rng,
         );
         drop(transformed);
-        let parameters = operation.pbs_parameters();
-        let key = primus_ntru::NtruLweKeySwitchingKey::generate(
-            client.accumulator_ntru_secret_key(),
-            parameters.accumulator_ntru().cipher_modulus(),
-            client.external_lwe_secret_key(),
-            parameters.key_switching(),
-            rng,
-        );
-        Ok(CircuitBootstrapServerKey::new(
-            ServerKey::new(blind_rotation, key),
+        let key_switching_key = self.generate_lwe_return_key(client, rng);
+        CircuitBootstrapServerKey::new(
+            ServerKey::new(blind_rotation, key_switching_key),
             circuit_bootstrap,
-        ))
+        )
     }
 }
 

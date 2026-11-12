@@ -76,14 +76,14 @@ fn main() {
         // Server, online: CBS computes the predicate; CMux chooses B when true.
         cbs.circuit_bootstrap_to(
             input.as_view(),
-            &mut control,
+            control.as_mut_view(),
             evaluator.bootstrap_resources_mut(),
         );
         cbs.cmux_to(
-            &control,
-            &a,
-            &b,
-            &mut selected,
+            control.as_view(),
+            a.as_view(),
+            b.as_view(),
+            selected.as_mut_view(),
             evaluator.bootstrap_resources_mut(),
         );
         selected.add_assign(&extra, ring_modulus);

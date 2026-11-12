@@ -506,25 +506,3 @@ where
         );
     }
 }
-
-impl<T, Table, LM> TfheContext<T, Table, LM>
-where
-    T: TorusFftValue,
-    Table: FftTable,
-    LM: primus_reduce::RingContext<T>,
-{
-    /// Prepares one-hot CBS from this context's configured input encoding and gadgets.
-    /// Shares the CBS/BR keys and takes resources only for setup and online calls.
-    /// Requires one-hot selector capacity in addition to ordinary CBS compatibility.
-    ///
-    /// # Correctness
-    /// Inherits [`OneHotCircuitBootstrapEvaluator::try_new`]'s secret and representation contracts.
-    pub(crate) fn one_hot_evaluator_with_resources<'a>(
-        &'a self,
-        resources: &BootstrapResources<'a, T, Table>,
-        circuit_key: &'a CircuitBootstrapKey<T>,
-    ) -> Result<OneHotCircuitBootstrapEvaluator<'a, T, Table>, OneHotBootstrapError> {
-        let parameters = self.check_circuit_bootstrap_binding(resources, circuit_key)?;
-        OneHotCircuitBootstrapEvaluator::try_new(self, circuit_key, parameters.input_codec())
-    }
-}

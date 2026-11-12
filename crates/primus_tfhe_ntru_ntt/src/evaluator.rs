@@ -31,26 +31,6 @@ where
     Table: MonomialNttTable<ValueT = T>,
     LM: primus_reduce::RingContext<T>,
 {
-    /// Creates reusable evaluation state after checking the server key once.
-    ///
-    /// # Correctness
-    /// The server key must use the NTT representation of `context.table()`.
-    /// Layout and basis checks do not establish transform or secret identity.
-    pub fn try_new(
-        context: &'a TfheContext<T, Table, LM>,
-        server_key: &'a ServerKey<T>,
-    ) -> Result<Self, TfheEvaluationError> {
-        let parameters = context.parameters();
-        let return_key = server_key.key_switching_key();
-        parameters.check_lwe_return_key(return_key)?;
-        let resources = BootstrapResources::try_new(context, server_key.blind_rotation_key())?;
-        Ok(Self::from_resources(
-            resources,
-            return_key,
-            parameters.external_lwe().cipher_modulus(),
-        ))
-    }
-
     /// Binds independent BR and Q→q, f→s return material before allocating scratch.
     /// The keys must share actual secrets and this context's transform representation;
     /// layout, distribution, basis and modulus checks do not establish identity.
@@ -325,11 +305,23 @@ where
     Table: MonomialNttTable<ValueT = T>,
     LM: primus_reduce::RingContext<T>,
 {
-    /// Creates an evaluator with reusable NTT and coefficient workspaces.
+    /// Creates reusable evaluation state after checking the server key once.
+    ///
+    /// # Correctness
+    /// The server key must use the NTT representation of this context's table.
+    /// Layout and basis checks do not establish transform or secret identity.
     pub fn evaluator<'a>(
         &'a self,
         server_key: &'a ServerKey<T>,
     ) -> Result<Evaluator<'a, T, Table, LM>, TfheEvaluationError> {
-        Evaluator::try_new(self, server_key)
+        let parameters = self.parameters();
+        let return_key = server_key.key_switching_key();
+        parameters.check_lwe_return_key(return_key)?;
+        let resources = self.bootstrap_resources(server_key.blind_rotation_key())?;
+        Ok(Evaluator::from_resources(
+            resources,
+            return_key,
+            parameters.external_lwe().cipher_modulus(),
+        ))
     }
 }

@@ -122,7 +122,7 @@ pub(super) fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>
 
 /// The encrypted candidates and scratch reused by predicate and selector tests.
 struct RingSelection<'a, T: FheUint, Table: MonomialNttTable<ValueT = T>> {
-    client: AccumulatorClient<'a, T, Table, PowOf2Modulus<T>>,
+    client: AccumulatorClient<'a, T, Table>,
     messages: [Vec<T>; 4],
     candidates: [Ntru<Vec<T>>; 4],
     selected: Ntru<Vec<T>>,

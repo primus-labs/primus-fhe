@@ -173,16 +173,7 @@ where
             return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
         let circuit_key = server_key.circuit_bootstrap_key();
-        circuit_key.check_parameters(self)?;
-        if lookup_table.input_encoding() != primus_tfhe::CbsInputEncoding::Padded
-            || !lookup_table.is_compatible(
-                self.parameters().poly_length(),
-                self.parameters().external_lwe().cipher_modulus_value(),
-                parameters.gadget().output_basis(),
-            )
-        {
-            return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
-        }
+        circuit_key.check_lookup_table(self, &lookup_table)?;
         let resources = server_key.bootstrap_resources(self)?;
         let operation = CircuitBootstrapEvaluator::from_lookup_table(
             self.evaluation_context(),

@@ -14,17 +14,15 @@ use crate::{TfheClientError, TfheContext};
 /// Prepared private-key client for the accumulator NTRU domain.
 ///
 /// Owns one transformed accumulator secret and reusable conversion workspace,
-/// binding a message codec and borrowing the context that fixes its table and modulus.
+/// with a bound message codec and a borrowed FFT table.
 /// Ciphertexts use coefficient representation and the accumulator secret, which
 /// differs from the external LWE domain used by [`crate::Encryptor`].
 /// Construction prepares all buffers; `encrypt_to` and `decrypt_to` do not allocate.
-pub struct AccumulatorClient<'a, T, Table, LM = primus_modulus::NativeModulus<T>>
+pub struct AccumulatorClient<'a, T, Table>
 where
     T: TorusFftValue,
     Table: FftTable,
-    LM: primus_reduce::RingContext<T>,
 {
-    context: &'a TfheContext<T, Table, LM>,
     parameters: NtruParameters<T, primus_modulus::NativeModulus<T>>,
     secret: FourierNtruSecretKey,
     transformed: FourierNtruCiphertext<Vec<Complex64>>,
@@ -33,17 +31,16 @@ where
     decrypt: FourierNtruDecryptWorkspace,
 }
 
-impl<'a, T, Table, LM> AccumulatorClient<'a, T, Table, LM>
+impl<'a, T, Table> AccumulatorClient<'a, T, Table>
 where
     T: TorusFftValue,
     Table: FftTable,
-    LM: primus_reduce::RingContext<T>,
 {
     /// Validates the key and Scaled codec modulus Q, then prepares the accumulator secret.
     /// Requires only the accumulator secret; its message codec is independent
     /// of external LWE encoding.
     /// Returns NTRU conversion failures, including a noninvertible secret.
-    pub fn try_new(
+    pub fn try_new<LM: primus_reduce::RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         secret_key: &NtruSecretKey<T>,
         codec: ScaledCodec<T, primus_modulus::NativeModulus<T>>,
@@ -57,7 +54,6 @@ where
         let mut fft = context.new_fft_engine();
         let secret = FourierNtruSecretKey::try_from_coeff_secret_key(secret_key, &mut fft)?;
         Ok(Self {
-            context,
             secret,
             transformed: FourierNtruCiphertext::zero(parameters.poly_length().fourier_poly_len()),
             fft,
@@ -75,7 +71,7 @@ where
         message: &[T],
         rng: &mut R,
     ) -> NtruCiphertext<Vec<T>> {
-        let mut output = self.context.allocate_accumulator_ciphertext();
+        let mut output = NtruCiphertext::zero(self.parameters.poly_length().get());
         self.encrypt_to(message, &mut output, rng);
         output
     }
@@ -153,12 +149,12 @@ where
         &self,
         secret_key: &NtruSecretKey<T>,
         t_ring: T,
-    ) -> Result<crate::AccumulatorClient<'_, T, Table, LM>, TfheClientError> {
+    ) -> Result<AccumulatorClient<'_, T, Table>, TfheClientError> {
         let codec = ScaledCodec::try_new(
             t_ring,
             self.parameters().accumulator_ntru().cipher_modulus(),
         )
         .map_err(crate::ClientError::from)?;
-        crate::AccumulatorClient::try_new(self, secret_key, codec)
+        AccumulatorClient::try_new(self, secret_key, codec)
     }
 }

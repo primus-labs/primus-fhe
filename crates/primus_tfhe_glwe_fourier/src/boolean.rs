@@ -63,7 +63,7 @@ where
     /// Creates a Boolean evaluator with this context's PBS, gate LUTs and workspace.
     /// Requires q=Q and configured input/output t=4; online `_to` operations reuse storage.
     ///
-    /// Inherits [`Evaluator::try_new`]'s Fourier table identity requirement.
+    /// Inherits [`TfheContext::evaluator`]'s Fourier table identity requirement.
     pub fn boolean_evaluator<'a>(
         &'a self,
         server_key: &'a ServerKey<T>,
