@@ -106,12 +106,7 @@ where
     /// Allocates and decodes all N coefficients. Inherits [`Self::decrypt_to`]'s contracts.
     #[must_use]
     pub fn decrypt<S: Data<Elem = T>>(&mut self, input: &NtruCiphertext<S>) -> Vec<T> {
-        let n = self
-            .context
-            .parameters()
-            .accumulator_ntru()
-            .poly_length()
-            .get();
+        let n = self.parameters.poly_length().get();
         let mut output = vec![T::ZERO; n];
         self.decrypt_to(input, &mut output);
         output
