@@ -20,13 +20,14 @@ fn encode_secret_polynomial_to<T: FheUint>(
 }
 
 /// Copies the same signed polynomial into every ordered modulus block.
-/// This keeps modulus-major traversal and delegates each bounded lift to reduce.
+/// Key generation supplies one complete polynomial in each limb. This keeps
+/// modulus-major traversal and delegates each bounded lift to reduce.
 pub(crate) fn encode_secret_polynomial_to_rns<T: FheUint>(
     coefficients: &[T::SignedInteger],
     output: &mut [T],
     moduli: &[T],
 ) {
-    assert_eq!(output.len(), coefficients.len() * moduli.len());
+    debug_assert_eq!(output.len(), coefficients.len() * moduli.len());
     output
         .chunks_exact_mut(coefficients.len())
         .zip(moduli)

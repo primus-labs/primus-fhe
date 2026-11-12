@@ -85,6 +85,14 @@ fn input_coefficients(q: &IBig) -> Vec<IBig> {
 
 #[test]
 fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
+    let poly_length = PolyLength::new(N);
+    let mut secret = vec![IBig::ZERO; N];
+    secret[0] = IBig::ONE;
+    secret[2] = -IBig::ONE;
+    let mut h = vec![IBig::ZERO; N];
+    h[0] = IBig::from(2);
+    h[1] = -IBig::ONE;
+    h[3] = IBig::ONE;
     for (q_values, p_values, dnum) in [
         (vec![193, 257, 449], vec![577], 3),
         (
@@ -117,22 +125,14 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             2,
         ),
     ] {
-        let auxiliary =
-            Arc::new(NativeHybridAuxiliary::try_new(PolyLength::new(N), &p_values).unwrap());
+        let auxiliary = Arc::new(NativeHybridAuxiliary::try_new(poly_length, &p_values).unwrap());
+        let p = product(&p_values);
+        let full_base = make_base(&q_values);
+        let table = U64DcrtTable::new(poly_length, full_base.moduli()).unwrap();
         for count in 1..=q_values.len() {
             let q_moduli = &q_values[..count];
             let q = product(q_moduli);
-            let p = product(&p_values);
             let qp = &q * &p;
-            let table = U64DcrtTable::new(
-                PolyLength::new(N),
-                &q_values
-                    .iter()
-                    .copied()
-                    .map(BarrettModulus::new)
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap();
             let parameters = Arc::new(
                 NativeHybridParameters::try_with_auxiliary(
                     &make_base(q_moduli),
@@ -149,13 +149,6 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             for (table, limb) in table.iter().zip(a_ntt.as_chunks_mut::<N>().0.iter_mut()) {
                 table.transform_slice(limb);
             }
-            let mut secret = vec![IBig::ZERO; N];
-            secret[0] = IBig::ONE;
-            secret[2] = -IBig::ONE;
-            let mut h = vec![IBig::ZERO; N];
-            h[0] = IBig::from(2);
-            h[1] = -IBig::ONE;
-            h[3] = IBig::ONE;
             for mode in [
                 HybridModDown::Centered,
                 HybridModDown::PlaintextPreserving(17),

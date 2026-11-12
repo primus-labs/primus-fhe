@@ -59,12 +59,11 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 );
             }
 
-            let scratch_len = partition.mod_up_scratch_len(poly_length);
             partition.for_each_approx_mod_up_complement_limb(
                 q_scratch,
                 mod_up_limb,
                 poly_length,
-                &mut conversion_scratch[..scratch_len],
+                conversion_scratch,
                 |modulus_index, converted_limb| {
                     table.ntt_tables()[modulus_index].transform_slice(converted_limb);
                     add_qp_glwe_product(
@@ -96,7 +95,6 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         let poly_length = self.input_size.poly_length().get();
         let qp_poly_len = self.qp_size.rns_poly_len();
         let q_poly_len = self.output_size.rns_poly_len();
-        let scratch_len = hybrid_rns.mod_down_scratch_len(poly_length);
 
         for accumulator in workspace.accumulator_qp.chunks_exact_mut(qp_poly_len) {
             approx_mod_down_ntt(
@@ -105,7 +103,7 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 accumulator,
                 poly_length,
                 &mut workspace.q_scratch,
-                &mut workspace.conversion_scratch[..scratch_len],
+                &mut workspace.conversion_scratch,
             );
         }
 
@@ -192,12 +190,11 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
                 .partitions()
                 .zip(key_for_secret.chunks_exact(qp_glwe_len))
             {
-                let scratch_len = partition.mod_up_scratch_len(poly_length);
                 partition.approx_mod_up_to(
                     mask_polynomial.as_slice(),
                     &mut digit_qp,
                     poly_length,
-                    &mut workspace.conversion_scratch[..scratch_len],
+                    &mut workspace.conversion_scratch,
                 );
                 table.transform_slice(&mut digit_qp);
 
@@ -380,8 +377,8 @@ struct HybridRnsGlweKeySwitchingWorkspace<T: FheUint> {
     q_scratch: Vec<T>,
     // One streamed coefficient-domain ModUp limb before its forward NTT.
     mod_up_limb: Vec<T>,
-    // ModUp completes before ModDown starts. Each converter overwrites its
-    // required prefix before reading it; one max-sized allocation serves both.
+    // ModUp completes before ModDown starts. Each converter selects and
+    // overwrites its required prefix; callers pass this allocation as a whole.
     conversion_scratch: Vec<T>,
 }
 

@@ -30,15 +30,7 @@ sha2 = "0.11"
 criterion = { workspace = true }
 
 [[bench]]
-name = "automorphism"
-harness = false
-
-[[bench]]
-name = "trace"
-harness = false
-
-[[bench]]
-name = "expand_coeff"
+name = "raw_phase"
 harness = false
 
 [features]

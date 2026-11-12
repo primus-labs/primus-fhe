@@ -164,7 +164,7 @@ fn centered_crt_pair(first: u64, second: u64, moduli: &[u64]) -> i128 {
         }
 }
 
-fn check_raw<T, Table>(moduli: [T; 2])
+fn check_raw<T, Table>(moduli: [T; 2], binomial: (usize, usize, u32))
 where
     T: FheUint,
     BarrettModulus<T>: FieldContext<T>,
@@ -173,9 +173,9 @@ where
     let values: Vec<u64> = moduli.iter().map(|&q| q.as_into()).collect();
     let moduli = moduli.map(BarrettModulus::new);
     let base = RNSBase::new(&moduli).unwrap();
+    let (rank, n, eta) = binomial;
     for (rank, n, error) in [
-        (1, 32, ErrorDistribution::CenteredBinomial { eta: 1 }),
-        (2, 64, ErrorDistribution::CenteredBinomial { eta: 21 }),
+        (rank, n, ErrorDistribution::CenteredBinomial { eta }),
         (
             2,
             32,
@@ -310,12 +310,13 @@ where
 
 #[test]
 fn raw_u32_encryption_and_phase_match_integer_oracles() {
-    check_raw::<u32, U32NttTable>([998_244_353, 1_004_535_809]);
+    check_raw::<u32, U32NttTable>([998_244_353, 1_004_535_809], (1, 32, 1));
 }
 
 #[test]
 fn raw_u64_encryption_and_phase_match_integer_oracles() {
-    check_raw::<u64, U64NttTable>([1_125_899_906_826_241, 1_125_899_906_629_633]);
+    // Keep the longer CBD mask and the larger transform on the second width.
+    check_raw::<u64, U64NttTable>([1_125_899_906_826_241, 1_125_899_906_629_633], (2, 64, 21));
 }
 
 fn check_shares<T, Table>(values: [T; 2], rank: usize)

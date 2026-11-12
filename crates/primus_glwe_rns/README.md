@@ -155,6 +155,18 @@ are excluded. Retained top-Q public material and working-basis keys must be
 listed separately; drops do not erase earlier exposure. Ring-row independence,
 joint-material and circular/KDM assumptions still require review.
 
+## Benchmarks
+
+The [raw phase benchmark](benches/raw_phase.rs) times automorphism, ordinary and
+reverse trace, and serial or two-worker coefficient expansion separately. Each
+uses the CRT or DCRT form of the same ciphertext with an unscaled raw phase.
+Preparation is outside timing, including when a Criterion filter selects one
+operation.
+
+```sh
+cargo bench -p primus_glwe_rns --bench raw_phase
+```
+
 ## Features and further reading
 
 Default features are empty; RNS dependencies are enabled without a separate

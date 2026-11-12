@@ -42,7 +42,7 @@ where
 
     let key_iter = DcrtGlevIterMut::new(key.as_mut_slice(), dcrt_glev_len);
 
-    sk.iter().zip(key_iter).for_each(|(si, mut dcrt_glev)| {
+    sk.iter().zip(key_iter).for_each(|(si, dcrt_glev)| {
         permutation.apply_signed_to::<T>(si, auto_signed);
         encode_secret_polynomial_to_rns(
             auto_signed,
@@ -50,7 +50,7 @@ where
             params.cipher_moduli_value(),
         );
 
-        encryptor.encrypt_crt_to(&auto_si, &mut dcrt_glev, rng);
+        encryptor.encrypt_crt_glev_kernel_to(auto_si.as_view(), dcrt_glev, rng);
     });
 
     key

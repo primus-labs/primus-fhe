@@ -66,10 +66,10 @@ where
     dcrt_sk
         .iter_dcrt_poly()
         .zip(key_iter)
-        .for_each(|(si, mut dcrt_glev)| {
+        .for_each(|(si, dcrt_glev)| {
             dcrt_polynomial_automorphism_to(si.0, auto_si.as_mut(), permutation);
 
-            encryptor.encrypt_dcrt_to(&auto_si, &mut dcrt_glev, rng);
+            encryptor.encrypt_dcrt_glev_kernel_to(auto_si.as_view(), dcrt_glev, rng);
         });
 
     key

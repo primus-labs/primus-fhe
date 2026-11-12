@@ -103,31 +103,37 @@ fn encryption_bindings_check_layout_and_ordered_moduli() {
             rand::Rng::next_u64(&mut rejected_rng),
             rand::Rng::next_u64(&mut expected_rng)
         );
-        assert!(matches!(
-            key.try_bind_raw(
-                other_params.encryption_parameters(),
-                other_params.base_q(),
-                &other_table
-            ),
-            Err(RnsDomainError::ModulusOrderMismatch { .. })
-        ));
-        assert!(matches!(
-            public_key.try_bind_raw(
-                other_params.encryption_parameters(),
-                other_params.base_q(),
-                &other_table
-            ),
-            Err(RnsDomainError::ModulusOrderMismatch { .. })
-        ));
+        let sampling = other_params.encryption_parameters();
+        let base = other_params.base_q();
         let gadget = other_params.gadget(DecompositionBaseLog::new(4), None);
-        assert!(matches!(
-            key.try_bind_gadget(&gadget, other_params.encryption_parameters(), &other_table),
-            Err(RnsDomainError::ModulusOrderMismatch { .. })
-        ));
-        assert!(matches!(
-            public_key.try_bind_gadget(&gadget, other_params.encryption_parameters(), &other_table),
-            Err(RnsDomainError::ModulusOrderMismatch { .. })
-        ));
+        for (operation, result) in [
+            (
+                "secret raw",
+                key.try_bind_raw(sampling, base, &other_table).map(|_| ()),
+            ),
+            (
+                "public raw",
+                public_key
+                    .try_bind_raw(sampling, base, &other_table)
+                    .map(|_| ()),
+            ),
+            (
+                "secret gadget",
+                key.try_bind_gadget(&gadget, sampling, &other_table)
+                    .map(|_| ()),
+            ),
+            (
+                "public gadget",
+                public_key
+                    .try_bind_gadget(&gadget, sampling, &other_table)
+                    .map(|_| ()),
+            ),
+        ] {
+            assert!(
+                matches!(result, Err(RnsDomainError::ModulusOrderMismatch { .. })),
+                "{operation}: {result:?} for {values:?}",
+            );
+        }
     }
 }
 

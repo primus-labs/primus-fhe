@@ -131,6 +131,16 @@ Gaussian 表。报告的 basis 可异于原采样 basis；该诊断不建立 con
 保留的顶层 Q 公开材料和各 working-basis 密钥需要分别列出；drop 不会撤销已有
 曝光。环行的独立性、联合材料和 circular/KDM 假设仍需审查。
 
+## 基准
+
+[原始相位基准](benches/raw_phase.rs)分别测量自同构、普通与反向 trace，以及串行与
+双 worker 系数展开。各操作使用同一份未缩放原始相位密文的 CRT 或 DCRT 表示。
+Criterion 筛选单个操作时，准备仍在计时之外。
+
+```sh
+cargo bench -p primus_glwe_rns --bench raw_phase
+```
+
 ## Feature 与进一步阅读
 
 默认 features 为空；已启用所需 RNS 依赖，无需另设 `rns` 开关。`simd` 转发 nightly
