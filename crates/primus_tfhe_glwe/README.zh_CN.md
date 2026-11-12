@@ -49,7 +49,7 @@
 
 使用 Block 时，设置 `config.method = BlindRotationMethod::Block` 和 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。`BlockOccupancy::AtMostOne` 允许空块，每块在 bit 控制后保存独立加密的 dummy。`ExactlyOne` 要求每块恰好有一个 `1`，只保存 bit 控制。采用分块秘密后需重新评估安全性和噪声。
 
-两后端通过 `BlockGlweBootstrappingKey` 和 `GlweBlindRotationControls<T, M>` 共享系数控制布局。NTT 使用 Barrett 剩余类，Fourier 使用 native 环面系数。Fourier 在系数域精确聚合，再执行普通 FFT 与外积，trace 精度独立选择。导入契约见 [Block 密钥类型](src/block.rs)，算法选择见[共享规则](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
+两后端通过 `BlockGlweBootstrappingKey` 共享系数控制和块布局。NTT 使用 Barrett 剩余类，Fourier 使用 native 环面系数。Fourier 在系数域精确聚合，再执行普通 FFT 与外积，trace 精度独立选择。导入契约见 [Block 密钥类型](src/block.rs)，算法选择见[共享规则](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
 两种分块占用模式也支持 Classic BR。输入维数和 gadget 布局相同时，Block scratch 可以跨占用模式复用。
 

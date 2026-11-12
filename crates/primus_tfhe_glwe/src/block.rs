@@ -1,13 +1,150 @@
 //! Coefficient controls for direct, contiguous block-binary blind rotation.
 
-use std::ops::Range;
+use std::{alloc::Layout, ops::Range};
 
-use primus_glwe::{BlockOccupancy, GgswParameters};
+use primus_decompose::primitive::ApproxSignedBasis;
+use primus_glwe::{BlockOccupancy, GgswParameters, SecretKeyDistr};
 use primus_integer::FheUint;
-use primus_lattice::LweDimension;
+use primus_lattice::{GadgetSize, LweDimension};
 use primus_reduce::{Modulus, RingContext};
 
-use crate::{BlockBootstrappingKeyError, GlweBlindRotationControls};
+use crate::BlockBootstrappingKeyError;
+
+/// Validated layout for contiguous coefficient GGSWs, shared by GLWE backends.
+///
+/// Describes only logical LWE positions. Any public zero padding introduced by
+/// ring key switching stays outside the block layout.
+#[doc(hidden)]
+pub struct BlockGlweKeyLayout<T: FheUint, M: RingContext<T>> {
+    input_dimension: LweDimension,
+    block_size: usize,
+    occupancy: BlockOccupancy,
+    selection_len: usize,
+    block_stride: usize,
+    size: GadgetSize,
+    basis: ApproxSignedBasis<T>,
+    ring_modulus: M,
+    input_modulus: Option<T>,
+}
+
+impl<T: FheUint, M: RingContext<T>> BlockGlweKeyLayout<T, M> {
+    /// Checks public geometry and coefficient allocation before key generation.
+    /// `input_modulus` is the explicit LWE modulus q, or `None` for the native torus.
+    ///
+    /// # Errors
+    /// Rejects a distribution other than block-binary, zero or incomplete
+    /// blocks, an unrepresentable rotation domain, or overflowing storage.
+    pub fn try_new(
+        dimension: usize,
+        distribution: SecretKeyDistr,
+        parameters: &GgswParameters<T, M>,
+        input_modulus: Option<T>,
+    ) -> Result<Self, BlockBootstrappingKeyError> {
+        use BlockBootstrappingKeyError as Error;
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy,
+        } = distribution
+        else {
+            return Err(Error::UnsupportedSecretDistribution);
+        };
+        let invalid_geometry = || Error::InvalidBlockGeometry {
+            dimension,
+            block_size,
+        };
+        let input_dimension = LweDimension::try_new(dimension).map_err(|_| invalid_geometry())?;
+        if block_size == 0 || !dimension.is_multiple_of(block_size) {
+            return Err(invalid_geometry());
+        }
+        if T::try_from(2 * parameters.poly_length().get()).is_err() {
+            return Err(Error::RotationDomainTooLarge);
+        }
+        let size = parameters.size();
+        let ggsw_len = size.ggsw_len();
+        let selection_len = block_size
+            .checked_mul(ggsw_len)
+            .ok_or(Error::StorageSizeOverflow)?;
+        let block_stride = selection_len
+            .checked_add(usize::from(occupancy == BlockOccupancy::AtMostOne) * ggsw_len)
+            .ok_or(Error::StorageSizeOverflow)?;
+        let len = (dimension / block_size)
+            .checked_mul(block_stride)
+            .ok_or(Error::StorageSizeOverflow)?;
+        Layout::array::<T>(len).map_err(|_| Error::StorageSizeOverflow)?;
+        Ok(Self {
+            input_dimension,
+            block_size,
+            occupancy,
+            selection_len,
+            block_stride,
+            size,
+            basis: parameters.basis().clone(),
+            ring_modulus: parameters.cipher_modulus(),
+            input_modulus,
+        })
+    }
+
+    /// Returns the number of logical LWE positions per block.
+    #[must_use]
+    #[inline]
+    pub fn block_size(&self) -> usize {
+        self.block_size
+    }
+
+    /// Returns the declared occupancy law.
+    #[must_use]
+    #[inline]
+    pub fn occupancy(&self) -> BlockOccupancy {
+        self.occupancy
+    }
+
+    /// Returns the number of GGSWs per block, including an AtMostOne dummy.
+    #[must_use]
+    #[inline]
+    pub fn controls_per_block(&self) -> usize {
+        self.block_size + usize::from(self.occupancy == BlockOccupancy::AtMostOne)
+    }
+
+    /// Allocates the validated payload and writes each complete block in key order.
+    /// The callback receives a contiguous logical range and its coefficient
+    /// storage, including the final dummy control for `AtMostOne`.
+    ///
+    /// # Correctness
+    /// The callback must fill every control with the material specified by
+    /// [the key import contract](BlockGlweBootstrappingKey::try_new).
+    #[must_use]
+    pub fn generate(
+        self,
+        mut write_block: impl FnMut(Range<usize>, &mut [T]),
+    ) -> BlockGlweBootstrappingKey<T, M> {
+        let mut data = vec![T::ZERO; self.data_len()];
+        for (block, coefficients) in data.chunks_exact_mut(self.block_stride).enumerate() {
+            let start = block * self.block_size;
+            write_block(start..start + self.block_size, coefficients);
+        }
+        BlockGlweBootstrappingKey { layout: self, data }
+    }
+
+    /// Coefficient count established when the layout was prepared.
+    fn data_len(&self) -> usize {
+        (self.input_dimension.get() / self.block_size) * self.block_stride
+    }
+
+    /// Binds imported material after checking that every complete block is present.
+    fn bind(
+        self,
+        data: Vec<T>,
+    ) -> Result<BlockGlweBootstrappingKey<T, M>, BlockBootstrappingKeyError> {
+        let expected = self.data_len();
+        if data.len() != expected {
+            return Err(BlockBootstrappingKeyError::StorageLengthMismatch {
+                expected,
+                actual: data.len(),
+            });
+        }
+        Ok(BlockGlweBootstrappingKey { layout: self, data })
+    }
+}
 
 /// Coefficient GGSWs for a block-binary input secret.
 ///
@@ -18,9 +155,8 @@ use crate::{BlockBootstrappingKeyError, GlweBlindRotationControls};
 /// Only the public geometry and ciphertexts are retained; neither actual block
 /// occupancy nor the sampled total Hamming weight is recorded.
 pub struct BlockGlweBootstrappingKey<T: FheUint, M: RingContext<T>> {
-    controls: GlweBlindRotationControls<T, M>,
-    block_size: usize,
-    occupancy: BlockOccupancy,
+    layout: BlockGlweKeyLayout<T, M>,
+    data: Vec<T>,
 }
 
 impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
@@ -46,92 +182,90 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
         parameters: &GgswParameters<T, M>,
         input_modulus: LM,
     ) -> Result<Self, BlockBootstrappingKeyError> {
-        use BlockBootstrappingKeyError as Error;
-        let dimension = input_dimension.get();
-        if block_size == 0 || !dimension.is_multiple_of(block_size) {
-            return Err(Error::InvalidBlockGeometry {
-                dimension,
+        BlockGlweKeyLayout::try_new(
+            input_dimension.get(),
+            SecretKeyDistr::BlockBinary {
                 block_size,
-            });
-        }
-        let control_count = dimension
-            .checked_add(
-                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
-            )
-            .ok_or(Error::StorageSizeOverflow)?;
-        let controls = GlweBlindRotationControls::try_new(
-            data,
-            input_dimension,
-            control_count,
+                occupancy,
+            },
             parameters,
-            input_modulus,
-        )
-        .map_err(|error| match error {
-            crate::controls::BlindRotationControlsError::RotationDomainTooLarge => {
-                Error::RotationDomainTooLarge
-            }
-            crate::controls::BlindRotationControlsError::StorageSizeOverflow => {
-                Error::StorageSizeOverflow
-            }
-            crate::controls::BlindRotationControlsError::StorageLengthMismatch {
-                expected,
-                actual,
-            } => Error::StorageLengthMismatch { expected, actual },
-        })?;
-        Ok(Self {
-            controls,
-            block_size,
-            occupancy,
-        })
+            input_modulus.explicit_value(),
+        )?
+        .bind(data)
     }
 
-    /// Borrows coefficient controls and their common numerical layout.
+    /// Returns the logical input dimension, excluding ring-KS zero padding.
     #[must_use]
     #[inline]
-    pub fn controls(&self) -> &GlweBlindRotationControls<T, M> {
-        &self.controls
+    pub fn input_dimension(&self) -> LweDimension {
+        self.layout.input_dimension
+    }
+
+    /// Returns the explicit input modulus q, or `None` for the native torus.
+    #[must_use]
+    #[inline]
+    pub fn input_modulus_value(&self) -> Option<T> {
+        self.layout.input_modulus
+    }
+
+    /// Returns the reducer for accumulator coefficients and gadget rows at Q.
+    #[must_use]
+    #[inline]
+    pub fn ring_modulus(&self) -> M {
+        self.layout.ring_modulus
+    }
+
+    /// Returns the GGSW layout shared by all selections and dummies.
+    #[must_use]
+    #[inline]
+    pub fn size(&self) -> GadgetSize {
+        self.layout.size
+    }
+
+    /// Returns the decomposition basis, including its level order.
+    #[must_use]
+    #[inline]
+    pub fn basis(&self) -> &ApproxSignedBasis<T> {
+        &self.layout.basis
     }
 
     /// Returns the number of logical input coefficients per complete block.
     #[must_use]
     #[inline]
     pub fn block_size(&self) -> usize {
-        self.block_size
+        self.layout.block_size
     }
 
     /// Returns the declared secret law, which determines whether a dummy is stored.
     #[must_use]
     #[inline]
     pub fn occupancy(&self) -> BlockOccupancy {
-        self.occupancy
+        self.layout.occupancy
     }
 
-    /// Returns the number of complete logical input blocks.
+    /// Borrows all coefficient GGSWs in block order. Each control uses
+    /// `[row][level][component][coefficient]` order.
     #[must_use]
     #[inline]
-    pub fn block_count(&self) -> usize {
-        self.controls.input_dimension().get() / self.block_size
+    pub fn as_slice(&self) -> &[T] {
+        &self.data
     }
 
-    /// Borrows a block's logical input range and contiguous coefficient GGSWs.
-    /// Only AtMostOne includes an independent dummy as the final GGSW,
-    /// without a corresponding input position. ExactlyOne contains w GGSWs.
+    /// Iterates complete blocks in input order.
     ///
-    /// # Panics
-    /// Panics if `block_index >= self.block_count()`.
-    #[must_use]
-    pub fn block_data(&self, block_index: usize) -> (Range<usize>, &[T]) {
-        assert!(
-            block_index < self.block_count(),
-            "block index out of bounds"
-        );
-        let start = block_index * self.block_size;
-        let count = self.block_size + usize::from(self.occupancy == BlockOccupancy::AtMostOne);
-        let control_start = block_index * count;
-        let ggsw_len = self.controls.size().ggsw_len();
-        (
-            start..start + self.block_size,
-            &self.controls.as_slice()[control_start * ggsw_len..(control_start + count) * ggsw_len],
-        )
+    /// Each item contains the logical input range, its contiguous coefficient
+    /// GGSWs, and the independently encrypted dummy for AtMostOne. The dummy
+    /// slice is empty for ExactlyOne.
+    #[inline]
+    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (Range<usize>, &[T], &[T])> {
+        let width = self.layout.block_size;
+        let selection_len = self.layout.selection_len;
+        self.data
+            .chunks_exact(self.layout.block_stride)
+            .enumerate()
+            .map(move |(block, controls)| {
+                let (selections, dummy) = controls.split_at(selection_len);
+                (block * width..(block + 1) * width, selections, dummy)
+            })
     }
 }

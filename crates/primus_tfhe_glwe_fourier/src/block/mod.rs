@@ -7,5 +7,4 @@ mod blind_rotation;
 mod key;
 
 pub use blind_rotation::BlockGlweBlindRotationWorkspace;
-pub(crate) use key::BlockKeyLayout;
 pub use primus_tfhe_glwe::BlockGlweBootstrappingKey;

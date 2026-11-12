@@ -1,13 +1,15 @@
 //! Server evaluation material and paired or component key generation.
 
-use primus_reduce::RingContext;
 mod circuit;
 pub use circuit::CircuitBootstrapServerKey;
 
-use primus_fft::{FftEngine, FftTable, TorusFftValue};
+use std::alloc::Layout;
+
+use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
 use primus_glwe::{FourierGlweEncryptor, FourierGlweKeySwitchingKey, SecretKeyDistr};
 use primus_modulus::NativeModulus;
-use primus_tfhe_glwe::ClientKey;
+use primus_reduce::RingContext;
+use primus_tfhe_glwe::{BlockBootstrappingKeyError, BlockGlweKeyLayout, ClientKey};
 
 use crate::{
     BlindRotationMethod, GlweKeySwitchingParameters, KeyGenerationError, PbsParameters,
@@ -28,9 +30,9 @@ pub enum BlindRotationKey<T: TorusFftValue> {
 
 /// Checked setup geometry, before secret sampling or ciphertext allocation.
 /// This choice retains neither ciphertexts nor private assignments.
-enum BlindRotationLayout {
+enum BlindRotationLayout<T: TorusFftValue> {
     Classic,
-    Block(crate::block::BlockKeyLayout),
+    Block(BlockGlweKeyLayout<T, NativeModulus<T>>),
 }
 
 impl<T: TorusFftValue> BlindRotationKey<T> {
@@ -49,14 +51,14 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                 key.basis(),
             ),
             Self::Block(key) => (
-                key.controls().input_dimension(),
-                key.controls().input_modulus_value(),
+                key.input_dimension(),
+                key.input_modulus_value(),
                 SecretKeyDistr::BlockBinary {
                     block_size: key.block_size(),
                     occupancy: key.occupancy(),
                 },
-                key.controls().size(),
-                key.controls().basis(),
+                key.size(),
+                key.basis(),
             ),
         };
         dimension == (parameters.small_lwe().dimension())
@@ -178,7 +180,12 @@ where
                 .encryption_parameters(),
         )
         .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_blind_rotation_key_with_accumulator(client_key, &mut encryptor, layout, rng)
+        Ok(self.generate_blind_rotation_key_with_accumulator(
+            client_key,
+            &mut encryptor,
+            layout,
+            rng,
+        ))
     }
 
     /// Generates ring KS material from the accumulator to the padded small secret.
@@ -264,16 +271,16 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         encryptor: &mut FourierGlweEncryptor<'_, T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<BlindRotationKey<T>, KeyGenerationError>
+    ) -> BlindRotationKey<T>
     where
         R: rand::Rng + rand::CryptoRng,
     {
         let parameters = self.context.parameters();
         let blind_rotation_ggsw = parameters.blind_rotation_params();
 
-        Ok(match layout {
+        match layout {
             BlindRotationLayout::Classic => {
                 BlindRotationKey::Classic(FourierGlweBootstrappingKey::generate_fourier(
                     client_key.small_lwe_secret_key(),
@@ -287,9 +294,9 @@ where
             BlindRotationLayout::Block(layout) => {
                 BlindRotationKey::Block(self.generate_block_bootstrapping_key_with_accumulator(
                     client_key, layout, encryptor, rng,
-                )?)
+                ))
             }
-        })
+        }
     }
 
     /// Consumes the accepted accumulator encryption setup for BR, then releases it before
@@ -299,7 +306,7 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         mut encryptor: FourierGlweEncryptor<'_, T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<ServerKey<T>, KeyGenerationError>
     where
@@ -310,7 +317,7 @@ where
             &mut encryptor,
             layout,
             rng,
-        )?;
+        );
         drop(encryptor);
         let glwe_key_switching_key = self.generate_glwe_key_switching_key(
             self.context.parameters().glwe_key_switching(),
@@ -351,16 +358,22 @@ where
     }
 
     /// Checks the selected public geometry before sampling secrets or rows.
-    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
+    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout<T>, KeyGenerationError> {
         Ok(match self.context.parameters().blind_rotation_method() {
             BlindRotationMethod::Classic => BlindRotationLayout::Classic,
             BlindRotationMethod::Block => {
                 let parameters = self.context.parameters();
-                BlindRotationLayout::Block(crate::block::BlockKeyLayout::try_new(
+                let gadget = parameters.blind_rotation_params();
+                let layout = BlockGlweKeyLayout::try_new(
                     parameters.small_lwe().dimension().get(),
                     parameters.small_lwe().secret_key_distr(),
-                    parameters.blind_rotation_params(),
-                )?)
+                    gadget,
+                    parameters.small_lwe().cipher_modulus_value(),
+                )?;
+                // The evaluated aggregate needs a separate complex buffer.
+                Layout::array::<Complex64>(gadget.size().fourier_ggsw_len())
+                    .map_err(|_| BlockBootstrappingKeyError::StorageSizeOverflow)?;
+                BlindRotationLayout::Block(layout)
             }
         })
     }

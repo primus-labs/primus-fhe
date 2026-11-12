@@ -49,7 +49,7 @@ Classic binary/ternary and Block binary support PBS, ManyLUT, MVB and CBS in bot
 
 For Block, set `config.method = BlindRotationMethod::Block` and select `SecretKeyDistr::BlockBinary { block_size, occupancy }`. `BlockOccupancy::AtMostOne` allows empty blocks and stores an independent encrypted dummy after each block's bit controls. `ExactlyOne` requires one `1` per block and stores only the bit controls. Choosing this distribution changes the secret law and requires its own security and noise assessment.
 
-The backends share `BlockGlweBootstrappingKey` and `GlweBlindRotationControls<T, M>` for coefficient controls. NTT uses Barrett residues and Fourier uses native-torus coefficients. Fourier aggregates exactly in the coefficient domain before the ordinary FFT and external product; trace precision is independent. See the [Block material contract](src/block.rs) for imports and the [shared selection rules](../primus_tfhe/README.md#selecting-blind-rotation) for method choice.
+The backends share `BlockGlweBootstrappingKey` for coefficient controls and block layout. NTT uses Barrett residues and Fourier uses native-torus coefficients. Fourier aggregates exactly in the coefficient domain before the ordinary FFT and external product; trace precision is independent. See the [Block material contract](src/block.rs) for imports and the [shared selection rules](../primus_tfhe/README.md#selecting-blind-rotation) for method choice.
 
 Both block occupancy modes also work with Classic BR. Block scratch is reusable across occupancy modes when its input dimension and gadget layout match.
 

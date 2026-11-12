@@ -1328,19 +1328,21 @@ fn check_bundle_material<Table: FftTable>() {
                     }
                 }
                 BlindRotationKey::Block(key) => {
-                    assert_eq!(key.controls().size(), br.size());
-                    assert_eq!(key.controls().basis(), br.basis());
-                    assert_eq!(key.block_count(), 2);
+                    assert_eq!(key.size(), br.size());
+                    assert_eq!(key.basis(), br.basis());
+                    assert_eq!(key.blocks().len(), 2);
                     assert_eq!(key.occupancy(), occupancy);
-                    for block in 0..key.block_count() {
-                        let (indices, data) = key.block_data(block);
-                        let controls = primus_lattice::ggsw::GgswIter::new(data, br.ggsw_len());
+                    for (indices, controls, dummy) in key.blocks() {
+                        let controls = primus_lattice::ggsw::GgswIter::new(controls, br.ggsw_len());
+                        let dummy_control =
+                            primus_lattice::ggsw::GgswIter::new(dummy, br.ggsw_len());
                         let has_dummy = occupancy == BlockOccupancy::AtMostOne;
-                        assert_eq!(controls.len(), indices.len() + usize::from(has_dummy));
+                        assert_eq!(controls.len(), indices.len());
+                        assert_eq!(dummy_control.len(), usize::from(has_dummy));
                         let bits = &small[indices];
                         let dummy = 1 - bits.iter().sum::<u64>();
                         let expected = bits.iter().copied().chain(has_dummy.then_some(dummy));
-                        for (control, bit) in controls.zip(expected) {
+                        for (control, bit) in controls.chain(dummy_control).zip(expected) {
                             // Exact native key rows retain only sampled noise:
                             // no forward/inverse Fourier roundtrip may create them.
                             assert_eq!(material_selector(control, br, &ring, 8), bit);

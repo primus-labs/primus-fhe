@@ -2,7 +2,6 @@
 
 use primus_data::{Data, DataMut};
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
-use primus_glwe::BlockOccupancy;
 use primus_lattice::{glwe::TorusGlwe, lwe::Lwe, workspace::FourierGlweExternalProductWorkspace};
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
@@ -26,7 +25,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
     #[must_use]
     pub fn new(key: &BlockGlweBootstrappingKey<T, NativeModulus<T>>) -> Self {
         Self {
-            inner: ControlAggregationWorkspace::new(key.controls()),
+            inner: ControlAggregationWorkspace::new(key),
         }
     }
 
@@ -72,8 +71,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
         B: Data<Elem = T>,
         C: DataMut<Elem = T>,
     {
-        let controls = key.controls();
-        let size = controls.size();
+        let size = key.size();
         let n = size.glwe_size().poly_length().get();
         assert_eq!(
             modulus_switch.rotation_step(),
@@ -81,7 +79,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
             "ordinary blind rotation requires step one"
         );
         assert!(
-            modulus_switch.is_compatible(controls.input_modulus_value(), 2 * n),
+            modulus_switch.is_compatible(key.input_modulus_value(), 2 * n),
             "block blind-rotation quantizer domain mismatch"
         );
         assert_eq!(
@@ -90,7 +88,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
                 lookup_table.as_ref().len(),
                 output.as_ref().len(),
             ),
-            (controls.input_dimension().get(), n, size.glwe_len()),
+            (key.input_dimension().get(), n, size.glwe_len()),
             "block blind-rotation input, LUT or output layout mismatch"
         );
         assert_eq!(
@@ -98,7 +96,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
                 self.inner.input_exponents.len(),
                 self.inner.external_product.size(),
             ),
-            (controls.input_dimension().get(), size),
+            (key.input_dimension().get(), size),
             "block blind-rotation workspace layout mismatch"
         );
         assert_eq!(
@@ -130,10 +128,9 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
     ) where
         Table: FftTable,
     {
-        let controls = key.controls();
-        let size = controls.size();
+        let size = key.size();
         let n = size.glwe_size().poly_length().get();
-        let modulus = controls.ring_modulus();
+        let modulus = key.ring_modulus();
         let ControlAggregationWorkspace {
             input_exponents,
             aggregate,
@@ -147,15 +144,11 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(initial_exponent, &mut Polynomial(body), modulus);
 
-        let controls_per_block =
-            key.block_size() + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
         let mut output_is_current = true;
-        for (exponents, ciphertexts) in input_exponents.chunks_exact(key.block_size()).zip(
-            controls
-                .as_slice()
-                .chunks_exact(controls_per_block * size.ggsw_len()),
-        ) {
-            let (selections, dummy) = ciphertexts.split_at(key.block_size() * size.ggsw_len());
+        for ((_, selections, dummy), exponents) in key
+            .blocks()
+            .zip(input_exponents.chunks_exact(key.block_size()))
+        {
             // ExactlyOne has no dummy; encrypted-zero selectors still take
             // part in the full aggregate. Overwrite dirty scratch in either mode.
             if dummy.is_empty() {
@@ -171,7 +164,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     &output,
                     scratch,
-                    controls.basis(),
+                    key.basis(),
                     fft,
                     external_product,
                 );
@@ -179,7 +172,7 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     scratch,
                     &mut output,
-                    controls.basis(),
+                    key.basis(),
                     fft,
                     external_product,
                 );

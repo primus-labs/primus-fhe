@@ -140,14 +140,14 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         mut encryptor: FourierGlweEncryptor<'_, T>,
-        layout: super::BlindRotationLayout,
+        layout: super::BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
         let blind_rotation =
-            self.generate_blind_rotation_key_with_accumulator(client, &mut encryptor, layout, rng)?;
+            self.generate_blind_rotation_key_with_accumulator(client, &mut encryptor, layout, rng);
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_accumulator(
             &mut encryptor,
             operation.gadget().clone(),

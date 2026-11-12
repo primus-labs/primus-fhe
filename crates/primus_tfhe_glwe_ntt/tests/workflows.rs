@@ -1496,7 +1496,7 @@ fn check_block_raw_rotation<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
                     &mut expected_key_rng,
                     &mut encryption,
                 );
-                assert_eq!(key.controls().as_slice(), expected);
+                assert_eq!(key.as_slice(), expected);
                 assert_eq!(rng.next_u64(), expected_key_rng.next_u64());
             }
             let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
