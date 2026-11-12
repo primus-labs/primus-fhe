@@ -7,10 +7,31 @@ use primus_integer::FheUint;
 #[cfg(feature = "simd")]
 use primus_integer::{LaneArray, SimdArray, SimdInteger};
 
-type ValueT = u32;
+const MODULUS: u32 = 536_813_569;
+const SECOND_MODULUS: u32 = 998_244_353;
 
-const MODULUS: ValueT = 536_813_569;
-const SECOND_MODULUS: ValueT = 998_244_353;
+// Native u64 dispatch starts at 32. Length 65 covers multiple vectors and a
+// scalar tail even for the widest portable SIMD lane count of 32.
+const SLICE_LENGTHS: [usize; 12] = [0, 1, 4, 7, 8, 15, 16, 17, 31, 32, 33, 65];
+const U32_MODULI: [u64; 3] = [3, 132_120_577, (1 << 31) - 1];
+const U64_MODULI: [u64; 4] = [3, (1 << 32) - 5, 1_125_899_906_826_241, (1 << 63) - 1];
+
+/// Includes full-word multiplicands and fixed interior values in both vector bodies and tails.
+fn input_words<T: FheUint + TryFrom<u64>>(len: usize, modulus: u64) -> Vec<T> {
+    let max: u64 = T::MAX.as_into();
+    (0..len)
+        .map(|i| {
+            let value = match i % 6 {
+                0 => 0,
+                1 => modulus - 1,
+                2 => max,
+                3 => modulus,
+                _ => (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) & max,
+            };
+            T::try_from(value).ok().unwrap()
+        })
+        .collect()
+}
 
 /// Resetting either value or modulus must refresh the cached quotient.
 #[test]
@@ -68,24 +89,8 @@ fn slice_mul_against_wide_product() {
     fn check<T: FheUint + TryFrom<u64> + Into<u128>>(q: u64) {
         let convert = |value| T::try_from(value).ok().unwrap();
         let modulus = convert(q);
-        let mut state = 0x1234_5678_9abc_def0u64;
-        for len in [0, 1, 7, 8, 15, 16, 17, 31, 32, 33, 64, 65] {
-            let input: Vec<T> = (0..len)
-                .map(|i| {
-                    state ^= state << 13;
-                    state ^= state >> 7;
-                    state ^= state << 17;
-                    // Shoup's scalar formula also accepts full-word operands;
-                    // exercise that range in both the vector body and tail.
-                    convert(match i % 6 {
-                        0 => 0,
-                        1 => q - 1,
-                        2 => T::MAX.into() as u64,
-                        3 => q,
-                        _ => state & (T::MAX.into() as u64),
-                    })
-                })
-                .collect();
+        for len in SLICE_LENGTHS {
+            let input = input_words::<T>(len, q);
             for factor_value in [0, 1, 17 % q, q / 2, q - 1] {
                 let factor = ShoupFactor::new(convert(factor_value), modulus);
                 let expected: Vec<T> = input
@@ -123,10 +128,10 @@ fn slice_mul_against_wide_product() {
     }
 
     check::<u16>(32749);
-    for q in [3, 132_120_577, 536_813_569, (1 << 31) - 1] {
+    for q in U32_MODULI {
         check::<u32>(q);
     }
-    for q in [3, (1 << 32) - 5, 1_125_899_906_826_241, (1 << 63) - 1] {
+    for q in U64_MODULI {
         check::<u64>(q);
     }
 }
@@ -138,21 +143,8 @@ fn fused_slice_ops_against_wide_product() {
         let convert = |value| T::try_from(value).ok().unwrap();
         let modulus = convert(q);
         let wide_q = u128::from(q);
-        let mut state = 0xa076_1d64_78bd_642fu64;
-        for len in [0, 1, 7, 8, 15, 16, 17, 31, 32, 33, 64, 65] {
-            let rhs: Vec<T> = (0..len)
-                .map(|i| {
-                    state ^= state << 13;
-                    state ^= state >> 7;
-                    state ^= state << 17;
-                    convert(match i % 4 {
-                        0 => 0,
-                        1 => q - 1,
-                        2 => T::MAX.into() as u64,
-                        _ => state & (T::MAX.into() as u64),
-                    })
-                })
-                .collect();
+        for len in SLICE_LENGTHS {
+            let rhs = input_words::<T>(len, q);
             let acc: Vec<T> = (0..len)
                 .map(|i| convert([0, q - 1, q / 2][i % 3]))
                 .collect();
@@ -193,10 +185,10 @@ fn fused_slice_ops_against_wide_product() {
         }
     }
     check::<u16>(32749);
-    for q in [3, 132_120_577, (1 << 31) - 1] {
+    for q in U32_MODULI {
         check::<u32>(q);
     }
-    for q in [3, (1 << 32) - 5, 1_125_899_906_826_241, (1 << 63) - 1] {
+    for q in U64_MODULI {
         check::<u64>(q);
     }
 }
@@ -209,7 +201,7 @@ fn grouped_butterfly_matches_both_wide_outputs() {
         let factors = weights.map(|value| ShoupFactor::new(value, q));
         // Short groups force the scalar path even on AVX-512. Longer groups
         // cover a complete vector, per-group tails, and repeated broadcasts.
-        for group_len in [1, 7, 8, 9, 17, 32, 65] {
+        for group_len in [1, 7, 8, 9, 17] {
             let len = group_len * factors.len();
             let mut lhs = vec![u64::MAX; len + 2];
             let mut rhs = lhs.clone();

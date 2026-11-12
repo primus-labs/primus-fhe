@@ -42,7 +42,7 @@ where
     /// are below Q, so one subtraction suffices after every add; a carry also
     /// requires subtraction when the stored limbs have wrapped.
     #[inline]
-    fn compose_to_kernel(&self, residues: &[T], mut value: BigUint<&mut [T]>) {
+    pub(crate) fn compose_to_kernel(&self, residues: &[T], mut value: BigUint<&mut [T]>) {
         let moduli_product = &self.moduli_product();
 
         value.set_zero();
@@ -101,7 +101,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if a data or scratch length does not match the stated layout.
+    /// Panics if a complete length overflows `usize` or a data or scratch
+    /// length does not match the stated layout.
     ///
     /// # Correctness
     ///
@@ -113,14 +114,20 @@ where
         value_count: usize,
         scratch: &mut [T],
     ) {
-        assert_eq!(multi_residues.len(), self.moduli_count() * value_count);
+        assert_eq!(
+            multi_residues.len(),
+            self.moduli_count()
+                .checked_mul(value_count)
+                .expect("RNS residue array length overflow")
+        );
+        let big_uint_value_len = self.big_uint_value_len();
         assert_eq!(
             big_uint_values.len(),
-            self.big_uint_value_len() * value_count
+            big_uint_value_len
+                .checked_mul(value_count)
+                .expect("RNS big-integer array length overflow")
         );
         assert_eq!(scratch.len(), self.moduli_count());
-
-        let big_uint_value_len = self.big_uint_value_len();
 
         for (value_index, value) in
             BigUintIterMut::new(big_uint_values, big_uint_value_len).enumerate()

@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于显式域模数和 NTT的 GLWE TFHE 后端。提供 PBS、ManyLUT、分解式 MVB、Boolean 门和 CBS，两种 PBS 顺序均支持 classic binary/ternary 或 sparse fixed-weight binary 盲旋转。见[操作与编码选择](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [GLWE 参数/密钥域](../primus_tfhe_glwe/README.zh_CN.md)。
+基于显式域模数和 NTT的 GLWE TFHE 后端。提供 PBS、ManyLUT、分解式 MVB、Boolean 门和 CBS，两种 PBS 顺序均支持 Classic binary/ternary 或 Block binary 盲旋转。见[操作与编码选择](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [GLWE 参数/密钥域](../primus_tfhe_glwe/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -42,12 +42,10 @@ Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncodi
 | --- | --- | --- |
 | 两次连续 PBS | `CLASSIC_PBS_U64` | [ntt_basic](examples/ntt_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`，消息 4→4 | [ntt_boolean](examples/ntt_boolean.rs) |
-| 使用 sparse BR 的相同评分流程 | `SPARSE_PBS_U64` | [ntt_sparse](examples/ntt_sparse.rs) |
 | ManyLUT grade/flag，再做密文组合 | `CLASSIC_MANY_LUT_U64` | [ntt_many_lut](examples/ntt_many_lut.rs) |
 | CBS 谓词 → CMux → 环加法 → LWE | `CLASSIC_CBS_U64` | [ntt_circuit_bootstrap](examples/ntt_circuit_bootstrap.rs) |
 | MSB Boolean NOT → 加密服务限额 | `CLASSIC_CBS_U64`，MSB 输入 | [ntt_msb_cbs](examples/ntt_msb_cbs.rs) |
 | 独立 q/Q、两种 PBS 顺序 | 示例内显式配置 | [ntt_two_moduli](examples/ntt_two_moduli.rs) |
-| 使用 sparse BR 的相同 CBS 流程 | `SPARSE_CBS_U64` | [ntt_sparse_circuit_bootstrap](examples/ntt_sparse_circuit_bootstrap.rs) |
 | 同一输入产生 17 个数值阈值标志 | `CLASSIC_THRESHOLD_MVB_U64` | [mvb_thresholds](examples/mvb_thresholds.rs) |
 
 普通 PBS/ManyLUT 和 MVB 使用 `context.try_generate_keys(rng)`。从 `client.external_lwe_secret_key()` 取得外部秘密，绑定到 `context.encryptor`；PBS/ManyLUT 用 `pbs_decryptor` 解密，MVB 的 Scaled 输出用 `mvb_decryptor`。公钥输入使用 `public_encryptor`，客户端无需 LUT 或手工 codec。
@@ -70,15 +68,13 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 
 分解式 MVB 要求奇数系数模数，准备后的整数因子保留 NTT 表示；因子范数会放大 BR 噪声。
 
-Sparse BR 须在 `config.method` 中显式选择 `BlindRotationMethod::Sparse`；仅使用固定重量秘密仍可运行 classic BR。Sparse 要求 binary 重量 `0<h<n`、`copy_count>=1`、`bucket_count>=max(copy_count,h)`。两种顺序均支持 PBS、ManyLUT、MVB 和 CBS。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
-
 直接 block BR 使用 `BlindRotationMethod::Block` 和 `SecretKeyDistr::BlockBinary { block_size, occupancy }`；逻辑 LWE 维数须能被正块宽整除，允许空块。两种 PBS 顺序下的普通 PBS、ManyLUT、MVB 和 CBS 沿用原有工厂。原始单输入 BR 使用 `block::BlockGlweBlindRotationWorkspace::new(key)` 及其 `blind_rotate_lookup_table_to` 方法；批量使用 `block::BlockGlweBlindRotationBatchWorkspace::<T>::new(key)` 和 `blind_rotate_lookup_table_many_to`。默认容量为四路；`::<T, 16>` 以更大的可复用工作区，让最多十六个独立输入共享密钥 tile。两种容量均保持每个输入的算术顺序，并处理短尾。密钥不含映射或私有占用信息，scratch 最多缓存 `block_size / 4` 份旋转描述。原 Classic 预设保持不变。
 
-对于共享同一密钥和 LUT 的独立 u32 或 u64 输入，采用默认容量的上述 block 批量工作区及 `sparse::SparseGlweBlindRotationBatchWorkspace::new(key.controls())` 均预分配四份互不重叠的工作区。`blind_rotate_lookup_table_many_to` 无分配地写入调用方提供的配对 coefficient GLWE 输出切片，在单线程中按四输入交错处理，剩余输入依次按两输入、一输入处理；单输入保留普通内核。输入顺序与各条密文结果保持不变；调用方可自行选择将环输出相加或分别返回。此原始操作不包含 KS/提取。单输入应用仍使用相应的单输入工作区。
+对于共享同一密钥和 LUT 的独立 u32 或 u64 输入，默认容量的 Block 批量工作区预分配四份互不重叠的工作区。`blind_rotate_lookup_table_many_to` 无分配地写入调用方提供的配对 coefficient GLWE 输出切片，在单线程中按四输入交错处理，剩余输入依次按两输入、一输入处理；单输入保留普通内核。输入顺序与各条密文结果保持不变；调用方可自行选择将环输出相加或分别返回。此原始操作不包含 KS/提取。单输入应用仍使用相应的单输入工作区。
 
 重复请求保留 context、密钥和已编译程序，`_to` 方法复用 evaluator scratch 及调用方输出；并发请求需要独立的可变 evaluator。MVB 程序保持与其 context 绑定。`KeyGenerator::try_generate_blind_rotation_key(client, rng)` 根据 context 的 `config.method` 仅生成 BR 材料；独立组件须使用相同的实际秘密和变换表示。独立材料组合及逐调用借用契约见 [KeyGenerator](src/key.rs)、[Evaluator](src/evaluator.rs) 和 [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs)，默认流程无需手工组合资源。借用资源执行 CBS 时，先编译程序，再通过 `CircuitBootstrapEvaluator::try_new` 绑定所选 gadget 参数与 circuit key。
 
-OMR 等只消费 BR 的组合流程可以通过 `BlindRotationKey::try_generate`，从输入秘密及目标 GGSW 参数直接建钥，无需准备 PBS 返回域；见[建钥契约](src/key.rs)。
+只消费 BR 的组合流程可以通过 `BlindRotationKey::try_generate`，从输入秘密及目标 GGSW 参数直接建钥，无需准备 PBS 返回域；见[建钥契约](src/key.rs)。
 
 ## Features
 
@@ -92,18 +88,16 @@ cargo bench -p primus_tfhe_glwe_ntt --bench pbs
 
 | Target | 计时请求 |
 | --- | --- |
-| [pbs](benches/pbs.rs) | 一次完整 PBS；dense u32/u64、fixed-weight classic/sparse u64；显式 Low/High 比较组见[测试指南](../../guides/development/testing.md#tfhe-benchmarks) |
+| [pbs](benches/pbs.rs) | 一次完整 PBS；dense Classic u32/u64；显式 Low/High 比较组见[测试指南](../../guides/development/testing.md#tfhe-benchmarks) |
 | [modulus_domains](benches/modulus_domains.rs) | q=Q/q1024 的两种顺序完整 PBS；用 `PRIMUS_DOMAIN_CASE=same/bk`、`split/bk`、`same/kb` 或 `split/kb` 选择 |
 | [many_lut](benches/many_lut.rs) | 一次双输出 grade/flag ManyLUT，u64 |
 | [mvb](benches/mvb.rs) | 一次 17 输出阈值 MVB，u64 |
 | [cbs](benches/cbs.rs) | 一次谓词 CBS、CMux 和单系数 LWE 返回，u64 |
 | [cbs_identity](benches/cbs_identity.rs) | bit 0/1 的 identity CBS → NTT GGSW 或 CBS＋CMux；派生 G1 Q54，padded/MSB 输入 |
 
-每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和工作流解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。只有 fixed-weight classic/sparse PBS 配对仅改变 BR 算法，dense 用例使用不同参数。计时范围与比较限制见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
+每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和工作流解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。计时范围与比较限制见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
 
 `cbs_identity` 使用仅在 bench 中定义的派生比较配置，不是教学预设或作者协议的原样复现。测量前检查 bit 0/1 的真实深度 1 CMux 消费，失败直接报错。这些有限 fixture 不证明安全性、失败率或更深树的精度；见[参数映射和验证范围](../../guides/performance/README.zh_CN.md#tfhe-comparisons)。
-
-OMR 的两阶段 clue 检测及 `classic_two_stage` / `sparse_two_stage` 基准位于独立的 [primus_omr](../../../primus_omr/README.zh_CN.md) 仓库，请在该仓库根目录运行。
 
 ## 进一步阅读
 

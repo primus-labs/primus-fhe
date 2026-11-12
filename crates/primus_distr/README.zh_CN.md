@@ -120,7 +120,7 @@ CRT Gaussian helper 不检查各模数能否编码完整截断支持集。对于
 - `gaussian_stats`：将规范 modular 样本转换为居中代表元，并计算 mean、population standard deviation 和累计 magnitude count；
 - `theoretical_cumulative_probs`：计算对应截断离散 Gaussian 的理论累计概率。
 
-这些函数用于测试和验证工具，而不是采样热路径。其 rustdoc 记录了精确的浮点数与模数 限制。
+对照经验计数时，使用与采样器相同的 Gaussian 参数 `sigma` 和截断范围。参考概率需要枚举截断支持集。数值范围见[统计 API](src/stats.rs)。
 
 ## High-precision feature
 

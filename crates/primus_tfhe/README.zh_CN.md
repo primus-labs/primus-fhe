@@ -21,7 +21,6 @@ GLWE 和 NTRU 共用的 LWE 客户端、LUT 编译、编码契约、PBS trait �
 | Boolean 门 | t=4 下的 Rounded 0/1 | 可串联的 Boolean LWE；`BooleanEvaluator` |
 | CBS 后接 CMux | Padded 输入或 GLWE MSB bit；F 在整个域上取 bit 值 | GGSW/NGSW 控制选择加密环候选；`CbsEvaluator` |
 | One-hot CBS | 一个 padded chunk，t=2M | NLev/NGSW selectors；[NTRU one-hot](../primus_tfhe_ntru/README.zh_CN.md#one-hot-cbs) |
-| 高精度查表 | 多个独立加密、统一位宽的 chunk | 可独立指定输出 chunk 数；独立的 [NTRU LUT 仓库](../../../primus_high_prec_lut/README.zh_CN.md) |
 
 ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分辨率换取输出数量；MVB 保留步长 1，但因子会放大噪声。Scaled 数值标志、Boolean LWE 和 gadget 控制使用不同编码，不能直接互换。
 
@@ -32,23 +31,23 @@ ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分�
 | [GLWE 参数与客户端](../primus_tfhe_glwe/README.zh_CN.md) | [GLWE NTT](../primus_tfhe_glwe_ntt/README.zh_CN.md) | [GLWE Fourier](../primus_tfhe_glwe_fourier/README.zh_CN.md) |
 | [NTRU 参数与客户端](../primus_tfhe_ntru/README.zh_CN.md) | [NTRU NTT](../primus_tfhe_ntru_ntt/README.zh_CN.md) | [NTRU Fourier](../primus_tfhe_ntru_fourier/README.zh_CN.md) |
 
-| 盲旋转模式 | PBS / ManyLUT | CBS | 分解式 MVB | One-hot / 高精度 LUT |
+| 盲旋转模式 | PBS / ManyLUT | CBS | 分解式 MVB | One-hot CBS |
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
-| GLWE sparse fixed-weight binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | GLWE block binary | 两种 PBS 顺序 | 支持 | 支持 | 未提供 |
 | NTRU classic binary/ternary | 支持 | 支持 | 支持 | 支持 |
-| NTRU sparse fixed-weight binary | 支持 | 支持 | 支持 | 支持 |
-| NTRU NTT block binary | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
-| NTRU Fourier block binary（u64） | 支持 | 支持 | 支持 | One-hot；LUT 接入待完成 |
+| NTRU NTT block binary | 支持 | 支持 | 支持 | 支持 |
+| NTRU Fourier block binary（u64） | 支持 | 支持 | 支持 | 支持 |
 
 四后端均提供私钥及 LWE 公钥客户端。Fourier 支持 RustFFT 和 TFHE-FFT，环模数仅支持 Native。示例配置用于算术教学，未评估安全性及失败概率。NTRU 的外部 LWE 秘密独立于环秘密，只有环秘密需要可逆性和 Fourier 逆稳定性筛选。
 
 ## 选择盲旋转算法
 
-四后端均导出 `BlindRotationMethod`，通过 `config.method` 选择；仅改变秘密分布不会切换算法。`Classic` 支持 binary/ternary，包括固定重量分布。显式的 `Sparse { copy_count, bucket_count }` 要求 fixed-weight binary 且 `0<h<n`，不支持 sparse ternary。公开映射重试后匹配仍失败时返回错误，不更改客户端秘密或回退到 classic。
+四后端均导出 `BlindRotationMethod`，通过 `config.method` 选择；仅改变秘密分布不会切换算法。`Classic` 支持 binary/ternary，包括固定重量分布。
 
 `SecretKeyDistr::BlockBinary { block_size, occupancy }` 独立采样连续块。`BlockOccupancy::AtMostOne` 均匀选择空块或一个位置为 `1` 的状态；`ExactlyOne` 只选择一个位置为 `1` 的状态。逻辑密钥长度须是块宽的非零整数倍。`Classic` 可使用两种分布；`Block` 在四个后端中选择直接按块聚合。全部 bit 控制都参与计算，包括加密的零。仅 `AtMostOne` 增加独立加密的空块 dummy；`ExactlyOne` 不存储或采样它。NTRU Fourier 要求 u64，支持 ordinary 或 split BR；trace、SS 精度保持独立。Block 秘密需要单独评估噪声与安全成本。GLWE ring-KS 保留逻辑 LWE 前缀并补公开零尾，填充后的环长度无需也能被块宽整除。
+
+迁移旧分桶 Sparse 配置时，选择 `Classic` 可保留固定重量二进制分布。重新生成计算密钥并复核噪声预算。采用 `Block` 需要分块二进制秘密和独立的参数评估。
 
 普通 PBS 先构造 `TfheContext::try_from_pbs_config(config)`，再调用 `context.try_generate_keys(rng)` 得到 `(ClientKey, ServerKey)`。CBS 或 NTRU one-hot 使用 CBS 工厂：
 
@@ -167,7 +166,7 @@ NTRU 的 `one_hot_evaluator` 使用专用 selector 表；`cmux_k_to` 消费非�
 
 所有输出共享一次步长 1 的 BR，再分别乘公开多项式。输出数为正、不补齐，也不降低输入分辨率。整数因子范数放大 BR 噪声，NTRU 因子也放大加密初始化误差，Fourier 还需 FFT 误差预算。Scaled 输出使用 `mvb_decryptor`，反馈给 Rounded 输入 PBS 需另行检查编码和噪声。本实现不提供奇数全域 MVB 或 CBS 输出。
 
-四后端均支持 classic 和 sparse，GLWE 支持两种顺序。[GLWE](../primus_tfhe_glwe_ntt/examples/mvb_thresholds.rs) 和 [NTRU](../primus_tfhe_ntru_ntt/examples/ntru_ntt_mvb_thresholds.rs) 示例产生 17 个阈值标志。ManyLUT 容量及旋转余量足够时优先使用；更多输出且因子范数较小时可考虑 MVB。代数和噪声条件见 [FactorizedLookupTable](src/lookup_table/factorized.rs) 及 [MVB 设计](../../guides/development/bootstrapping-contracts.md#factorized-mvb)。
+四后端均支持 Classic 和 Block，GLWE 支持两种顺序。[GLWE](../primus_tfhe_glwe_ntt/examples/mvb_thresholds.rs) 和 [NTRU](../primus_tfhe_ntru_ntt/examples/ntru_ntt_mvb_thresholds.rs) 示例产生 17 个阈值标志。ManyLUT 容量及旋转余量足够时优先使用；更多输出且因子范数较小时可考虑 MVB。代数和噪声条件见 [FactorizedLookupTable](src/lookup_table/factorized.rs) 及 [MVB 设计](../../guides/development/bootstrapping-contracts.md#factorized-mvb)。
 
 ## 错误边界
 

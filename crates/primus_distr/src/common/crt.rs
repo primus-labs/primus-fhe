@@ -128,6 +128,14 @@ pub fn sample_crt_sparse_ternary_values_to<T, R>(
 }
 
 /// Samples a uniform vector in modulus-major CRT layout.
+///
+/// # Correctness
+///
+/// The product `poly_length * uniform_distrs.len()` must fit in `usize`.
+///
+/// # Panics
+///
+/// Panics if `poly_length` is zero, even when there are no distributions.
 pub fn sample_crt_uniform_values<T, R>(
     poly_length: usize,
     uniform_distrs: &[Uniform<T>],
@@ -146,8 +154,19 @@ where
 
 /// Fills a slice with uniform samples in modulus-major CRT layout.
 ///
-/// In debug builds, this function checks that `poly_length` is nonzero and
-/// that `result.len()` equals `poly_length * uniform_distrs.len()`.
+/// Each block uses its corresponding distribution. With a positive block
+/// length and no distributions, an empty output consumes no randomness.
+/// A panicking RNG may leave partial output.
+///
+/// # Correctness
+///
+/// The output must contain exactly `poly_length * uniform_distrs.len()`
+/// elements. The product must fit in `usize`.
+///
+/// # Panics
+///
+/// Panics if `poly_length` is zero. Debug builds also panic on a layout
+/// mismatch.
 // Keep the sampling loop together: inlining this batch into a larger caller
 // can instead outline `Uniform::sample`, adding a call for every coefficient.
 #[inline(never)]
@@ -181,9 +200,12 @@ pub fn sample_crt_uniform_values_to<T, R>(
 
 /// Samples a Gaussian vector in modulus-major CRT layout.
 ///
-/// Every modulus must canonically encode the complete truncated support. This
-/// precondition is not checked and must be established by the caller's
-/// parameter construction.
+/// Empty batches consume no randomness.
+///
+/// # Correctness
+///
+/// The product `length * moduli.len()` must fit in `usize`. The modulus
+/// requirements of [`sample_crt_gaussian_values_to`] also apply.
 pub fn sample_crt_gaussian_values<T, R>(
     length: usize,
     moduli: &[T],
@@ -203,12 +225,19 @@ where
 
 /// Fills a slice with Gaussian samples in modulus-major CRT layout.
 ///
-/// Every modulus must canonically encode the complete truncated support. This
-/// precondition is not checked and must be established by the caller's
-/// parameter construction.
+/// Samples each coefficient once and encodes it under every modulus. A zero
+/// length or an empty modulus list yields an empty batch and consumes no
+/// randomness. A panicking RNG may leave partial output.
 ///
-/// In debug builds, this function checks that `length` is nonzero and that
-/// `result.len()` equals `length * moduli.len()`.
+/// # Correctness
+///
+/// The output must contain exactly `length * moduli.len()` elements, and the
+/// product must fit in `usize`. For a nonempty batch, every modulus must exceed
+/// the maximum sample magnitude to canonically encode the truncated support.
+///
+/// # Panics
+///
+/// Debug builds panic on a layout mismatch.
 pub fn sample_crt_gaussian_values_to<T, R>(
     result: &mut [T],
     length: usize,
@@ -219,7 +248,6 @@ pub fn sample_crt_gaussian_values_to<T, R>(
     T: FheUint,
     R: rand::Rng + rand::CryptoRng,
 {
-    debug_assert!(length > 0, "CRT polynomial length must be nonzero");
     debug_assert_eq!(
         result.len(),
         length * moduli.len(),

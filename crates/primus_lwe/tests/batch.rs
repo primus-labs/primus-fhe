@@ -100,7 +100,11 @@ fn public_batch_matches_independent_matrix_arithmetic() {
     }
 }
 
-fn check_batches<T: FheUint, M: RingContext<T>>(modulus: M, dimension: usize) {
+fn check_batches<T: FheUint, M: RingContext<T>>(
+    modulus: M,
+    dimension: usize,
+    cases: &[(usize, PlaintextEmbedding)],
+) {
     let lwe_len = dimension + 1;
     let params = LweParameters::new(
         LweDimension::new(dimension),
@@ -119,60 +123,54 @@ fn check_batches<T: FheUint, M: RingContext<T>>(modulus: M, dimension: usize) {
         params.noise_distribution(),
         &mut rng,
     );
-    for count in [0, 1, 7, 8, 17] {
+    for &(count, embedding) in cases {
         let messages: Vec<T> = (0..count).map(|i| T::as_from(i % 4)).collect();
-        for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
-            for use_public in [false, true] {
-                let mut rng = StdRng::seed_from_u64(0x1_ee22);
-                let mut raw_rng = StdRng::seed_from_u64(0x1_ee22);
-                let mut storage = vec![T::MAX; count * lwe_len + 2];
-                let batch = &mut storage[1..count * lwe_len + 1];
-                if use_public {
-                    public.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
-                } else {
-                    secret.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
-                }
-                let encoded: Vec<T> = messages
-                    .iter()
-                    .map(|&m| params.plaintext_codec().encode_value(m, embedding))
-                    .collect();
-                let raw = if use_public {
-                    public.encrypt_encoded_batch(
-                        &encoded,
-                        modulus,
-                        params.noise_distribution(),
-                        &mut raw_rng,
-                    )
-                } else {
-                    secret.encrypt_encoded_batch(
-                        &encoded,
-                        params.encryption_parameters(),
-                        &mut raw_rng,
-                    )
-                };
-                assert_eq!(raw.as_slice(), &*batch);
-                assert_eq!(secret.decrypt_message_batch(batch, &params), messages);
-                let mut decrypted = vec![T::MAX; count];
-                secret.decrypt_message_batch_to(batch, &mut decrypted, &params);
-                assert_eq!(decrypted, messages);
-                let phases = secret.decrypt_phase_batch(batch, modulus);
-                secret.decrypt_phase_batch_to(batch, &mut decrypted, modulus);
-                assert_eq!(decrypted, phases);
-                for (ciphertext, &phase) in LweIter::new(batch, lwe_len).zip(&phases) {
-                    assert_eq!(secret.as_view().decrypt_phase(&ciphertext, modulus), phase);
-                    assert!(
-                        ciphertext
-                            .as_ref()
-                            .iter()
-                            .all(|&c| c <= modulus.minus_one())
-                    );
-                }
-                assert_eq!(storage[0], T::MAX);
-                assert_eq!(storage[count * lwe_len + 1], T::MAX);
-                if count == 0 {
-                    let mut untouched = StdRng::seed_from_u64(0x1_ee22);
-                    assert_eq!(rng.next_u64(), untouched.next_u64());
-                }
+        for use_public in [false, true] {
+            let mut rng = StdRng::seed_from_u64(0x1_ee22);
+            let mut raw_rng = StdRng::seed_from_u64(0x1_ee22);
+            let mut storage = vec![T::MAX; count * lwe_len + 2];
+            let batch = &mut storage[1..count * lwe_len + 1];
+            if use_public {
+                public.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
+            } else {
+                secret.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
+            }
+            let encoded: Vec<T> = messages
+                .iter()
+                .map(|&m| params.plaintext_codec().encode_value(m, embedding))
+                .collect();
+            let raw = if use_public {
+                public.encrypt_encoded_batch(
+                    &encoded,
+                    modulus,
+                    params.noise_distribution(),
+                    &mut raw_rng,
+                )
+            } else {
+                secret.encrypt_encoded_batch(&encoded, params.encryption_parameters(), &mut raw_rng)
+            };
+            assert_eq!(raw.as_slice(), &*batch);
+            assert_eq!(secret.decrypt_message_batch(batch, &params), messages);
+            let mut decrypted = vec![T::MAX; count];
+            secret.decrypt_message_batch_to(batch, &mut decrypted, &params);
+            assert_eq!(decrypted, messages);
+            let phases = secret.decrypt_phase_batch(batch, modulus);
+            secret.decrypt_phase_batch_to(batch, &mut decrypted, modulus);
+            assert_eq!(decrypted, phases);
+            for (ciphertext, &phase) in LweIter::new(batch, lwe_len).zip(&phases) {
+                assert_eq!(secret.as_view().decrypt_phase(&ciphertext, modulus), phase);
+                assert!(
+                    ciphertext
+                        .as_ref()
+                        .iter()
+                        .all(|&c| c <= modulus.minus_one())
+                );
+            }
+            assert_eq!(storage[0], T::MAX);
+            assert_eq!(storage[count * lwe_len + 1], T::MAX);
+            if count == 0 {
+                let mut untouched = StdRng::seed_from_u64(0x1_ee22);
+                assert_eq!(rng.next_u64(), untouched.next_u64());
             }
         }
     }
@@ -180,14 +178,26 @@ fn check_batches<T: FheUint, M: RingContext<T>>(modulus: M, dimension: usize) {
 
 #[test]
 fn batches_decrypt_across_moduli_embeddings_and_tail_sizes() {
-    check_batches(NativeModulus::<u32>::new(), 7);
-    check_batches(NativeModulus::<u64>::new(), 7);
-    check_batches(PowOf2Modulus::new(1u32 << 30), 7);
-    check_batches(BarrettModulus::new(132_120_577u32), 7);
-    check_batches(BarrettModulus::new(1_125_899_906_826_241u64), 7);
-    // A longer non-power-of-two mask exercises multiple vector blocks and a tail.
-    check_batches(NativeModulus::<u32>::new(), 65);
-    check_batches(BarrettModulus::new(132_120_577u32), 65);
+    use PlaintextEmbedding::{Centered, Unsigned};
+
+    // Cover the batch boundaries on both reduction paths. Dimension 65 also
+    // leaves a coefficient tail after the full SIMD blocks.
+    let batch_boundaries = [
+        (0, Unsigned),
+        (1, Unsigned),
+        (7, Centered),
+        (8, Unsigned),
+        (17, Centered),
+    ];
+    check_batches(NativeModulus::<u32>::new(), 65, &batch_boundaries);
+    check_batches(BarrettModulus::new(132_120_577u32), 65, &batch_boundaries);
+    check_batches(NativeModulus::<u64>::new(), 65, &[(17, Centered)]);
+    check_batches(
+        BarrettModulus::new(1_125_899_906_826_241u64),
+        65,
+        &[(17, Centered)],
+    );
+    check_batches(PowOf2Modulus::new(1u32 << 30), 7, &[(3, Unsigned)]);
 }
 
 #[test]

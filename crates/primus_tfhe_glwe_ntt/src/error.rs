@@ -5,7 +5,7 @@ use primus_integer::FheUint;
 pub use primus_tfhe::{LookupTableError, TfheEvaluationError};
 pub use primus_tfhe_glwe::{
     BlockBootstrappingKeyError, BooleanError, CircuitBootstrapParameterError, KeyGenerationError,
-    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
+    TfheClientError, TfheKeyError, TfheParameterError,
 };
 
 /// Failure to construct an NTT table or bind it to TFHE parameters.

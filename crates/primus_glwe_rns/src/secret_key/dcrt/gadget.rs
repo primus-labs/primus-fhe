@@ -126,7 +126,7 @@ where
     /// Reuses the DCRT message at every gadget level, adding it after the noise
     /// transform. The encryptor establishes the key/resource numerical binding;
     /// message/output layouts and representations remain caller contracts.
-    fn encrypt_dcrt_glev_kernel_to<R>(
+    pub(crate) fn encrypt_dcrt_glev_kernel_to<R>(
         &self,
         input: DcrtPolynomial<&[T]>,
         mut output: DcrtGlev<&mut [T]>,
@@ -135,6 +135,8 @@ where
         R: rand::Rng + rand::CryptoRng,
     {
         let parameters = self.parameters;
+        debug_assert_eq!(input.as_ref().len(), parameters.rns_poly_len());
+        debug_assert_eq!(output.as_ref().len(), parameters.rns_glev_len());
         output
             .iter_dcrt_glwe_mut(parameters.rns_glwe_len())
             .zip(parameters.scalar_residue_iter())
@@ -192,7 +194,7 @@ where
     /// Reuses the CRT message at every gadget level, adding it before the body
     /// transform. The encryptor establishes the key/resource numerical binding;
     /// message/output layouts and representations remain caller contracts.
-    fn encrypt_crt_glev_kernel_to<R>(
+    pub(crate) fn encrypt_crt_glev_kernel_to<R>(
         &self,
         input: CrtPolynomial<&[T]>,
         mut output: DcrtGlev<&mut [T]>,
@@ -201,6 +203,8 @@ where
         R: rand::Rng + rand::CryptoRng,
     {
         let parameters = self.parameters;
+        debug_assert_eq!(input.as_ref().len(), parameters.rns_poly_len());
+        debug_assert_eq!(output.as_ref().len(), parameters.rns_glev_len());
         output
             .iter_dcrt_glwe_mut(parameters.rns_glwe_len())
             .zip(parameters.scalar_residue_iter())

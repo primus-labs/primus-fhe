@@ -20,7 +20,7 @@ Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格�
 cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 ```
 
-示例选择 `experimental` 操作配置，创建 context 和配套密钥，连续执行两次 PBS。源码区分 client 与 server，复用密钥、LUT、求值器和输出缓冲。各后端 README 提供其他操作的完整示例。
+示例复用同一组密钥和求值器，串联两张查找表。各后端 README 提供其他操作的完整示例。
 
 ## TFHE 后端
 
@@ -31,7 +31,7 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 
 GLWE 支持两种 PBS 顺序。NTRU 使用独立的外部 LWE 秘密与环秘密，支持环模数 Q 到外部模数 q 的返回；可逆性要求针对环秘密，外部 binary/ternary 秘密没有奇数重量要求。Fourier 环目前只支持 `NativeModulus`，支持 RustFFT 与 TFHE-FFT；NTRU 的外部 q 可独立选择。
 
-Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
+Classic 与 Block 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN.md#crate-分工与能力)。操作配置绑定消息模数和密钥域，context 准备相应客户端及 LUT 编译器；raw 密文不携带编码或秘密身份。
 
 ## BFV 与 BGV
 
@@ -42,10 +42,10 @@ cargo run --release -p primus_bfv --example coefficients
 cargo run --release -p primus_bgv --example leveled_coefficients
 ```
 
-- [BFV](crates/primus_bfv/README.zh_CN.md) 提供精确舍入降模和 Exact、HPSPOVERQ 乘法。[工作基指南](guides/development/bfv-working-basis.md) 说明有限的 HPSPOVERQLEVELED 参数工厂及其算术与密钥前提。
-- [BGV](crates/primus_bgv/README.zh_CN.md) 支持各密文素数与明文模数 `p` 互素的模数链。丢弃素数 `q` 时将校正因子更新为 `f*q^-1 mod p`。恢复明文时对 centered phase 取模 `p` 后应用因子的逆。[参数与预算指南](guides/development/ordinary-parameter-budgets.md) 说明普通 BGV 流程和适用范围。
+- [BFV](crates/primus_bfv/README.zh_CN.md) 提供 Exact、HPSPOVERQ 乘法和舍入降模。
+- [BGV](crates/primus_bgv/README.zh_CN.md) 提供精确降模，密文素数须与明文模数互素。
 
-两种方案的 QP 密钥基与角色绑定见[原生 Hybrid 密钥指南](guides/development/native-hybrid-keys.md)。
+按电路选参时，参见[参数与预算指南](guides/development/ordinary-parameter-budgets.md)。
 
 ## Workspace 导航
 
@@ -63,11 +63,10 @@ cargo run --release -p primus_bgv --example leveled_coefficients
 
 ## 构建与进一步阅读
 
-默认 features 使用 stable Rust；可选 `simd` 需要 nightly。在仓库根目录运行 `cargo check --workspace --all-targets` 或 `cargo doc --workspace --no-deps`。仓库设置了 `target-cpu=native`，分发到其他 CPU 的二进制需要显式调整构建配置。
+默认 features 使用 stable Rust。可选 `simd` 需要 nightly。仓库设置了 `target-cpu=native`，向其他 CPU 分发二进制时需调整构建配置。
 
-- 普通测试、doctest、示例和基准冒烟命令见[测试指南](guides/development/testing.md)和 [justfile](justfile)。
-- BFV/BGV 独立消费者验证和参数筛查入口见[开发脚本](guides/development/testing.md#开发脚本)。
-- 性能数据的适用口径见[性能指南](guides/performance/README.zh_CN.md)，算法条件见 [TFHE 数值契约](guides/development/bootstrapping-contracts.md)。
+- 用 `cargo doc --workspace --no-deps` 生成 API 文档。各 crate 的 README 列出具体操作需要的 features。
+- 验证命令与脚本见[测试指南](guides/development/testing.md)，基准口径见[性能指南](guides/performance/README.zh_CN.md)。
 - 工作区修改遵循[贡献规范](AGENTS.md)。
 
 ## 许可证

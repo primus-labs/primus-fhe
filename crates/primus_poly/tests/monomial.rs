@@ -91,6 +91,10 @@ fn check<T: FheUint + Into<u64>, M: RingContext<T>>(modulus: M, q: u128) {
             vec![0, 1, n / 2, n - 1, n, n + 1, n + n / 2, 2 * n - 1]
         };
         let moduli = vec![modulus; components];
+        let second_rotations: Vec<_> = exponents
+            .iter()
+            .map(|&exponent| monomial_oracle(second.as_ref(), exponent, n, q))
+            .collect();
         for &ra in &exponents {
             let rotated = monomial_oracle(first.as_ref(), ra, n, q);
             let mut actual = CrtPolynomial::new(first.as_ref().to_vec());
@@ -101,24 +105,18 @@ fn check<T: FheUint + Into<u64>, M: RingContext<T>>(modulus: M, q: u128) {
             if components == 1 {
                 check_single_monomial(first.as_view(), &rotated, ra, q, modulus);
             }
-            for &rb in &exponents {
+            for (&rb, second_rotated) in exponents.iter().zip(&second_rotations) {
                 let mut output = values[2 * len..].to_vec();
+                let mut expected = output.clone();
                 // Repeat on the initialized accumulator to exercise scratch reuse.
                 for _ in 0..2 {
-                    let mut expected = output.clone();
-                    for (source, r) in [(first.as_ref(), ra), (second.as_ref(), rb)] {
-                        for (i, &value) in source.iter().enumerate() {
-                            let power = i % n + r;
-                            let index = i / n * n + power % n;
-                            let old = u128::from(expected[index].into());
-                            let value = u128::from(value.into());
-                            let result = if (power / n).is_multiple_of(2) {
-                                (old + value) % q
-                            } else {
-                                (old + q - value) % q
-                            };
-                            expected[index] = T::as_from(result as u64);
-                        }
+                    for ((acc, &first), &second) in
+                        expected.iter_mut().zip(&rotated).zip(second_rotated)
+                    {
+                        let sum = u128::from((*acc).into())
+                            + u128::from(first.into())
+                            + u128::from(second.into());
+                        *acc = T::as_from((sum % q) as u64);
                     }
                     if components == 1 {
                         Polynomial(output.as_mut_slice())
@@ -177,8 +175,25 @@ fn check_lazy_monomials<T: FheUint + Into<u64>>(q: T) {
             })
             .collect();
         let second: Vec<T> = first.iter().copied().rev().collect();
-        for a in [0, n / 2, n - 1, n, 2 * n - 1] {
-            for b in [0, n / 2, n - 1, n, 2 * n - 1] {
+        let exponents: &[usize] = match n {
+            1 => &[0, 1],
+            2 => &[0, 1, 2, 3],
+            _ => &[0, n / 2, n - 1, n, 2 * n - 1],
+        };
+        let first_rotations: Vec<_> = exponents
+            .iter()
+            .map(|&exponent| monomial_oracle(&first, exponent, n, wide_q))
+            .collect();
+        let second_rotations: Vec<_> = exponents
+            .iter()
+            .map(|&exponent| monomial_oracle(&second, exponent, n, wide_q))
+            .collect();
+        for (&a, first_rotated) in exponents.iter().zip(&first_rotations) {
+            for ((&b, second_rotated), tail_rotated) in exponents
+                .iter()
+                .zip(&second_rotations)
+                .zip(&first_rotations)
+            {
                 let mut actual: Vec<T> = (0..len)
                     .map(|i| T::as_from([0, wide_q - 1, wide_q, 2 * wide_q - 1][i % 4]))
                     .collect();
@@ -186,11 +201,6 @@ fn check_lazy_monomials<T: FheUint + Into<u64>>(q: T) {
                     .iter()
                     .map(|&v| u128::from(v.into()) % wide_q)
                     .collect();
-                let rotations = [
-                    monomial_oracle(&first, a, n, wide_q),
-                    monomial_oracle(&second, b, n, wide_q),
-                    monomial_oracle(&first, b, n, wide_q),
-                ];
                 for _ in 0..2 {
                     lazy_add_mul_monomial_pair_assign(
                         &mut actual,
@@ -204,7 +214,7 @@ fn check_lazy_monomials<T: FheUint + Into<u64>>(q: T) {
                     assert!(actual.iter().all(|&v| v < q + q));
                     lazy_add_mul_monomial_assign(&mut actual, &first, b, n, modulus);
                     assert!(actual.iter().all(|&v| v < q + q));
-                    for rotated in &rotations {
+                    for rotated in [first_rotated, second_rotated, tail_rotated] {
                         for (sum, &value) in expected.iter_mut().zip(rotated) {
                             *sum = (*sum + u128::from(value.into())) % wide_q;
                         }

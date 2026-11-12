@@ -3,7 +3,7 @@ use primus_integer::FheUint;
 pub use primus_tfhe::{LookupTableError, TfheEvaluationError};
 pub use primus_tfhe_ntru::{
     BlockBootstrappingKeyError, BooleanError, CircuitBootstrapParameterError, KeyGenerationError,
-    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
+    TfheClientError, TfheKeyError, TfheParameterError,
 };
 
 /// Failure to prepare NTRU operations or bind their NTT table.

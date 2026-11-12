@@ -10,7 +10,6 @@ use primus_lattice::GlweDimension;
 use primus_lattice::{GlweSize, glwe::DcrtGlwe};
 use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -111,28 +110,12 @@ fn hybrid_noise_support_must_fit_auxiliary_moduli() {
 /// encrypt a phase probe under sk_1 → switch → inspect phase under sk_2.
 #[test]
 fn test_rns_glwe_ksk() {
-    type ValueT = u64;
-
     let dimension = 3;
-    let poly_length = PolyLength::new(32);
-
-    let t: ValueT = 12289;
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    // Two 50-bit RNS moduli: Q = q₀ · q₁
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
+    let glwe_params = support::probe_parameters(dimension);
+    let poly_length = glwe_params.poly_length();
+    let base = glwe_params.base_q();
+    let table = UintDcrtTable::new(poly_length, base.moduli()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x005e_ed4b_534b);
-
-    let glwe_params = support::RawParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    );
 
     let rns_glwe_len = glwe_params.rns_glwe_len();
 
@@ -162,9 +145,11 @@ fn test_rns_glwe_ksk() {
         &mut rng,
     );
 
-    let input: Polynomial<Vec<ValueT>> = Polynomial::random(poly_length.get(), mod_t, &mut rng);
-    let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
+    let expected: Vec<_> = (0..poly_length.get())
+        .map(|i| (i % 7) as i128 - 3)
+        .collect();
+    let mut c1 = DcrtGlweCiphertext::<Vec<u64>>::zero(rns_glwe_len);
+    let mut c2 = DcrtGlweCiphertext::<Vec<u64>>::zero(rns_glwe_len);
     let mut ksk_evaluator =
         DcrtGlweKeySwitchEvaluator::new(&key_switching_key, &glev_params, &table);
 
@@ -176,7 +161,7 @@ fn test_rns_glwe_ksk() {
         )
         .unwrap();
     dcrt_sk_1_context.encrypt_encoded_crt_to(
-        &support::unsigned_probe(input.as_ref(), &glwe_params),
+        &support::encode_probe(&expected, base.moduli_values()),
         &mut c1,
         &mut rng,
     );
@@ -186,7 +171,6 @@ fn test_rns_glwe_ksk() {
 
     ksk_evaluator.key_switch_to(&c1.as_view(), &mut c2.as_mut_view());
 
-    let expected: Vec<_> = input.iter().map(|&value| i128::from(value)).collect();
     let bound = i128::from(glwe_params.core.noise_distribution().maximum_magnitude())
         + support::switch_error_bound(
             &glev_params,
@@ -204,9 +188,6 @@ fn test_rns_glwe_ksk_hybrid() {
 
     let dimension = 2;
     let poly_length = PolyLength::new(32);
-
-    let t: ValueT = 12289;
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
 
     // Three Q limbs retain an uneven partition; two P limbs keep the
     // complete integer error below each q, so the raw phase is directly testable.
@@ -258,7 +239,9 @@ fn test_rns_glwe_ksk_hybrid() {
 
     let rns_glwe_len = glwe_params.rns_glwe_len();
 
-    let input: Polynomial<Vec<ValueT>> = Polynomial::random(poly_length.get(), mod_t, &mut rng);
+    let expected: Vec<_> = (0..poly_length.get())
+        .map(|i| (i % 7) as i128 - 3)
+        .collect();
     let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
 
@@ -270,7 +253,7 @@ fn test_rns_glwe_ksk_hybrid() {
         )
         .unwrap();
     dcrt_sk_1_context.encrypt_encoded_crt_to(
-        &support::unsigned_probe(input.as_ref(), &glwe_params),
+        &support::encode_probe(&expected, &q_values),
         &mut c1,
         &mut rng,
     );
@@ -280,7 +263,6 @@ fn test_rns_glwe_ksk_hybrid() {
 
     hybrid_evaluator.key_switch_to(&c1.as_view(), &mut c2.as_mut_view());
 
-    let expected: Vec<_> = input.iter().map(|&value| i128::from(value)).collect();
     let p_product = u128::from(p_values[0]) * u128::from(p_values[1]);
     // Approximate ModUp uses the unreduced CRT sum, not a centered digit:
     // an r-prime partition lifts to [0, r*Qi). Here r<=2 and Qi<2P, so

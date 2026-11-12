@@ -69,11 +69,11 @@ where
 {
     /// Generates a client and complete CBS material, including the ordinary KS key.
     /// Shares the accepted ring representation between BR and CBS, then releases
-    /// it before preparing KS. Sparse matching retries only the public map.
+    /// it before preparing KS.
     ///
     /// # Errors
-    /// Missing CBS state and invalid grouped geometry precede secret sampling.
-    /// Propagates secret-generation, return-domain and matching failures.
+    /// Missing CBS state and invalid block geometry precede secret sampling.
+    /// Propagates secret-generation and return-domain failures.
     ///
     /// # Correctness
     /// Inherits [`Self::try_generate`]'s BR/KS contracts and
@@ -132,7 +132,7 @@ where
         self.generate_circuit_server_with_accumulator(operation, client, encryptor, layout, rng)
     }
 
-    /// The context owns this complete CBS operation; client compatibility and grouped
+    /// The context owns this complete CBS operation; client compatibility and block
     /// geometry are already established. Share one coefficient encryption setup between BR and
     /// CBS, then release it before preparing the padded small secret for KS.
     fn generate_circuit_server_with_accumulator<R>(

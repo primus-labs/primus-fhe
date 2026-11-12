@@ -26,9 +26,11 @@ No FFT engine is enabled by default. `FftTable`, `FftEngine`, `Complex64`, and `
 - `rustfft` exports `RustFftTable` / `RustFftWorkspace`.
 - `tfhe-fft` exports `TfheFftTable` / `TfheFftWorkspace`.
 
-Both may be enabled together. Select explicitly in your dependency, for example `primus_fft = { path = "../primus_fft", features = ["rustfft"] }`. Without either engine, you can still implement your own `FftTable`. The example below uses `rustfft`.
+Both may be enabled together. Custom `FftTable` implementations can use the common API with the default features.
 
 ## Example
+
+Add `primus_fft` with the `rustfft` feature and `primus_shape` as direct dependencies.
 
 ```rust
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
@@ -65,7 +67,7 @@ Input and output lengths must match exactly; otherwise transforms panic:
 - coefficient slices contain `poly_length().get()` values;
 - Fourier slices contain `fourier_length() == poly_length().fourier_poly_len()` values.
 
-Use `FftEngine::new(table)` and retain it for repeated transforms. Complete method contracts are in the [table and engine API](src/table.rs).
+See the [table and engine API](src/table.rs) for complete method contracts.
 
 Built-in workspaces erase their buffers on drop; `fft.zeroize_workspace()` erases them without releasing the allocation. Transforms do not erase scratch after each call. Caller-owned inputs/outputs, registers and stack copies are outside this buffer guarantee; custom backends define their own erasure behavior.
 
@@ -73,16 +75,14 @@ Built-in workspaces erase their buffers on drop; `fft.zeroize_workspace()` erase
 
 ## Length and precision
 
-`FftTable::new` takes [`primus_shape::PolyLength`](../primus_shape/README.md#polynomial-length). Table and engine `poly_length()` accessors return that type; `fourier_length()` returns the complex element count. Table construction performs planning and allocation, so keep it outside repeated transform paths.
+`FftTable::new` takes [`primus_shape::PolyLength`](../primus_shape/README.md#polynomial-length). Build the table outside repeated transform paths to reuse its plan and allocations.
 
 Transforms use `f64` and are approximate; a word-wide torus input is not guaranteed to round-trip bit-for-bit. Correct rounding depends on accumulated floating-point error and integer operand magnitudes, so the surrounding algorithm must maintain a suitable precision budget. Conversion and rounding rules are in the [torus API](src/torus.rs).
 
 ## Testing and benchmarks
 
-```text
-cargo test -p primus_fft --features rustfft,tfhe-fft
-cargo bench -p primus_fft --bench fft --features rustfft,tfhe-fft
-```
+See the workspace [testing guide](../../guides/development/testing.md) and the
+[`fft` benchmark](benches/fft.rs) for commands, engine features and workloads.
 
 ## License
 

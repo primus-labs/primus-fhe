@@ -44,34 +44,26 @@ fixtures with different input and consumer contracts from the teaching presets.
 Historical cross-library PBS, CBS and EBS used different parameter profiles
 and provide functional reference points. [Comparison commands](../development/testing.md#glwe-functional-comparison-benchmarks) · [Current benchmark parameters](../development/tfhe-parameters.md#current-backend-benchmarks)
 
-Measure single-input and batched blind rotation separately. Retained sparse
-schedules keep the encrypted selectors, dummy and arithmetic boundaries. Their
-observed gains depend on geometry and workload. CBS with CMux and return needs
-a complete measurement even when a scheme-switching kernel is faster or its
-key payload is smaller. [Bootstrapping contracts](../development/bootstrapping-contracts.md)
+Measure single-input and batched Block blind rotation separately. Their
+performance depends on block geometry, occupancy and workload. Measure the
+complete CBS, CMux and return path even when a scheme-switching kernel is faster
+or its key payload is smaller. [Bootstrapping contracts](../development/bootstrapping-contracts.md)
 
 ## Fourier key generation
 
-Fourier GLWE evaluation material is generated from native coefficient rows
-before transformation. Regenerate material produced by the former unreduced
-path and replace secrets whose affected material was disclosed. Use the exact
-coefficient path for current GLWE Fourier timings. The historical repair
-comparison measured setup separately and found higher
-key-generation costs with mixed, much smaller online changes. The exact
-native rows still incur Fourier conversion error and have backend-specific
-precision limits. [Fourier error budget](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)
+Use exact coefficient key generation for current GLWE Fourier timings and
+report it separately from evaluation. The historical repair comparison
+found higher key-generation costs with mixed, much smaller online changes.
+Use the current material migration and precision requirements when reproducing
+the comparison. [GLWE key generation](../../crates/primus_glwe/README.md#encryption-and-decryption) · [Fourier error budget](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)
 
 ## NTRU projection
 
-Choose the projection strategy before generating keys and preparing scratch.
-NTT CBS performance presets use `PairedTrace`; the default configuration uses
-`Separate`. Fourier fusion and pairing require split trace and scheme switching,
-and NLEV-only or dual outputs use separate operations. Historical NTT paired
-trace reduced the measured trace-plus-switching projection at higher key and
-scratch costs than `Separate`. Fourier complete one-hot and LUT results were
-mixed, including cases where faster projection did not reduce request time.
-Compare the complete request and its error budget before choosing a strategy.
-[Projection and precision contract](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+Historical NTT paired trace reduced the measured trace-plus-scheme-switch
+projection at higher key and scratch costs than `Separate`. Complete Fourier
+one-hot results varied by configuration, even when projection alone was faster.
+Choose a supported projection before key generation and compare the complete
+request, including its error budget. [Projection and precision contract](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
 
 ## Historical evidence
 

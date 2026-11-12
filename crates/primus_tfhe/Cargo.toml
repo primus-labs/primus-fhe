@@ -17,7 +17,6 @@ primus_lattice = { path = "../primus_lattice" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }
-zeroize = { workspace = true }
 
 [features]
 default = []

@@ -24,71 +24,27 @@ The first three types encode coefficients. `BatchingEncoder` converts between pl
 
 ## Encoding contracts
 
-Messages and decoded outputs use the coefficient type `T`, with canonical values in `[0,t)`. Unsigned embedding lifts messages to `[0,t)`; centered embedding lifts them to `[-floor(t/2),ceil(t/2))`, including `1 -> -1` when `t=2`. Accumulators and decoding inputs must be canonical ciphertext residues under the codec's modulus. These ciphertext input ranges are caller preconditions, not validated by the codecs.
+Messages and decoded outputs are canonical values of type `T` in `[0,t)`. Unsigned embedding lifts to `[0,t)`, and centered embedding to `[-floor(t/2),ceil(t/2))`. The caller supplies canonical accumulators and decoding inputs under the codec's ciphertext modulus.
 
-Rounded encoding rounds ties away from zero on the integer lift. Both single-modulus codecs decode by rounding the canonical phase times `t/q`, with ties upward, modulo `t`. Only when `t` divides `q` can this be written as `round(c/delta) mod t` with `delta=q/t`; a power-of-two rounded scale alone is insufficient.
+Rounded encoding resolves ties away from zero on the integer lift. Both single-modulus codecs decode by rounding the canonical phase times `t/q`, with ties upward, modulo `t`. Use `MessageDecoder::from(&codec)` when only decoding is needed. See the [decoder contract](src/decode.rs).
 
-`RoundedCodec` requires `t >= 2` and `q > t`. `ScaledCodec` additionally checks `abs(t*delta-q)*(t-1) < q/2`, where `delta=round(q/t)` with ties upward. This is sufficient for noiseless recovery under either embedding and guarantees `(t-1)*delta < q`. For an integer lift `m` and phase noise `e`, a sufficient Scaled recovery condition is `abs((t*delta-q)*m + t*e) < q/2`.
-
-`RoundedCodec::try_new` and `ScaledCodec::try_new` return `CodecError` on invalid domains or a failed fixed-scale recovery bound; `new` panics on the same errors. These checks do not establish an encryption or evaluation noise budget. Producers and consumers must agree on the codec, embedding and moduli.
-
-Use `MessageDecoder::from(&codec)` when only decoding is needed. Single-modulus slice methods use `_to` for separate output and `_assign` for in-place updates. Batch encoding validates message ranges and exact lengths before writing; methods that add encoded messages retain the existing accumulator contents.
+Both codecs require `t >= 2` and `q > t`. Scaled also checks noiseless recovery at its fixed scale. Use `try_new` to handle a rejected configuration and establish the full encryption and evaluation noise budget separately. Producers and consumers must agree on the codec, embedding and moduli. See the [Rounded](src/rounded.rs) and [Scaled](src/scaled.rs) recovery contracts.
 
 ## BFV RNS
 
-With the `rns` feature, `BfvRnsCodec::try_new(plaintext_modulus, base_q, gamma_modulus)` prepares coefficient scaling under the product `Q` of an ordered ciphertext basis. It returns `BfvRnsCodecError<T>` on invalid modulus or recovery conditions; `new` panics on the same errors. The constructor checks the [modulus ranges and coprimality conditions](src/bfv_rns/mod.rs), as well as `Q > 4*(Q % t)*(t-1)` and `gamma > 4*k`, where `k` is the number of ciphertext moduli. These conservative bounds ensure noiseless recovery, not an encryption noise or security budget.
+With `rns`, prepare `BfvRnsCodec::try_new(t_modulus, base_q, gamma_modulus)` for coefficient scaling under the product `Q` of an ordered ciphertext basis. The constructor checks moduli and noiseless recovery. For a bound `E` covering the full phase error, call `validate_noise_bound(E, embedding)` when preparing parameters. See the [constructor](src/bfv_rns/mod.rs) and [recovery bounds](src/bfv_rns/decode.rs).
 
-For phase `delta*m+e`, with `delta=floor(Q/t)`, a sufficient decode condition is `abs(t*e-(Q % t)*m)/Q + k/gamma < 1/2`.
-
-For a complete phase-noise magnitude bound `E`, call `validate_noise_bound(E, embedding)` when preparing parameters. It checks `(t*E + (Q % t)*A)/Q + k/gamma < 1/2`, with `A=t-1` for unsigned lifting and `A=floor(t/2)` for centered lifting. Failure returns `InsufficientNoiseRecovery`; this sufficient bound can reject cases that would still decode. Include all encryption and evaluation contributions in `E`.
-
-`encode_coeffs_to` produces coefficient-domain `CrtPolynomial` data in the basis order; `add_encode_coeffs_assign` adds to an existing canonical accumulator. Polynomial length comes from the plaintext slice. `decode_coeffs_to` overwrites its coefficient-domain input and needs exactly `decode_scratch_len(output.len())` scratch elements: zero for a single-modulus basis, one RNS polynomial otherwise. Perform inverse NTT before decoding transformed data.
-
-Each input residue must be canonical under its basis modulus. Custom modulus contexts must also satisfy the [cross-modulus base-conversion contract](../primus_rns/README.md#base-conversion) inherited by the codec; the supplied Barrett contexts meet it. This codec is a BFV building block, not a complete BFV scheme.
+`encode_coeffs_to` writes a coefficient-domain `CrtPolynomial` in basis order. For decoding, inverse-transform NTT data first and provide canonical residues. `decode_coeffs_to` overwrites its input and requires `decode_scratch_len(output.len())` scratch elements. Custom modulus contexts must satisfy the [cross-modulus base-conversion contract](../primus_rns/README.md#base-conversion).
 
 ## Integer slots and subrings
 
-With `batching`, construct `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))` once for a prime plaintext modulus with `p = 1 mod 2n`. The existing `U64NttTable` imposes `p < 2^62` and the supported `PolyLength` range starts at `n = 32`. Primality is a caller precondition, as for the underlying NTT; the constructor checks transform availability.
+With `batching`, prepare `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))`. The caller supplies a prime `p` with `p = 1 mod 2n` and `p < 2^62`. Inputs are canonical residues in `[0,p)`. `encode` accepts a slot prefix and zero-pads the rest; `decode` returns all `n` ordered slots. Use `encode_to` and `decode_to` to reuse buffers. See the [slot layout and plaintext automorphisms](src/batching.rs).
 
-The layout has two rows of `n/2` slots, at the smallest primitive `2n`-th root raised to `5^j` and `-5^j`. For ordinary calls, `encode(slots)` returns `n` coefficients, zero-padding a slot prefix; `decode(coefficients)` returns all `n` ordered slots from exactly `n` canonical coefficients. Encoding allocates one result vector; decoding allocates the result and one temporary `n`-entry transform buffer. Both entries require values in `[0,p)` and reuse the prepared operations below.
-
-`encode_to(slots, coefficients)` accepts a prefix of at most `n` slots, zeroes the missing slots, and writes exactly `n` coefficients. `decode_to(coefficients, slots, scratch)` requires exactly `n` elements in each slice. These prepared calls allocate nothing and validate canonical plaintext values and complete lengths before writing.
-
-`rotation_exponent(k)` gives the polynomial automorphism exponent that rotates each row left by `k`; negative steps rotate right. `row_swap_exponent()` swaps rows without reversing them. `automorphism_slots_to` applies the corresponding **plaintext** permutation. Ciphertext automorphism and key switching belong to the scheme.
-
-The plaintext slot capacity `n` can be smaller than the ciphertext ring dimension `N`. `embed_to` writes `f(X^(N/n))`, with zero coefficients outside multiples of `N/n`; `extract_to` checks and reverses that embedding after scheme decryption and coefficient decoding. Only `2n` must divide `p-1`; `p` need not admit a full-`N` plaintext transform. Neither helper resizes a ciphertext or its full-`N` secret. For example, `n=32, N=128, p=193` supports 32 subring slots, even though a 128-slot transform modulo 193 is unavailable. Both the embedding and extraction require power-of-two `N >= n`.
-
-Run the independent direct-evaluation, negacyclic multiplication, automorphism and allocation checks with `cargo test -p primus_encoding --features batching --test batching --test batching_allocation`.
+For a power-of-two ciphertext ring length `N >= n`, `embed_to` writes `f(X^(N/n))`. After decryption and coefficient decoding, `extract_to` checks and reverses the embedding. The plaintext transform still uses length `n`, and the ciphertext and secret stay at length `N`. See the [BFV subring example](../primus_bfv/examples/subring_slots.rs).
 
 ## Phase error diagnostics
 
-`phase_error_magnitude(phase, expected_phase, modulus)` returns the exact
-nonnegative circular distance in the coefficient type, in `[0, floor(q/2)]`.
-It handles Native's `2^BITS` modulus without floating-point conversion.
-`phase_error_magnitude_slice_to` writes these distances into a supplied slice;
-all three lengths must match, including for empty inputs. Length mismatches
-panic before any output is written. Canonical residues are caller preconditions.
-
-Extract the coefficient phase with the encryption library, then encode the
-**expected message** using the same codec, embedding and modulus as that phase.
-For example:
-
-```rust
-use primus_encoding::{PlaintextEmbedding, RoundedCodec, phase_error_magnitude};
-use primus_modulus::PowOf2Modulus;
-
-let modulus = PowOf2Modulus::new(256u64);
-let codec = RoundedCodec::new(4, modulus);
-let expected_phase = codec.encode_value(0, PlaintextEmbedding::Unsigned);
-let phase = 64; // The expected message was 0, but this phase decodes to 1.
-assert_eq!(phase_error_magnitude(phase, expected_phase, modulus), 64);
-```
-
-Re-encoding the decoded value would give a zero residual in this example and
-hide the incorrect message. Decode correctness remains a separate check. The
-distance has no sign, cannot recover an integer error after modular wraparound,
-and includes any transform or evaluation error already present in the phase.
-Per-limb RNS distances do not measure the error under the product modulus.
+Use `phase_error_magnitude` or `phase_error_magnitude_slice_to` on canonical coefficient phases. Encode the **expected message** using the codec, embedding and modulus of the extracted phase. Re-encoding the decoded value can hide a wrong result. The distance is unsigned and circular. In RNS, per-limb distances measure errors under the individual moduli. See the [runnable example and exact contract](src/phase_error.rs).
 
 ## Further reading
 

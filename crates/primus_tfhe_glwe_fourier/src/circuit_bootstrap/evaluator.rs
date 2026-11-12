@@ -12,7 +12,7 @@ use crate::{
     circuit_bootstrap::{CbsGadgetParameters, CircuitBootstrapKey},
 };
 
-/// Classic binary/ternary or sparse binary CBS producing Fourier GGSW controls.
+/// Classic or Block CBS producing Fourier GGSW controls.
 ///
 /// Owns the programmed LUT and projection buffers. Common input/BR/FFT/EP
 /// resources are borrowed per call; both BR variants share trace and scheme switching.
@@ -42,7 +42,7 @@ where
     /// a compatible basis with the same key layout. Checks the key/parameters
     /// and program's N, q/Q and exact output basis at this binding boundary.
     /// Common resources are borrowed only for construction and each online call;
-    /// both classic/sparse BR and both PBS orders are supported.
+    /// both Classic and Block BR support either PBS order.
     ///
     /// # Correctness
     /// CBS and resource keys must use the same paired secrets and this context's
@@ -118,9 +118,9 @@ where
     /// the program's padded or MSB Boolean encoding. Noise must fit that program's
     /// rotation intervals. Trace and scheme-switch errors, including native
     /// halving and FFT rounding, must fit the independent CBS error budget;
-    /// see [`CbsGadgetParameters`]. Sparse keys also require aggregation
-    /// noise from every bucket, including zero selections and dummies, and the
-    /// aggregate FFT error to fit that budget. CMux requires `F(m)` in `{0, 1}`
+    /// see [`CbsGadgetParameters`]. For Block BR, budget the aggregation noise
+    /// from all selectors and any dummies, plus the aggregate FFT error. CMux
+    /// requires `F(m)` in `{0, 1}`
     /// throughout the programmed domain. The default identity uses `F(m)=m`.
     /// The output uses gadget scales rather than ordinary LWE encoding.
     ///

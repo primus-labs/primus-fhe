@@ -121,6 +121,25 @@ impl<T: FheUint> LweSecretKeyRef<'_, T> {
             self.dimension(),
             "LWE output dimension must match the secret key"
         );
+        self.encrypt_mask_body(plaintext, (mask, body), modulus, uniform, noise, rng);
+    }
+
+    /// Samples one ciphertext after its owner establishes the mask dimension.
+    /// Key generation and batch encryption obtain complete rows from their layout.
+    /// The coefficient and sampler contracts of [`Self::encrypt_encoded_to`] apply.
+    #[inline]
+    pub(crate) fn encrypt_mask_body<M, R>(
+        self,
+        plaintext: T,
+        (mask, body): (&mut [T], &mut T),
+        modulus: M,
+        uniform: Uniform<T>,
+        noise: &DiscreteGaussian<T>,
+        rng: &mut R,
+    ) where
+        M: RingContext<T>,
+        R: rand::Rng + rand::CryptoRng,
+    {
         mask.iter_mut()
             .zip(uniform.sample_iter(&mut *rng))
             .for_each(|(out, sample)| *out = sample);

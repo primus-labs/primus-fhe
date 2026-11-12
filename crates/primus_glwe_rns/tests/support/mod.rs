@@ -2,8 +2,6 @@
 //! from bounded evaluation error; it has no plaintext modulus or BFV decoder.
 #![allow(dead_code)]
 
-use std::sync::Arc;
-
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
@@ -24,7 +22,7 @@ pub struct RawParameters<T: FheUint>
 where
     BarrettModulus<T>: FieldContext<T>,
 {
-    pub core: Arc<CrtGlweEncryptionParameters<T>>,
+    pub core: CrtGlweEncryptionParameters<T>,
     pub base: RNSBase<T, BarrettModulus<T>>,
 }
 
@@ -41,8 +39,7 @@ where
     ) -> Self {
         let base = RNSBase::new(moduli).unwrap();
         let size = RnsGlweSize::new(GlweSize::new(dimension, n), base.moduli_count());
-        let core =
-            Arc::new(CrtGlweEncryptionParameters::try_new(size, &base, secret, sigma).unwrap());
+        let core = CrtGlweEncryptionParameters::try_new(size, &base, secret, sigma).unwrap();
         Self { core, base }
     }
 
@@ -79,6 +76,18 @@ where
     }
 }
 
+/// Keep the polynomial short while exercising a product wider than one word.
+pub fn probe_parameters(dimension: usize) -> RawParameters<u64> {
+    let moduli = [1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new);
+    RawParameters::new(
+        GlweDimension::new(dimension),
+        PolyLength::new(32),
+        &moduli,
+        SecretKeyDistr::SparseTernary,
+        3.2,
+    )
+}
+
 pub fn encode_probe(message: &[i128], moduli: &[u64]) -> CrtPolynomial<Vec<u64>> {
     CrtPolynomial::new(
         moduli
@@ -93,13 +102,12 @@ pub fn encode_probe(message: &[i128], moduli: &[u64]) -> CrtPolynomial<Vec<u64>>
 }
 
 pub fn unsigned_probe(message: &[u64], parameters: &RawParameters<u64>) -> CrtPolynomial<Vec<u64>> {
-    let values: Vec<_> = parameters.base.moduli().iter().map(|q| q.value()).collect();
     encode_probe(
         &message
             .iter()
             .map(|&value| i128::from(value))
             .collect::<Vec<_>>(),
-        &values,
+        parameters.base.moduli_values(),
     )
 }
 

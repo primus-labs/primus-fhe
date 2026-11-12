@@ -225,7 +225,7 @@ where
     }
 
     /// Moves out prepared state and resources for serial composition with other
-    /// operations, including the advanced sparse-pair projection interface.
+    /// operations, including the block-pair projection interface.
     /// No buffers are copied or allocated.
     #[must_use]
     pub fn into_parts(

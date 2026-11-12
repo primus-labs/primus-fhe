@@ -1,4 +1,4 @@
-//! Fixed two-input grouped BR with a scoped projection capability.
+//! Fixed two-input block BR with a scoped projection capability.
 
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
 
@@ -7,6 +7,7 @@ use crate::{
     Lwe,
     blind_rotation::RotationState,
     bootstrap::{BlindRotationPairWorkspace, BootstrapResources},
+    grouped_rotation::{rotate_groups_pair, rotate_groups_split_pair},
 };
 
 /// One prepared input from [`OneHotCircuitBootstrapEvaluator::with_pair`].
@@ -58,7 +59,7 @@ where
     Table: FftTable,
 {
     /// Allocates a second input's aggregate, current and exponents for
-    /// [`Self::with_pair`]. Supports ordinary sparse BR and ordinary/split block BR;
+    /// [`Self::with_pair`]. Supports ordinary and split block BR;
     /// returns `None` for classic resources. Shared Fourier, split recovery,
     /// projection and external-product scratch is not duplicated.
     ///
@@ -71,12 +72,12 @@ where
     ) -> Option<BlindRotationPairWorkspace<T>> {
         resources.check_context(self.context);
         match &resources.blind_rotation.rotation {
-            RotationState::Sparse { .. }
-            | RotationState::Block { .. }
-            | RotationState::BlockSplit { .. } => Some(BlindRotationPairWorkspace::new(
-                resources.context.blind_rotation(),
-                resources.context.external_lwe_dimension(),
-            )),
+            RotationState::Block { .. } | RotationState::BlockSplit { .. } => {
+                Some(BlindRotationPairWorkspace::new(
+                    resources.context.blind_rotation(),
+                    resources.context.external_lwe_dimension(),
+                ))
+            }
             RotationState::Binary { .. }
             | RotationState::Ternary { .. }
             | RotationState::Split { .. } => None,
@@ -159,14 +160,12 @@ where
         // block scratch keeps its configured precision; no ordinary fallback is
         // selected for a split binding.
         let first_exponents = match &mut resources.blind_rotation.rotation {
-            RotationState::Sparse { scratch, .. } | RotationState::Block { scratch, .. } => {
-                &mut scratch.exponents
-            }
+            RotationState::Block { scratch, .. } => &mut scratch.exponents,
             RotationState::BlockSplit { scratch, .. } => &mut scratch.exponents,
             RotationState::Binary { .. }
             | RotationState::Ternary { .. }
             | RotationState::Split { .. } => {
-                panic!("one-hot pair requires sparse or block blind-rotation resources")
+                panic!("one-hot pair requires block blind-rotation resources")
             }
         };
         let modulus = parameters.accumulator_ntru().cipher_modulus();
@@ -191,15 +190,7 @@ where
             &mut resources.blind_rotation.scratch,
         ];
         match &mut resources.blind_rotation.rotation {
-            RotationState::Sparse { key, scratch } => crate::sparse::rotate_buckets_pair(
-                key,
-                scratch,
-                second,
-                buffers,
-                resources.blind_rotation_key.blind_rotation_basis(),
-                &mut resources.fft,
-            ),
-            RotationState::Block { key, scratch } => crate::sparse::rotate_groups_pair(
+            RotationState::Block { key, scratch } => rotate_groups_pair(
                 crate::block::blocks(key),
                 scratch,
                 second,
@@ -208,7 +199,7 @@ where
                 &mut resources.fft,
             ),
             RotationState::BlockSplit { key, scratch } => {
-                crate::sparse::rotate_groups_split_pair(
+                rotate_groups_split_pair(
                     crate::block::blocks(key),
                     scratch,
                     second,
@@ -224,7 +215,7 @@ where
             RotationState::Binary { .. }
             | RotationState::Ternary { .. }
             | RotationState::Split { .. } => {
-                panic!("one-hot pair requires sparse or block blind-rotation resources")
+                panic!("one-hot pair requires block blind-rotation resources")
             }
         }
     }

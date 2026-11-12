@@ -43,15 +43,15 @@ Both orders return under their external secret and modulus. Equal q/Q skips the 
 
 Raw GLWE blind-rotation calls take a separately prepared `RotationModulusSwitch<T>` for the key's input q and ring domain 2N. Use step one for ordinary PBS, and the LUT's padded output width for interleaved operations. Context evaluators bind this automatically; applications do not need to manage quantizers. See [rotation quantization](../primus_tfhe/src/rotation.rs) and the backend BR contracts.
 
-## Sparse coefficient keys
+## Blind-rotation keys
 
-Classic binary/ternary and sparse fixed-weight binary work with both orders, including PBS, ManyLUT, MVB and CBS. Select `config.method = BlindRotationMethod::Sparse { copy_count, bucket_count }` explicitly; the [shared selection rules](../primus_tfhe/README.md#selecting-blind-rotation) apply.
+Classic binary/ternary and Block binary support PBS, ManyLUT, MVB and CBS in both orders. To keep an existing fixed-weight binary secret, choose `BlindRotationMethod::Classic`, regenerate the evaluation keys and reassess the noise budget.
 
-The backends share `GlweBlindRotationControls<T, M>` for coefficient controls and their numerical layout; `SparseGlweBootstrappingKey` adds the public bucket map and fixed weight. Borrow the controls with `key.controls()` when allocating a raw BR workspace. NTT uses Barrett residues and Fourier uses Native coefficients, so those representations are not interchangeable. Prefer context/key-generator factories and ordinary evaluators; storage and import contracts are on the [sparse key type](src/sparse.rs).
+For Block, set `config.method = BlindRotationMethod::Block` and select `SecretKeyDistr::BlockBinary { block_size, occupancy }`. `BlockOccupancy::AtMostOne` allows empty blocks and stores an independent encrypted dummy after each block's bit controls. `ExactlyOne` requires one `1` per block and stores only the bit controls. Choosing this distribution changes the secret law and requires its own security and noise assessment.
 
-Both GLWE backends also accept `config.method = BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. It uses contiguous blocks without mapping or matching; `BlockOccupancy::AtMostOne` stores an independent empty-block dummy after each block's bit controls; `ExactlyOne` stores only the bit controls and requires one `1` per block. Both PBS orders, ManyLUT, MVB and CBS use the same context/evaluator factories. Fourier uses exact native coefficient aggregation followed by ordinary FFT and external products; trace precision remains independent. The [block material contract](src/block.rs) describes import layout and mathematical requirements.
+The backends share `BlockGlweBootstrappingKey` and `GlweBlindRotationControls<T, M>` for coefficient controls. NTT uses Barrett residues and Fourier uses native-torus coefficients. Fourier aggregates exactly in the coefficient domain before the ordinary FFT and external product; trace precision is independent. See the [Block material contract](src/block.rs) for imports and the [shared selection rules](../primus_tfhe/README.md#selecting-blind-rotation) for method choice.
 
-Both modes also work with Classic BR. Secret law is bound to the key; scratch can be reused across modes when its input dimension and gadget layout match.
+Both block occupancy modes also work with Classic BR. Block scratch is reusable across occupancy modes when its input dimension and gadget layout match.
 
 ## Clients and LUTs
 
@@ -69,7 +69,7 @@ For CBS, create a CBS context and call `context.try_generate_circuit_bootstrap_k
 
 `CbsConfig::input_encoding` selects `Padded` (inherits PBS input t) or `MsbBoolean` (t=2, no padding bit). Use `cbs_encryptor` / `cbs_public_encryptor`, then `encrypt` / `encrypt_to`; the client enforces the selected domain. Ordinary `encryptor` keeps PBS encoding. MSB compilation requires exact half gadget weights (even weights for native Q), prepares a centered sign LUT and binds its post-trace corrections. It does not establish a noise budget. See [`CircuitBootstrapLookupTable`](../primus_tfhe/src/lookup_table/circuit_bootstrap.rs) for protection geometry.
 
-Compile identity or a custom function with `compile_cbs_identity`, `compile_cbs_fn` or `compile_cbs_slice`. Bind it with `circuit_bootstrap_evaluator_with_lookup_table`; `circuit_bootstrap_evaluator` is the identity shortcut. Output uses gadget scaling under the ring secret, with no output message codec. CMux requires F to be bit-valued throughout the input domain. Both backends support classic binary/ternary and sparse binary in either order.
+Compile identity or a custom function with `compile_cbs_identity`, `compile_cbs_fn` or `compile_cbs_slice`. Bind it with `circuit_bootstrap_evaluator_with_lookup_table`; `circuit_bootstrap_evaluator` is the identity shortcut. Output uses gadget scaling under the ring secret, with no output message codec. CMux requires F to be bit-valued throughout the input domain. Both backends support Classic binary/ternary and Block binary in either order.
 
 `CbsConfig::fourier_trace_precision` retains the CBS trace representation in prepared
 parameters. Use `FourierTracePrecision::Ordinary` for NTT or ordinary Fourier;

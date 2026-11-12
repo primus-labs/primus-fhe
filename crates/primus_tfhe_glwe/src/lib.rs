@@ -14,8 +14,8 @@
 //! It also provides a [`LookupTableCompiler`] for Rounded LUTs. [`ClientKey`] owns the
 //! complete setup secrets; [`Encryptor`] and [`Decryptor`] borrow only the external
 //! message secret and bind its codec. Choose the NTT/Fourier
-//! backend for transform tables, key generation and evaluators. Shared sparse
-//! coefficient storage is provided by [`SparseGlweBootstrappingKey`].
+//! backend for transform tables, key generation and evaluators. Both backends
+//! use [`BlockGlweBootstrappingKey`] for coefficient-domain block controls.
 //! Concrete backends provide experimental u64 operation/message configurations.
 //! This family supplies the shared numerical configuration types and sampling state.
 //! [`KeyGenerationError`] and [`TfheClientError`] report key generation and family
@@ -64,7 +64,6 @@ mod error;
 mod key;
 mod lookup_table;
 mod parameters;
-mod sparse;
 
 use primus_glwe::{GgswParameters, GlevParameters, GlweKeySwitchingParameters, GlweSecretKey};
 use primus_lwe::LweSecretKey;
@@ -75,12 +74,11 @@ pub use config::{CbsConfig, FourierTracePrecision, PbsConfig};
 pub use controls::GlweBlindRotationControls;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
-    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
+    TfheClientError, TfheKeyError, TfheParameterError,
 };
 pub use key::{ClientKey, ExternalLweSecretKey};
 pub use parameters::{CbsParameters, PbsEvaluationParameters, PbsOrder, PbsParameters};
 pub use primus_tfhe::{LweConfig, ModulusConfig, ModulusConfigError};
-pub use sparse::SparseGlweBootstrappingKey;
 
 pub use primus_tfhe::{
     BOOLEAN_PLAINTEXT_BITS, BivariateLookupTable, BooleanError, BooleanEvaluator, BooleanGate,

@@ -13,7 +13,8 @@
 
 ## API 与契约
 
-- 优先已有类型、普通函数、固有方法、泛型/trait 和切片。新抽象须集中真实不变量、消除已确认重复、防止误用、隔离不同表示或有实测收益；参数重复、存在分支或假想消费者不足以成立。
+- 常用方案入口优先采用具体类型，复用已有类型、函数、固有方法和借用视图。泛型用于实际共享的算法、表示差异或性能特化。运行时分派在绑定或整次算子调用时完成。
+- 新抽象须集中真实不变量、消除已确认重复、防止误用、隔离不同表示或有实测收益。参数重复、存在分支或假想消费者不足以成立。
 - 实现前先查依赖层已有接口，入口见[库使用导航](guides/development/README.zh_CN.md)。完整多项式/密文及其子结构优先使用语义迭代器；标量、gadget 权重或无对应类型的分块使用 slice iterator。迭代器会略过不完整尾块，`zip` 只消费共同前缀；公开边界仍须验证完整长度和配对数量。
 - NTT、Fourier、CRT/DCRT 等保留必要差异，不用万能 trait 隐藏数值契约。宏用于稳定重复、不变量生成或必要编译期工作，并权衡诊断和维护成本。
 - 名称表达数学角色和表示，同一角色跨 crate 统一；函数族统一词干及 `try_`、`lazy_`、`*_assign`、`*_to`、`*_slice` 语义。参数按 `input/lhs/rhs/acc/output/scratch/context/modulus` 等角色命名，同层顺序一致，不强求不同契约同名或跨层统一参数顺序。
@@ -26,6 +27,7 @@
 - 修改算术前确认输入域、输出范围、布局、归一化和精确缓冲区长度，核对溢出、窄化、移位、wrapping、惰性约简与 unsafe 前提。
 - 在拥有契约的公开、批量或构造边界验证调用方数据；私有 kernel 使用已建立的不变量。不要逐层重复检查长度、模数、basis/table，也不在逐系数循环内重复检查或分派。
 - 内部不变量通常用少量边界 `debug_assert!`；安全公开 API 独立承担的必要检查保留在 release。内存安全不能依赖 debug 检查。主动 panic 给出明确消息，避免调用方可触发的 `unreachable!`。
+- 为优化保留 release 断言时，在断言附近说明它向编译器提供的条件，以及该条件帮助消除的检查或促成的优化。用生成代码或代表性基准核对收益。
 - 同一数学操作的 scalar/SIMD、NTT/Fourier、CRT/DCRT/RNS 路径核对语义并做聚焦差分验证，不强行统一表示。
 
 ## 性能、测试与基准
@@ -52,16 +54,6 @@
 
 ## 验证与交付
 
-实现先窄后宽：
-
-```text
-cargo fmt --all
-cargo check -p <crate> --all-targets
-cargo test -p <crate>
-cargo clippy -p <crate> --all-targets -- -D warnings
-```
-
-- 纯审查需要格式检查时用 `cargo fmt --all -- --check`，不格式化写入。纯文档检查内容和链接，必要时构建文档，不机械运行数值测试。
-- Workspace 入口为 `just fmt-check`、`just check`、`just lint`、`just test`、`just simd`，先查 [justfile](justfile) 的实际 recipe/feature 覆盖；TFHE 使用 `just tfhe` / `just tfhe-simd`，后者需要 nightly。缺失覆盖补显式包命令，无关失败如实报告，不削弱检查。
-- 普通 nextest 显式使用 `--lib --tests`；all-targets 用于编译/lint。Doctest 用 `just test-doc` 单独执行；Criterion smoke 用 `just bench-smoke <package> <target>`，不混入普通测试。覆盖与命令见[测试指南](guides/development/testing.md)。
+- 实现先窄后宽，按[测试指南](guides/development/testing.md)选择格式、编译、lint 和测试入口。核对实际 recipe、feature 与运行覆盖，缺失覆盖补包级检查，无关失败如实报告并保留原有检查强度。
+- 纯审查使用只读格式检查。纯文档验证内容、链接和受影响的可运行示例，按需构建 rustdoc。普通测试、doctest 和 Criterion smoke 分开执行。
 - 交付前检查最终 diff、清理临时资产，说明行为/API 变化、实际验证、未验证路径及实质限制。

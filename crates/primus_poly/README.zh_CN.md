@@ -12,13 +12,13 @@
 | 类型 | 表示与布局 | 主要操作 |
 | --- | --- | --- |
 | `Polynomial<S>` | 单个模数下按幂次递增排列的 `N` 个系数 | 加、减、取负、scalar/factor 乘法、负循环单项式、朴素乘法、求值和采样 |
-| `NttPolynomial<S>` | 单个模数下的 `N` 个点值；顺序由 NTT context 定义 | 逐点算术、融合乘加和逆元 |
+| `NttPolynomial<S>` | 单个模数下的 `N` 个点值；顺序由 NTT context 定义 | 逐点算术、融合乘加和逐点求模逆 |
 | `CrtPolynomial<S>` | modulus-major 系数数据：每个模数对应一个连续的 `N` 系数多项式 | 分量算术、scalar/factor 操作和负循环单项式 |
-| `DcrtPolynomial<S>` | modulus-major NTT 数据：每个模数对应一个连续的 `N` 点变换结果 | 逐点算术、融合乘加、逆元和 factor butterfly 内核 |
+| `DcrtPolynomial<S>` | modulus-major NTT 数据：每个模数对应一个连续的 `N` 点变换结果 | 逐点算术、融合乘加、逐点求模逆和 factor butterfly 内核 |
 | `BigUintPolynomial<S>` | coefficient-major 数据：每个系数是固定宽度的小端 limb 分块 | 多 limb 模加、模减和模取负 |
 | `FourierPolynomial<S>` | 独立复数求值；顺序由 Fourier 后端定义 | 逐点加、减、取负、乘法、融合乘加和 scalar 乘法 |
 
-`primus_poly` 负责保存数值并实现算术，不拥有变换表，也不替调用方选择表示。[`primus_ntt`](../primus_ntt) 负责系数与 NTT、CRT 与 DCRT 表示之间的转换；[`primus_fft`](../primus_fft) 提供 Fourier 变换。
+`primus_poly` 保存数值并实现算术。[`primus_ntt`](../primus_ntt) 在单模数下提供系数和 NTT 点值之间的变换，并对每个模数分量做正逆 NTT，在 CRT 与 DCRT 之间转换。[`primus_rns`](../primus_rns) 提供 CRT 重建和基转换，[`primus_fft`](../primus_fft) 提供 Fourier 变换。
 
 平坦标量缓冲使用 slice 和 [`primus_reduce`](../primus_reduce/README.zh_CN.md)
 的 `Reduce*Slice` trait，例如 `modulus.reduce_add_slice_assign(lhs, rhs)`。

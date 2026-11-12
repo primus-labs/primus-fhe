@@ -57,32 +57,8 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
     /// [`try_new`](Self::try_new).
     #[must_use]
     pub fn new(value: T) -> Self {
-        assert!(
-            value > T::ONE,
-            "BarrettModulus::new: modulus must be greater than one"
-        );
-        let leading_zeros = value.leading_zeros();
-        assert!(
-            leading_zeros > 1,
-            "BarrettModulus::new: modulus must be less than 2^(T::BITS - 2)"
-        );
-        Self::new_unchecked(value)
-    }
-
-    /// Creates a [`BarrettModulus<T>`] without validating `value`.
-    ///
-    /// # Correctness
-    ///
-    /// `value` must satisfy `1 < value < 2^(T::BITS - 2)`.
-    #[must_use]
-    #[inline]
-    pub fn new_unchecked(value: T) -> Self {
-        let mut quotient = [T::ZERO; 3];
-        let _rem = DivRemScalar::div_rem_scalar(&[T::ZERO, T::ZERO, T::ONE], value, &mut quotient);
-        Self {
-            value,
-            ratio: [quotient[0], quotient[1]],
-        }
+        Self::try_new(value)
+            .expect("BarrettModulus::new: modulus must satisfy 1 < q < 2^(T::BITS - 2)")
     }
 
     /// Creates a [`BarrettModulus<T>`] from precomputed parts.
@@ -103,14 +79,12 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
     #[must_use]
     #[inline]
     pub fn try_new(value: T) -> Option<Self> {
-        if value <= T::ONE {
+        if value <= T::ONE || value.leading_zeros() < 2 {
             return None;
         }
-        let leading_zeros = value.leading_zeros();
-        if leading_zeros < 2 {
-            return None;
-        }
-        Some(Self::new_unchecked(value))
+        let mut quotient = [T::ZERO; 3];
+        let _rem = DivRemScalar::div_rem_scalar(&[T::ZERO, T::ZERO, T::ONE], value, &mut quotient);
+        Some(Self::from_parts(value, [quotient[0], quotient[1]]))
     }
 
     /// Returns the modulus.

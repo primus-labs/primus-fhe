@@ -1,7 +1,9 @@
-use crate::{BaseConverter, RNSBase, Residues, RnsError};
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
 use primus_reduce::{Reduce, ReduceMul, ReduceSub};
+
+use crate::{BaseConverter, RNSBase, RnsError};
+
 type Base = RNSBase<u64, BarrettModulus<u64>>;
 
 /// Reusable allocation-free storage for exact centered basis conversion.
@@ -163,6 +165,8 @@ impl CenteredBaseConverter {
         }
     }
 
+    /// Converts using the complete layouts and workspace established by
+    /// `convert_to` or the HPS entry point.
     pub(crate) fn expand(
         &self,
         input: &[u64],
@@ -205,7 +209,7 @@ impl CenteredBaseConverter {
         }
         let adjusted = &mut workspace.adjusted[..input.len()];
         self.converter
-            .fast_convert_array(input, output, n, adjusted);
+            .fast_convert_array_kernel(input, output, n, adjusted);
         for (correction, residues) in workspace
             .corrections
             .iter_mut()
@@ -243,7 +247,7 @@ impl CenteredBaseConverter {
                 *residue = chunk[index];
             }
             let value = &mut workspace.value[..source.big_uint_value_len()];
-            source.compose_to(Residues(residues), BigUint(value));
+            source.compose_to_kernel(residues, BigUint(value));
             let negative = value
                 .iter()
                 .rev()

@@ -18,10 +18,10 @@ use crate::{
 
 /// Additional state for a second grouped blind-rotation input.
 /// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_pair_workspace`].
-/// Sparse buckets and direct blocks share this geometry-independent storage:
+/// Block BR uses this geometry-independent storage:
 /// input exponents, an L*N coefficient aggregate and one N-coefficient accumulator.
 /// The original resources provide shared transform/product scratch. Reuse across
-/// grouped methods or block widths requires matching input dimension and NLEV size.
+/// block widths requires matching input dimension and NLEV size.
 pub struct BlindRotationPairWorkspace<T: FheUint> {
     pub(crate) exponents: Vec<usize>,
     pub(crate) aggregate: Vec<T>,

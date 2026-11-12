@@ -3,7 +3,7 @@
 pub use primus_tfhe::{LookupTableError, TfheEvaluationError};
 pub use primus_tfhe_glwe::{
     BlockBootstrappingKeyError, BooleanError, CircuitBootstrapParameterError, KeyGenerationError,
-    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
+    TfheClientError, TfheKeyError, TfheParameterError,
 };
 
 /// Failure to prepare operation state or bind it to a Fourier table.

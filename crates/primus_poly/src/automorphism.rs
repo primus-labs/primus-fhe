@@ -2,7 +2,7 @@
 
 use primus_integer::{FheUint, WrappingNeg};
 use primus_modulus::PowOf2Modulus;
-use primus_reduce::{ReduceMul, RingContext};
+use primus_reduce::{ReduceMul, ReduceNeg};
 use primus_shape::PolyLength;
 
 /// One source index and its negacyclic sign, packed into four bytes.
@@ -147,7 +147,7 @@ impl CoeffAutomorphismPermutation {
     pub fn apply_to<T, M>(&self, input: &[T], output: &mut [T], modulus: M)
     where
         T: FheUint,
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
     {
         debug_assert_eq!(input.len(), self.poly_length().get());
         debug_assert_eq!(output.len(), self.poly_length().get());

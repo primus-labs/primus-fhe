@@ -83,19 +83,12 @@ NLev 的 `external_product_sum_to` 和 GGSW/NGSW 的 `cmux_k_to` 接收数量匹
 
 ## Native Hybrid RNS product
 
-启用 `rns` 时，`radix::NativeRadixParameters` 在 BFV/BGV 角色密钥间共享不可变
-signed decomposition、已检查的列 geometry 和 CRT weights。它绑定 N 和有序 Q，
-不认证 secret 或 transform 身份。方案建钥入口通过
-`EvaluationKeyConfig::PreparedRadix` 消费此资源。
-
-启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
-为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
-CRT bases。`NativeHybridAuxiliary` 持有一个环的有序 P 基与 NTT 表。多个活跃 Q 层
-可以通过 `NativeHybridParameters::try_with_auxiliary` 复用它。方案层持有 Q NTT 表。
-Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridModDown::Centered` 和
-`PlaintextPreserving(p)` 保持不同 correction；不新增密文类型族或 raw GLWE bridge。
-方案层仍生成/检查角色 keys 并建立完整误差与安全条件；共享 setup 扩展先恢复唯一
-受支撑的实际系数秘密，再构造 P limbs。详见[Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
+启用 `rns` 后，`NativeRadixParameters` 将共享分解资源绑定到环长度和有序 Q，
+由 `EvaluationKeyConfig::PreparedRadix` 使用。`NativeHybridParameters` 和
+`NativeHybridProduct` 支持原生 BFV/BGV 的 `u64`、rank-one `[c0,c1]` plus-phase
+布局。按顺序绑定活跃 Q 和辅助 P，共享准备好的参数，每个 worker 使用独立的可变
+product。方案层负责角色密钥生成和参数适用性。辅助资源复用和不同的 ModDown 校正
+见 [Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
 
 ## 正确性与工作区契约
 
@@ -113,13 +106,15 @@ Prepared product 共享活跃层参数并复用全部可变 scratch。`HybridMod
 
 工作区提供可复用 scratch，不验证密钥、basis、table 或模数身份。覆盖式外积会初始化所需缓冲区，合法调用之间无需 reset；累加接口要求输出已有有效值。GLWE 外积工作区的 `with_rebound` 临时改变分解层数，保持 GLWE 形状，并在调用结束后恢复原布局；`resize` 可改变缓冲区尺寸。
 
-批量外积和 k-CMux 检查迭代器数量；缓冲区长度检查因操作而异，部分只使用 debug 断言。后续项无效或迭代器 panic 可能留下部分输出或 scratch；丢弃结果后，合法调用仍可复用工作区。具体检查与写入边界见相应方法文档。
+批量外积和 k-CMux 检查迭代器数量。每对输入的布局检查和写入边界见对应的方法文档。
+某对输入非法或迭代器 panic 时，输出或 scratch 可能仅部分更新。应丢弃结果，再用有效输入复用工作区。
 
 CMux 的选择语义要求控制加密比特；k-CMux 要求至多一个控制比特为一。三元 `cmux_ternary_monomial_to` 使用互斥比特 `s⁺, s⁻`，理想旋转为 `X^(exponent * (s⁺-s⁻))`；指数须在 `0..2N`，零指数精确复制输入。控制须使用相同密钥、basis 和变换约定；Fourier 控制使用 native-torus 尺度和匹配的 native basis。噪声增长和可解密性由更高层负责。
 
 ## 示例
 
-借用存储，把已经编码的多项式加到 body，再在显式模数下抽取第二个系数：
+将 `primus_lattice`、`primus_shape`、`primus_modulus` 和 `primus_poly` 添加为
+直接依赖。本示例使用默认 features，将已编码的多项式加到 body，再抽取第二个系数。
 
 ```rust
 use primus_lattice::{GlweDimension, GlweSize, glwe::Glwe, lwe::Lwe};
@@ -152,11 +147,9 @@ assert_eq!(sample.b(), 76);
 - `fourier` 启用对应的 Fourier 泛型接口，不选择具体 FFT 引擎。
 - `rustfft` / `tfhe-fft` 同时启用 `fourier` 和对应 FFT 实现，可叠加使用。
 - `rns` 启用 CRT/DCRT 密文及乘法工作区；DCRT 需要的 `ntt` 一并启用。
-- `parallel` 向已启用的 NTT 依赖转发有界 prefix 正逆变换调度，涵盖 GLev product
-  和 Hybrid Q/P 变换；它不激活 `ntt` 或 `rns`，须另行选择所需表示。每次 prefix
-  的 N≥4096 且至少两条 limb 时使用至多4个连续任务，总线程数须由
-  `RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 串行路径
-  不初始化 pool，随机采样不并行。
+- `parallel` 向已启用的 NTT 依赖转发有界 DCRT 前缀调度，涵盖 GLev product
+  和 Hybrid Q/P 变换。须另行启用 `ntt` 或 `rns`，并按
+  [NTT 线程池说明](../primus_ntt/README.zh_CN.md#simd-backend-与编译目标)配置。
 - `simd` 仅向已启用的算术依赖传播 nightly SIMD，不激活后端、FFT 引擎或 `rns`。
 - `RnsGlweSize` 和 `RnsGadgetSize` 不依赖 `rns` feature。
 
@@ -164,4 +157,5 @@ assert_eq!(sample.b(), 76);
 
 ## 测试与基准
 
-验证命令见 workspace [测试指南](../../guides/development/testing.md)。[基准指南](benches/README.md) 列出可独立运行的 target 和测量端点；完整 PBS 与连续读取计算密钥的成本须在上层测量。
+验证命令见 workspace [测试指南](../../guides/development/testing.md)，工作负载和计时边界见
+[基准指南](benches/README.md)。

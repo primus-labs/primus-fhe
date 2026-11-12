@@ -20,12 +20,6 @@ use primus_tfhe_glwe_ntt::{
 };
 use rand::{SeedableRng, rngs::StdRng};
 
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 8,
-};
-
-/// A Fourier-only selection is rejected before constructing an NTT table or keys.
 #[test]
 fn cbs_rejects_fourier_split_precision() {
     use primus_tfhe_glwe_ntt::{
@@ -61,7 +55,7 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse uses fixed weight; direct Block uses two non-power-of-two blocks.
+/// Direct Block uses two non-power-of-two blocks.
 /// Classic cases select binary/ternary below.
 fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T> {
     let modulus = ModulusConfig::Explicit(T::as_from(if T::BITS == 32 {
@@ -252,13 +246,6 @@ where
     let blind_rotation = generator
         .try_generate_blind_rotation_key(&client, &mut rng)
         .unwrap();
-    assert_eq!(
-        matches!(
-            blind_rotation,
-            primus_tfhe_glwe_ntt::key::BlindRotationKey::Sparse(_)
-        ),
-        matches!(config.method, BlindRotationMethod::Sparse { .. }),
-    );
     assert_eq!(
         matches!(
             blind_rotation,
@@ -764,40 +751,10 @@ fn u64_ternary_batches() {
 }
 
 #[test]
-fn u32_sparse_batches() {
-    let config = config(SPARSE);
-    many_lut_and_mvb::<u32, U32NttTable, _>(config);
-}
-
-#[test]
 fn u64_classic_cbs() {
     let mut config = config(BlindRotationMethod::Classic);
     config.small_lwe.secret_key_distr = SecretKeyDistr::UniformTernary;
     config.order = PbsOrder::KeyswitchBootstrap;
-    circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
-}
-
-#[test]
-fn u32_sparse_cbs() {
-    let config = config(SPARSE);
-    circuit_selection::<u32, U32NttTable, _>(config, CbsInputEncoding::Padded);
-}
-
-/// Q26 permits multiple four-source groups per u32 reduction; Q30 covers fallback.
-#[test]
-fn u32_sparse_bounded_aggregation_pbs() {
-    let mut config = config::<u32>(SPARSE);
-    config.small_lwe.dimension = LweDimension::new(32);
-    config.small_lwe.cipher_modulus = ModulusConfig::Explicit(67_104_769);
-    config.ring_modulus = ModulusConfig::Explicit(67_104_769);
-    chained_pbs::<u32, U32NttTable, _>(config);
-}
-
-/// u64 uses bounded whole-bucket aggregation; u32 sparse cases use another kernel.
-#[test]
-fn u64_sparse_pbs_and_cbs() {
-    let config = config(SPARSE);
-    chained_pbs::<u64, U64NttTable, _>(config);
     circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
 }
 
@@ -842,9 +799,11 @@ fn q1024_classic_returns_and_cbs() {
 }
 
 #[test]
-fn q1024_sparse_returns_and_cbs() {
+fn q1024_fixed_weight_classic_returns_and_cbs_u32() {
     for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
-        let config = two_domain_config(SPARSE, order);
+        let mut config = two_domain_config(BlindRotationMethod::Classic, order);
+        config.small_lwe.secret_key_distr =
+            SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 3 };
         chained_pbs::<u32, U32NttTable, _>(config);
         many_lut_and_mvb::<u32, U32NttTable, _>(config);
         circuit_selection::<u32, U32NttTable, _>(config, CbsInputEncoding::Padded);
@@ -907,11 +866,7 @@ fn input_domain_binding_precedes_output_writes() {
     use primus_tfhe::rotation::RotationModulusSwitch;
     use primus_tfhe_glwe_ntt::key::BlindRotationKey;
 
-    for method in [
-        BlindRotationMethod::Classic,
-        SPARSE,
-        BlindRotationMethod::Block,
-    ] {
+    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
         let config = two_domain_config::<u32>(method, PbsOrder::BootstrapKeyswitch);
         let context = TfheContext::<u32, U32NttTable, _>::try_from_pbs_config(config).unwrap();
         let mut rng = StdRng::seed_from_u64(114);
@@ -961,20 +916,6 @@ fn input_domain_binding_precedes_output_writes() {
                             &mut workspace,
                         );
                     }
-                    BlindRotationKey::Sparse(key) => {
-                        let mut workspace =
-                            primus_tfhe_glwe_ntt::sparse::SparseGlweBlindRotationWorkspace::new(
-                                key.controls(),
-                            );
-                        workspace.blind_rotate_lookup_table_to(
-                            key,
-                            &input,
-                            &lut,
-                            &rotation,
-                            &mut output,
-                            context.table(),
-                        );
-                    }
                     BlindRotationKey::Block(key) => {
                         let mut workspace =
                             primus_tfhe_glwe_ntt::block::BlockGlweBlindRotationWorkspace::new(key);
@@ -995,7 +936,7 @@ fn input_domain_binding_precedes_output_writes() {
     }
 }
 
-/// Both orders use an independent q; classic ternary and sparse binary share the
+/// Both orders use an independent q; Classic ternary and Block binary share the
 /// MSB program/consumer contract. Existing padded tests retain u32/u64 coverage.
 #[test]
 fn msb_boolean_cbs() {
@@ -1004,7 +945,7 @@ fn msb_boolean_cbs() {
         config(BlindRotationMethod::Classic),
         CbsInputEncoding::MsbBoolean,
     );
-    for method in [BlindRotationMethod::Classic, SPARSE] {
+    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
         for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
             circuit_selection::<u64, U64NttTable, _>(
                 two_domain_config(method, order),
@@ -1014,14 +955,12 @@ fn msb_boolean_cbs() {
     }
 }
 
-/// Missing operation state, invalid sparse geometry and imported secrets are
+/// Missing operation state and incompatible imported secrets are
 /// rejected before key sampling. A rejected call must leave the generator reusable.
 #[test]
 fn key_generation_boundaries() {
     type Table = U32NttTable;
-    use primus_tfhe_glwe_ntt::{
-        ClientKey, KeyGenerationError, KeyGenerator, SparseBootstrappingKeyError,
-    };
+    use primus_tfhe_glwe_ntt::{ClientKey, KeyGenerationError, KeyGenerator};
     use rand::Rng;
 
     let gadget = CbsGadgetConfig {
@@ -1032,7 +971,7 @@ fn key_generation_boundaries() {
             level_count: Some(DecompositionLevelCount::new(3)),
         },
     };
-    let mut config = config::<u32>(SPARSE);
+    let mut config = config::<u32>(BlindRotationMethod::Classic);
     config.bsk_dimension = GlweDimension::new(1);
     config.bsk_poly_length = PolyLength::new(64);
     let context = TfheContext::<u32, Table>::try_from_pbs_config(config).unwrap();
@@ -1096,33 +1035,6 @@ fn key_generation_boundaries() {
         ))
     );
 
-    // Public sparse geometry must be checked before either PBS or CBS samples a client.
-    let mut invalid_config = config;
-    invalid_config.method = BlindRotationMethod::Sparse {
-        copy_count: 0,
-        bucket_count: 8,
-    };
-    let invalid_context = TfheContext::<u32, Table>::try_from_cbs_config(CbsConfig {
-        fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
-        pbs: invalid_config,
-        gadget,
-        input_encoding: CbsInputEncoding::Padded,
-    })
-    .unwrap();
-    let mut generator = KeyGenerator::new(&invalid_context);
-    assert!(matches!(
-        generator.try_generate_blind_rotation_key(&client, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        generator.try_generate(&mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        generator.try_generate_circuit_bootstrap_keys(&mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-
     let context = context
         .try_with_circuit_bootstrap(
             gadget,
@@ -1131,7 +1043,7 @@ fn key_generation_boundaries() {
         )
         .unwrap();
     let mut generator = KeyGenerator::new(&context);
-    let (small, ring, order) = client.clone().into_parts();
+    let (small, ring, _) = client.clone().into_parts();
     let wrong_order = ClientKey::new(small, ring, PbsOrder::KeyswitchBootstrap);
     assert!(matches!(
         generator.try_generate_blind_rotation_key(&wrong_order, &mut key_rng),
@@ -1146,31 +1058,6 @@ fn key_generation_boundaries() {
         Err(KeyGenerationError::ClientKey(_))
     ));
 
-    // Binary coefficients alone do not prove the declared sparse weight.
-    let zero_secret = primus_lwe::LweSecretKey::new(
-        vec![0; config.small_lwe.dimension.get()],
-        config.small_lwe.secret_key_distr,
-        context.parameters().small_lwe().cipher_modulus(),
-    );
-    let wrong_weight = ClientKey::new(zero_secret, client.glwe_secret_key().clone(), order);
-    assert!(matches!(
-        generator.try_generate_blind_rotation_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
-    assert!(matches!(
-        generator.try_generate_server_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
-    assert!(matches!(
-        generator.try_generate_circuit_bootstrap_server_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
     assert_eq!(key_rng.next_u64(), untouched_rng.next_u64());
 
     // A valid import still produces the complete BR/KS/trace/SS bundle after errors.
@@ -1283,131 +1170,6 @@ fn ring_return_phase_and_layout_boundaries() {
             ring_return_phase::<U64NttTable, _>(split, dimension);
         }
     }
-}
-
-/// Batch scheduling must preserve every ciphertext, not just its decoded message.
-/// Exercise odd/even bucket counts, short tails, repeated reuse and u32 headroom
-/// both with four-source groups and with the canonical single-source fallback.
-#[test]
-fn sparse_batch_matches_single_inputs() {
-    for q in [67_104_769u32, 134_215_681, 998_244_353] {
-        for buckets in [7, 8] {
-            check_sparse_batch::<u32, U32NttTable>(q, buckets);
-        }
-    }
-    // u64 exercises the same four/pair/single schedule. The smaller modulus fits
-    // a GGSW in one tile; the larger modulus reuses descriptors across tiles.
-    for q in [65_537, 1_125_899_906_826_241] {
-        for buckets in [7, 8] {
-            check_sparse_batch::<u64, U64NttTable>(q, buckets);
-        }
-    }
-}
-
-fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buckets: usize) {
-    use primus_tfhe::rotation::RotationModulusSwitch;
-    use primus_tfhe_glwe_ntt::{
-        ClientKey, KeyGenerator,
-        key::BlindRotationKey,
-        sparse::{SparseGlweBlindRotationBatchWorkspace, SparseGlweBlindRotationWorkspace},
-    };
-    use rand::RngExt;
-
-    let mut config = config::<T>(BlindRotationMethod::Sparse {
-        copy_count: 3,
-        bucket_count: buckets,
-    });
-    config.bsk_poly_length = PolyLength::new(32);
-    config.ring_modulus = ModulusConfig::Explicit(q);
-    config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(65537));
-    let context = TfheContext::<T, Table>::try_from_pbs_config(config).unwrap();
-    let mut rng = StdRng::seed_from_u64(518);
-    let client = ClientKey::generate(context.parameters(), &mut rng);
-    let BlindRotationKey::Sparse(key) = KeyGenerator::new(&context)
-        .try_generate_blind_rotation_key(&client, &mut rng)
-        .unwrap()
-    else {
-        panic!("expected sparse key")
-    };
-    let mut single = SparseGlweBlindRotationWorkspace::new(key.controls());
-    let mut batch = SparseGlweBlindRotationBatchWorkspace::new(key.controls());
-    let rotation =
-        RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 64, 1);
-    // Arbitrary canonical inputs and a nonconstant LUT expose rotation/lane errors
-    // without relying on a successful decode or on tiny fixture noise margins.
-    let inputs: Vec<_> = (0..9)
-        .map(|_| {
-            let mut input = context.allocate_lwe_ciphertext();
-            for value in input.as_mut() {
-                *value = T::as_from(rng.random_range(0..65537u64));
-            }
-            input
-        })
-        .collect();
-    let lut = Polynomial::new((0..32).map(|i| T::as_from(i * 37)).collect::<Vec<_>>());
-    let mut expected = vec![context.allocate_accumulator_ciphertext(); inputs.len()];
-    let mut actual = expected.clone();
-    for (input, output) in inputs.iter().zip(&mut expected) {
-        single.blind_rotate_lookup_table_to(&key, input, &lut, &rotation, output, context.table());
-    }
-    for count in [9, 0, 4, 1, 8, 5, 3, 2, 6, 7] {
-        for output in &mut actual {
-            output.as_mut().fill(T::ONE);
-        }
-        batch.blind_rotate_lookup_table_many_to(
-            &key,
-            &inputs[..count],
-            &lut,
-            &rotation,
-            &mut actual[..count],
-            context.table(),
-        );
-        for (got, want) in actual[..count].iter().zip(&expected) {
-            assert_eq!(got.as_ref(), want.as_ref());
-        }
-        assert!(
-            actual[count..]
-                .iter()
-                .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
-        );
-    }
-    // A malformed late entry/count must not partially write earlier outputs.
-    for output in &mut actual {
-        output.as_mut().fill(T::ONE);
-    }
-    actual[8] = primus_lattice::glwe::Glwe::new(vec![T::ONE; 1]);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        batch.blind_rotate_lookup_table_many_to(
-            &key,
-            &inputs,
-            &lut,
-            &rotation,
-            &mut actual,
-            context.table(),
-        );
-    }));
-    assert!(result.is_err());
-    assert!(
-        actual
-            .iter()
-            .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
-    );
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        batch.blind_rotate_lookup_table_many_to(
-            &key,
-            &inputs[..4],
-            &lut,
-            &rotation,
-            &mut actual[..3],
-            context.table(),
-        );
-    }));
-    assert!(result.is_err());
-    assert!(
-        actual
-            .iter()
-            .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
-    );
 }
 
 /// Direct blocks retain the single-input ciphertext, including each lane's

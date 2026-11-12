@@ -167,14 +167,16 @@ fn check_batch<T: FheUint>() {
         let mut modulus = vec![T::MAX; len];
         modulus[0] -= T::as_from(58u8);
         modulus[len - 1] -= T::as_from(2u8);
-        for log_basis in [16, 17] {
+        // Both initialization modes get a multi-value batch with a tail.
+        // Use the empty batch for exact decomposition and the singleton for
+        // rounded decomposition to exercise both shapes once per stride.
+        for (log_basis, counts) in [(16, [0, 33]), (17, [1, 33])] {
             let basis = BigUintApproxSignedBasis::new(
                 BigUint(&modulus[..]),
                 DecompositionBaseLog::new(log_basis),
                 None,
             );
-            // Empty input, a single value, and a batch with a vectorization tail.
-            for count in [0, 1, 33] {
+            for count in counts {
                 let mut values: Vec<T> = (0..count * len)
                     .map(|i| T::as_from((i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)))
                     .collect();

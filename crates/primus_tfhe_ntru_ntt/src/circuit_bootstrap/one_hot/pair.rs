@@ -53,9 +53,8 @@ where
     Table: MonomialNttTable<ValueT = T>,
 {
     /// Allocates a second input's aggregate, current and exponents for
-    /// [`Self::with_pair`]. Supports sparse buckets and direct blocks;
-    /// returns `None` for classic resources. Storage is independent of bucket
-    /// geometry or block width and may be reused across compatible grouped keys.
+    /// [`Self::with_pair`]. Returns `None` for Classic resources.
+    /// Storage is independent of block width and reusable across compatible Block keys.
     /// Shared transform, projection and external-product scratch is not duplicated.
     ///
     /// # Panics
@@ -67,17 +66,15 @@ where
     ) -> Option<BlindRotationPairWorkspace<T>> {
         resources.check_context(self.context);
         match &resources.blind_rotation.rotation {
-            RotationState::Sparse { .. } | RotationState::Block { .. } => {
-                Some(BlindRotationPairWorkspace::new(
-                    resources.context.blind_rotation(),
-                    resources.context.external_lwe_dimension(),
-                ))
-            }
+            RotationState::Block { .. } => Some(BlindRotationPairWorkspace::new(
+                resources.context.blind_rotation(),
+                resources.context.external_lwe_dimension(),
+            )),
             RotationState::Binary { .. } | RotationState::Ternary { .. } => None,
         }
     }
 
-    /// Blind-rotates two sparse or direct-block inputs together, then consumes their projections
+    /// Blind-rotates two Block inputs together, then consumes their projections
     /// in input order. The callback receives index 0 then 1; each scoped view
     /// can write NLEV and/or nonzero NGSW and consumes no additional selector batch.
     /// Complete projection and any buffer consumption inside the callback before
@@ -91,7 +88,7 @@ where
     /// first block; later groups use NGSW controls with the same product arithmetic.
     ///
     /// # Panics
-    /// Rejects non-grouped resources, a foreign context, input dimensions or workspace
+    /// Rejects Classic resources, a foreign context, input dimensions or workspace
     /// geometry before BR. Projection length checks occur within each callback;
     /// a later panic may leave an earlier callback's output written. Scratch is
     /// overwritten on the next call, including after a callback unwinds.
@@ -130,11 +127,12 @@ where
     ) {
         use primus_poly::Polynomial;
         resources.check_context(self.context);
-        let workspace = match &mut resources.blind_rotation.rotation {
-            RotationState::Sparse { scratch, .. } | RotationState::Block { scratch, .. } => scratch,
-            RotationState::Binary { .. } | RotationState::Ternary { .. } => {
-                panic!("one-hot pair requires grouped blind-rotation resources")
-            }
+        let RotationState::Block {
+            key,
+            scratch: workspace,
+        } = &mut resources.blind_rotation.rotation
+        else {
+            panic!("one-hot pair requires Block blind-rotation resources");
         };
         let parameters = resources.context;
         let n = parameters.poly_length().get();
@@ -180,20 +178,6 @@ where
         ];
         let basis = resources.blind_rotation_key.blind_rotation_basis();
         let table = resources.context.table();
-        match &mut resources.blind_rotation.rotation {
-            RotationState::Sparse { key, scratch } => {
-                crate::sparse::rotate_buckets_pair(
-                    key, scratch, second, buffers, basis, modulus, table,
-                );
-            }
-            RotationState::Block { key, scratch } => {
-                crate::block::rotate_blocks_pair(
-                    key, scratch, second, buffers, basis, modulus, table,
-                );
-            }
-            RotationState::Binary { .. } | RotationState::Ternary { .. } => {
-                unreachable!("grouped resources checked before blind rotation")
-            }
-        }
+        crate::block::rotate_blocks_pair(key, workspace, second, buffers, basis, modulus, table);
     }
 }

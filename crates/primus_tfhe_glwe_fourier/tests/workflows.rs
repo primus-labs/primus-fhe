@@ -25,11 +25,6 @@ use primus_tfhe_glwe_fourier::{
 };
 use rand::{SeedableRng, rngs::StdRng};
 
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 8,
-};
-
 fn decomposition() -> DecompositionConfig {
     DecompositionConfig {
         log_basis: DecompositionBaseLog::new(4),
@@ -38,8 +33,7 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse uses fixed weight; Block uses two non-power-of-two blocks.
-/// Classic cases select binary/ternary below.
+/// Classic defaults to fixed weight. Block uses two non-power-of-two blocks.
 fn config<T: TorusFftValue>(method: BlindRotationMethod) -> PbsConfig<T> {
     let modulus = ModulusConfig::Native;
     let secret = if method == BlindRotationMethod::Block {
@@ -95,13 +89,6 @@ where
     let blind_rotation = generator
         .try_generate_blind_rotation_key(&client, &mut rng)
         .unwrap();
-    assert_eq!(
-        matches!(
-            blind_rotation,
-            primus_tfhe_glwe_fourier::key::BlindRotationKey::Sparse(_)
-        ),
-        matches!(config.method, BlindRotationMethod::Sparse { .. }),
-    );
     assert_eq!(
         matches!(
             blind_rotation,
@@ -657,28 +644,6 @@ fn u32_classic_cbs_rows_and_consumption() {
     circuit_selection::<u32, primus_fft::TfheFftTable, _>(config);
 }
 
-#[cfg(feature = "tfhe-fft")]
-#[test]
-fn tfhe_fft_u64_sparse_chain() {
-    let mut config = config(SPARSE);
-    config.order = PbsOrder::KeyswitchBootstrap;
-    chained_pbs::<u64, primus_fft::TfheFftTable, _>(config);
-}
-
-#[cfg(feature = "tfhe-fft")]
-#[test]
-fn tfhe_fft_u64_sparse_batches() {
-    let config = config(SPARSE);
-    many_lut_and_mvb::<u64, primus_fft::TfheFftTable, _>(config);
-}
-
-#[cfg(feature = "tfhe-fft")]
-#[test]
-fn tfhe_fft_u64_sparse_cbs() {
-    let config = config(SPARSE);
-    circuit_selection::<u64, primus_fft::TfheFftTable, _>(config);
-}
-
 /// q uses a power-of-two reducer independently of the accumulator representation.
 /// Keep ring secret ternary/rank two to exercise signed padding and extraction.
 fn two_domain_config<T: TorusFftValue>(
@@ -728,44 +693,28 @@ fn q1024_classic_returns_and_cbs() {
     }
 }
 
+/// Native32 Block with a separate input q exercises both KS placements for
+/// PBS, changing ManyLUT strides, MVB and ordinary CBS.
 #[test]
-fn q1024_sparse_returns_and_cbs() {
-    for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
-        let config = two_domain_config(SPARSE, order);
-        #[cfg(feature = "rustfft")]
-        chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
-        #[cfg(feature = "rustfft")]
-        many_lut_and_mvb::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        many_lut_and_mvb::<u32, primus_fft::TfheFftTable, _>(config);
-        #[cfg(feature = "rustfft")]
-        circuit_selection::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        circuit_selection::<u32, primus_fft::TfheFftTable, _>(config);
+fn u32_block_two_domain_workflows() {
+    fn check<Table: FftTable>() {
+        for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+            let mut config = two_domain_config::<u32>(BlindRotationMethod::Block, order);
+            circuit_selection::<u32, Table, _>(config);
+            for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+                config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                    block_size: 3,
+                    occupancy,
+                };
+                chained_pbs::<u32, Table, _>(config);
+                many_lut_and_mvb::<u32, Table, _>(config);
+            }
+        }
     }
-}
-
-/// Direct blocks use the same changing ManyLUT strides and factorized MVB
-/// program as the other methods; q differs from the native ring modulus.
-#[test]
-fn u32_block_pbs_and_batches() {
-    let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
-    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
-        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-            block_size: 3,
-            occupancy,
-        };
-        #[cfg(feature = "rustfft")]
-        chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
-        #[cfg(feature = "rustfft")]
-        many_lut_and_mvb::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        many_lut_and_mvb::<u32, primus_fft::TfheFftTable, _>(config);
-    }
+    #[cfg(feature = "rustfft")]
+    check::<primus_fft::RustFftTable>();
+    #[cfg(feature = "tfhe-fft")]
+    check::<primus_fft::TfheFftTable>();
 }
 
 /// KS-before-BR prepares the direct-block input, then CBS controls encrypted
@@ -793,11 +742,7 @@ fn input_domain_binding<Table: FftTable>() {
     use primus_tfhe::rotation::RotationModulusSwitch;
     use primus_tfhe_glwe_fourier::key::BlindRotationKey;
 
-    for method in [
-        BlindRotationMethod::Classic,
-        SPARSE,
-        BlindRotationMethod::Block,
-    ] {
+    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
         let config = two_domain_config::<u32>(method, PbsOrder::BootstrapKeyswitch);
         let context = TfheContext::<u32, Table, _>::try_from_pbs_config(config).unwrap();
         let mut rng = StdRng::seed_from_u64(114);
@@ -860,20 +805,6 @@ fn input_domain_binding<Table: FftTable>() {
                             &mut context.new_fft_engine(),
                         );
                     }
-                    BlindRotationKey::Sparse(key) => {
-                        let mut workspace =
-                            primus_tfhe_glwe_fourier::sparse::SparseGlweBlindRotationWorkspace::new(
-                                key.controls(),
-                            );
-                        workspace.blind_rotate_lookup_table_to(
-                            key,
-                            &input,
-                            &lut,
-                            &rotation,
-                            &mut output,
-                            &mut context.new_fft_engine(),
-                        );
-                    }
                 }
             }));
             assert!(result.is_err());
@@ -890,12 +821,12 @@ fn input_domain_binding_precedes_output_writes() {
     input_domain_binding::<primus_fft::TfheFftTable>();
 }
 
-/// Split changes trace alone: preserve both PBS orders, classic/sparse BR and
+/// Split changes trace alone: preserve both PBS orders, Classic and Block BR and
 /// a ternary ring key. The same consumer checks all rows and gadget levels.
 #[test]
 #[cfg(feature = "split-trace")]
 fn split_trace_cbs_workflows() {
-    for method in [BlindRotationMethod::Classic, SPARSE] {
+    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
         for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
             let mut config = config::<u64>(method);
             config.bsk_dimension = GlweDimension::new(1);
@@ -966,13 +897,13 @@ fn msb_boolean_cbs() {
     // Native32 and same q=Q remain supported by ordinary trace.
     #[cfg(feature = "rustfft")]
     circuit_selection_with_trace::<u32, primus_fft::RustFftTable, _>(
-        config(SPARSE),
+        config(BlindRotationMethod::Classic),
         CbsInputEncoding::MsbBoolean,
         FourierTracePrecision::Ordinary,
     );
     #[cfg(feature = "tfhe-fft")]
     circuit_selection_with_trace::<u32, primus_fft::TfheFftTable, _>(
-        config(SPARSE),
+        config(BlindRotationMethod::Classic),
         CbsInputEncoding::MsbBoolean,
         FourierTracePrecision::Ordinary,
     );
@@ -982,7 +913,7 @@ fn msb_boolean_cbs() {
             FourierTracePrecision::Ordinary,
         ),
         #[cfg(feature = "split-trace")]
-        (SPARSE, FourierTracePrecision::Split35),
+        (BlindRotationMethod::Block, FourierTracePrecision::Split35),
     ] {
         for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
             let mut config = two_domain_config::<u64>(method, order);
@@ -1003,12 +934,10 @@ fn msb_boolean_cbs() {
     }
 }
 
-/// Missing operation state, invalid sparse geometry and imported secrets are
-/// rejected before key sampling. A rejected call must leave the generator reusable.
+/// Missing operation state and incompatible imported secrets are rejected
+/// before key sampling. A rejected call leaves the generator reusable.
 fn check_key_generation_boundaries<Table: FftTable>() {
-    use primus_tfhe_glwe_fourier::{
-        ClientKey, KeyGenerationError, KeyGenerator, SparseBootstrappingKeyError,
-    };
+    use primus_tfhe_glwe_fourier::{ClientKey, KeyGenerationError, KeyGenerator};
     use rand::Rng;
 
     let gadget = CbsGadgetConfig {
@@ -1019,7 +948,7 @@ fn check_key_generation_boundaries<Table: FftTable>() {
             level_count: Some(DecompositionLevelCount::new(3)),
         },
     };
-    let mut config = config::<u32>(SPARSE);
+    let mut config = config::<u32>(BlindRotationMethod::Classic);
     config.bsk_dimension = GlweDimension::new(1);
     config.bsk_poly_length = PolyLength::new(64);
     let context = TfheContext::<u32, Table>::try_from_pbs_config(config).unwrap();
@@ -1067,39 +996,16 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         block_config.order,
     );
     assert!(matches!(
+        block_generator.try_generate_blind_rotation_key(&invalid_block, &mut key_rng),
+        Err(KeyGenerationError::ClientKey(_))
+    ));
+    assert!(matches!(
         block_generator.try_generate_server_key(&invalid_block, &mut key_rng),
         Err(KeyGenerationError::ClientKey(_))
     ));
     assert!(matches!(
         block_generator.try_generate_circuit_bootstrap_server_key(&invalid_block, &mut key_rng),
         Err(KeyGenerationError::ClientKey(_))
-    ));
-
-    // Public sparse geometry must be checked before either PBS or CBS samples a client.
-    let mut invalid_config = config;
-    invalid_config.method = BlindRotationMethod::Sparse {
-        copy_count: 0,
-        bucket_count: 8,
-    };
-    let invalid_context = TfheContext::<u32, Table>::try_from_cbs_config(CbsConfig {
-        fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
-        pbs: invalid_config,
-        gadget,
-        input_encoding: CbsInputEncoding::Padded,
-    })
-    .unwrap();
-    let mut generator = KeyGenerator::new(&invalid_context);
-    assert!(matches!(
-        generator.try_generate_blind_rotation_key(&client, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        generator.try_generate(&mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        generator.try_generate_circuit_bootstrap_keys(&mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
     ));
 
     let context = context
@@ -1110,7 +1016,7 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         )
         .unwrap();
     let mut generator = KeyGenerator::new(&context);
-    let (small, ring, order) = client.clone().into_parts();
+    let (small, ring, _) = client.clone().into_parts();
     let wrong_order = ClientKey::new(small, ring, PbsOrder::KeyswitchBootstrap);
     assert!(matches!(
         generator.try_generate_blind_rotation_key(&wrong_order, &mut key_rng),
@@ -1125,31 +1031,6 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         Err(KeyGenerationError::ClientKey(_))
     ));
 
-    // Binary coefficients alone do not prove the declared sparse weight.
-    let zero_secret = primus_lwe::LweSecretKey::new(
-        vec![0; config.small_lwe.dimension.get()],
-        config.small_lwe.secret_key_distr,
-        context.parameters().small_lwe().cipher_modulus(),
-    );
-    let wrong_weight = ClientKey::new(zero_secret, client.glwe_secret_key().clone(), order);
-    assert!(matches!(
-        generator.try_generate_blind_rotation_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
-    assert!(matches!(
-        generator.try_generate_server_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
-    assert!(matches!(
-        generator.try_generate_circuit_bootstrap_server_key(&wrong_weight, &mut key_rng),
-        Err(KeyGenerationError::SparseBootstrapping(
-            SparseBootstrappingKeyError::InvalidSecretCoefficients
-        ))
-    ));
     assert_eq!(key_rng.next_u64(), untouched_rng.next_u64());
 
     // A valid import still produces the complete BR/KS/trace/SS bundle after errors.
@@ -1304,7 +1185,7 @@ fn native_material_phase<T: TorusFftValue>(
     phase
 }
 
-/// Check every row/level against the inferred body-row bit. Native Sparse/Block
+/// Check every row/level against the inferred body-row bit. Native Block
 /// rows have only sampled noise; an inverse-transformed classic row also has FFT
 /// error. The separate exact-encryption tests check canonical spectra directly.
 fn material_selector(
@@ -1364,7 +1245,6 @@ fn check_bundle_material<Table: FftTable>() {
     };
     for (method, occupancy) in [
         (BlindRotationMethod::Classic, BlockOccupancy::AtMostOne),
-        (SPARSE, BlockOccupancy::AtMostOne),
         (BlindRotationMethod::Block, BlockOccupancy::AtMostOne),
         (BlindRotationMethod::Block, BlockOccupancy::ExactlyOne),
     ] {
@@ -1393,9 +1273,7 @@ fn check_bundle_material<Table: FftTable>() {
             .unwrap();
             let parameters = context.parameters();
             let br = parameters.blind_rotation_params();
-            let small = if method == SPARSE {
-                vec![1, 0, 1, 0, 0, 1, 0, 0]
-            } else if method == BlindRotationMethod::Block {
+            let small = if method == BlindRotationMethod::Block {
                 // Keep the optional empty block only in the AtMostOne fixture.
                 vec![
                     0,
@@ -1468,34 +1346,6 @@ fn check_bundle_material<Table: FftTable>() {
                             assert_eq!(material_selector(control, br, &ring, 8), bit);
                         }
                     }
-                }
-                BlindRotationKey::Sparse(key) => {
-                    let mut selected = vec![0u64; small.len()];
-                    let mut dummy_count = 0;
-                    assert_eq!(key.controls().size(), br.size());
-                    assert_eq!(key.controls().basis(), br.basis());
-                    for bucket in 0..key.bucket_count() {
-                        let (indices, controls) = key.bucket(bucket);
-                        assert_eq!(controls.len(), indices.len() + 1);
-                        let mut bucket_sum = 0;
-                        for (entry, control) in controls.enumerate() {
-                            // sigma=0.7 has truncated support floor(12*sigma)=8;
-                            // coefficient key generation adds no FFT rounding.
-                            let bit = material_selector(control, br, &ring, 8);
-                            bucket_sum += bit;
-                            if entry < indices.len() {
-                                selected[indices[entry]] += bit;
-                            } else {
-                                dummy_count += bit;
-                            }
-                        }
-                        assert_eq!(bucket_sum, 1);
-                    }
-                    assert_eq!(selected, small);
-                    assert_eq!(
-                        dummy_count,
-                        (key.bucket_count() - key.hamming_weight()) as u64
-                    );
                 }
             }
             let ks = server.server_key().glwe_key_switching_key();

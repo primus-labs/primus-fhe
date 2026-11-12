@@ -7,22 +7,24 @@ use primus_distr::{
 use rand::{Rng, SeedableRng, distr::Distribution, rngs::StdRng};
 
 /// Compare allocation and destination APIs with scalar sampling, including the next RNG word.
-fn check_batch<T: Clone + Default + Debug + PartialEq, D: Distribution<T>>(
+fn check_batch<T: Clone + Debug + PartialEq, D: Distribution<T>>(
     distr: &D,
     length: usize,
+    sentinel: T,
     sample_vec: impl FnOnce(&D, usize, &mut StdRng) -> Vec<T>,
     sample_to: impl FnOnce(&D, &mut [T], &mut StdRng),
 ) {
-    let mut rng = StdRng::seed_from_u64(501);
+    let replay_rng = || StdRng::seed_from_u64(501);
+    let mut rng = replay_rng();
     let expected: Vec<T> = distr.sample_iter(&mut rng).take(length).collect();
     let expected_next = rng.next_u64();
 
-    let mut rng = StdRng::seed_from_u64(501);
+    let mut rng = replay_rng();
     assert_eq!(sample_vec(distr, length, &mut rng), expected);
     assert_eq!(rng.next_u64(), expected_next);
 
-    let mut output = vec![T::default(); length];
-    let mut rng = StdRng::seed_from_u64(501);
+    let mut output = vec![sentinel; length];
+    let mut rng = replay_rng();
     sample_to(distr, &mut output, &mut rng);
     assert_eq!(output, expected);
     assert_eq!(rng.next_u64(), expected_next);
@@ -77,18 +79,24 @@ fn ziggurat_default_adapters_preserve_support_and_encoding() {
         let facade = SignedDiscreteGaussian::<i64>::new(sigma).unwrap();
         assert!(matches!(facade, SignedDiscreteGaussian::Ziggurat(_)));
         assert_eq!(facade.maximum_magnitude(), maximum_magnitude);
+        let replay_rng = || StdRng::seed_from_u64(501);
+        let mut signed_rng = replay_rng();
+        let mut facade_rng = replay_rng();
+        let values: [i64; 16] = std::array::from_fn(|_| signed.sample(&mut signed_rng));
+        for &value in &values {
+            assert!(value.unsigned_abs() <= maximum_magnitude);
+            assert_eq!(facade.sample(&mut facade_rng), value);
+        }
+        let next = signed_rng.next_u64();
+        assert_eq!(facade_rng.next_u64(), next);
+
         for modulus_minus_one in [maximum_magnitude, u64::MAX] {
             let encoded = DiscreteZiggurat::new(sigma, 12.0, modulus_minus_one).unwrap();
             let encoded_facade = DiscreteGaussian::new(sigma, modulus_minus_one).unwrap();
             assert!(matches!(encoded_facade, DiscreteGaussian::Ziggurat(_)));
-            let mut signed_rng = StdRng::seed_from_u64(501);
-            let mut facade_rng = StdRng::seed_from_u64(501);
-            let mut encoded_rng = StdRng::seed_from_u64(501);
-            let mut encoded_facade_rng = StdRng::seed_from_u64(501);
-            for _ in 0..16 {
-                let value = signed.sample(&mut signed_rng);
-                assert!(value.unsigned_abs() <= maximum_magnitude);
-                assert_eq!(facade.sample(&mut facade_rng), value);
+            let mut encoded_rng = replay_rng();
+            let mut encoded_facade_rng = replay_rng();
+            for &value in &values {
                 let expected = if value < 0 {
                     modulus_minus_one - value.unsigned_abs() + 1
                 } else {
@@ -98,8 +106,6 @@ fn ziggurat_default_adapters_preserve_support_and_encoding() {
                 assert_eq!(encoded.sample(&mut encoded_rng), expected);
                 assert_eq!(encoded_facade.sample(&mut encoded_facade_rng), expected);
             }
-            let next = signed_rng.next_u64();
-            assert_eq!(facade_rng.next_u64(), next);
             assert_eq!(encoded_rng.next_u64(), next);
             assert_eq!(encoded_facade_rng.next_u64(), next);
         }
@@ -116,6 +122,7 @@ fn gaussian_batches_preserve_scalar_samples_and_rng_consumption() {
             check_batch(
                 &signed,
                 length,
+                i32::MAX,
                 SignedDiscreteGaussian::sample_vec,
                 SignedDiscreteGaussian::sample_to,
             );
@@ -127,6 +134,7 @@ fn gaussian_batches_preserve_scalar_samples_and_rng_consumption() {
                 check_batch(
                     &encoded,
                     length,
+                    1 << 63,
                     DiscreteGaussian::sample_vec,
                     DiscreteGaussian::sample_to,
                 );

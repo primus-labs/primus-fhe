@@ -15,11 +15,6 @@ use primus_tfhe_ntru_ntt::{
 };
 use rand::{SeedableRng, rngs::StdRng};
 
-const SPARSE: BlindRotationMethod = BlindRotationMethod::Sparse {
-    copy_count: 3,
-    bucket_count: 8,
-};
-
 fn decomposition() -> DecompositionConfig {
     DecompositionConfig {
         log_basis: DecompositionBaseLog::new(4),
@@ -28,8 +23,8 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse needs fixed-weight binary secrets; direct blocks select their own
-/// distribution below, and classic cases also exercise binary/ternary inputs.
+/// Default to a fixed-weight Classic input. Block fixtures select their own
+/// distribution and other Classic fixtures exercise binary or ternary inputs.
 fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T, PowOf2Modulus<T>> {
     let modulus = ModulusConfig::Explicit(T::as_from(if T::BITS == 32 {
         998_244_353u64
@@ -76,10 +71,6 @@ fn chained_pbs<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     let blind_rotation = generator
         .try_generate_blind_rotation_key(&client, &mut rng)
         .unwrap();
-    assert_eq!(
-        blind_rotation.sparse_bootstrapping_key().is_some(),
-        matches!(config.method, BlindRotationMethod::Sparse { .. }),
-    );
     assert_eq!(
         blind_rotation.block_bootstrapping_key().is_some(),
         config.method == BlindRotationMethod::Block,
@@ -718,9 +709,10 @@ fn u64_ternary_batches() {
 }
 
 #[test]
-fn u32_sparse_batches() {
-    let config = config(SPARSE);
+fn u32_fixed_weight_classic_batches_and_cbs() {
+    let config = config(BlindRotationMethod::Classic);
     many_lut_and_mvb::<u32, U32NttTable>(config);
+    circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::PairedTrace);
 }
 
 #[test]
@@ -737,14 +729,8 @@ fn u64_classic_cbs() {
     }
 }
 
-#[test]
-fn u32_sparse_cbs() {
-    let config = config(SPARSE);
-    circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::PairedTrace);
-}
-
 /// Direct blocks retain independent q/Q, ordinary PBS, changing interleaved
-/// strides and factorized returns without a sparse bucket map.
+/// strides and factorized returns.
 #[test]
 fn u32_block_pbs_and_batches() {
     for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
@@ -827,7 +813,7 @@ fn key_generation_boundaries() {
     use primus_tfhe_ntru_ntt::{ClientKey, KeyGenerationError, KeyGenerator, TfheKeyError};
     use rand::Rng;
 
-    let mut config = config::<u32>(SPARSE);
+    let mut config = config::<u32>(BlindRotationMethod::Classic);
     config.bsk_poly_length = PolyLength::new(64);
     let context = TfheContext::<u32, Table, _>::try_from_pbs_config(config)
         .unwrap()
@@ -951,37 +937,6 @@ fn key_generation_boundaries() {
         ))
     );
 
-    // Sparse preflight must also precede client generation in both complete paths.
-    let mut invalid_config = config;
-    invalid_config.method = BlindRotationMethod::Sparse {
-        copy_count: 0,
-        bucket_count: 8,
-    };
-    let invalid =
-        TfheContext::<u32, Table, _>::try_from_cbs_config(primus_tfhe_ntru_ntt::CbsConfig {
-            projection: primus_tfhe_ntru::NtruProjectionMethod::Separate,
-            fourier_precision: primus_tfhe_ntru::FourierCbsPrecision::ORDINARY,
-            pbs: invalid_config,
-            gadget: CbsGadgetConfig {
-                trace: decomposition(),
-                scheme_switch: decomposition(),
-                output: decomposition(),
-            },
-        })
-        .unwrap();
-    let mut invalid_generator = KeyGenerator::new(&invalid);
-    assert!(matches!(
-        invalid_generator.try_generate_blind_rotation_key(&imported(8, 1), &mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        invalid_generator.try_generate(&mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
-    assert!(matches!(
-        invalid_generator.try_generate_circuit_bootstrap_keys(&mut rng),
-        Err(KeyGenerationError::SparseBootstrapping(_))
-    ));
     assert_eq!(rng.next_u64(), untouched.next_u64());
 
     // An invertible f outside return q is still valid for standalone BR.

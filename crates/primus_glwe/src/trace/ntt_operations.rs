@@ -207,6 +207,7 @@ impl<T: FheUint> NttGlweTraceKey<T> {
         } = &mut workspace.trace;
         kernels::pack_to(
             input,
+            count,
             output.as_mut(),
             &mut workspace.tree,
             automorphism_output.as_mut(),
@@ -445,6 +446,7 @@ impl<T: FheUint> NttGlweTraceKey<T> {
         } = workspace;
         kernels::expand_to(
             input.as_ref(),
+            log_count,
             output,
             automorphism_output.as_mut(),
             self.glwe_size,

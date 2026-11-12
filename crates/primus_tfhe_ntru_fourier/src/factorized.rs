@@ -119,7 +119,6 @@ impl<'a, T: TorusFftValue, Table: FftTable, LM: primus_reduce::RingContext<T>>
     /// Takes ownership of a prepared PBS evaluator and allocates two Fourier
     /// polynomials for MVB. Its existing BR/FFT and scalar/batch return buffers
     /// are moved without copying key material or preparing them again.
-    /// Both classic and sparse PBS keys use the same factor/return path.
     #[must_use]
     pub fn new(evaluator: Evaluator<'a, T, Table, LM>) -> Self {
         let context = evaluator.resources.context;
@@ -153,7 +152,7 @@ impl<'a, T: TorusFftValue, Table: FftTable, LM: primus_reduce::RingContext<T>>
     /// encoding, with a message in `0..lookup_table.input_domain_len()`. Input
     /// noise and coefficient-wise quantization must keep the rotation in that
     /// message's LUT interval. Each integer factor W amplifies both public-lift
-    /// and BR noise, including sparse bucket aggregation. Public FFT multiplication
+    /// and BR noise. Public FFT multiplication
     /// adds phase error `f_acc * delta_c`; each product then incurs modulus
     /// conversion and LWE key-switch errors.
     /// Before returning, the Scaled recovery condition is

@@ -32,6 +32,8 @@ This lets arithmetic and cryptographic kernels accept borrowed slices, arrays, o
 
 References to a supported backend forward its capabilities: `&S` supports reading, and `&mut S` supports mutation when `S` does.
 
+Use `as_slice()` or `as_mut_slice()` for layout-specific operations such as splitting a mask from a ciphertext body.
+
 The aligned backends require the optional `aligned-vec` feature. Their alignment is chosen explicitly during allocation; they do not implement `DataOwned`.
 
 ## Example

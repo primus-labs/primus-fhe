@@ -5,11 +5,13 @@ use std::{
 };
 
 use primus_distr::{
-    SecretKeyDistr, SecretKeySampler, sample_crt_sparse_ternary_values_to,
-    sample_fixed_hamming_weight_ternary_values_to, sample_sparse_ternary_values_to,
-    sample_ternary_values_with_probabilities_to, sample_uniform_ternary_values_to,
+    SecretKeyDistr, SecretKeySampler, SignedDiscreteGaussian, sample_crt_gaussian_values,
+    sample_crt_gaussian_values_to, sample_crt_sparse_ternary_values_to,
+    sample_crt_uniform_values_to, sample_fixed_hamming_weight_ternary_values_to,
+    sample_sparse_ternary_values_to, sample_ternary_values_with_probabilities_to,
+    sample_uniform_ternary_values_to,
 };
-use rand::{Rng, SeedableRng, TryCryptoRng, TryRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, TryCryptoRng, TryRng, distr::Uniform, rngs::StdRng};
 
 // A scripted source solely for deterministic sampling-boundary tests.
 struct Words(std::vec::IntoIter<u64>);
@@ -29,6 +31,39 @@ impl TryRng for Words {
     }
 }
 impl TryCryptoRng for Words {}
+
+#[test]
+fn crt_uniform_rejects_zero_length_before_writes_or_rng_use() {
+    let distributions = [Uniform::new(0u64, 97).unwrap()];
+    let mut rng = Words(vec![42].into_iter());
+    let mut output = [19];
+    for output_len in [0, 1] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                sample_crt_uniform_values_to(&mut output[..output_len], 0, &distributions, &mut rng)
+            }))
+            .is_err()
+        );
+    }
+
+    sample_crt_uniform_values_to(&mut output[..0], 1, &[], &mut rng);
+    assert_eq!(output, [19]);
+    assert_eq!(rng.next_u64(), 42);
+}
+
+#[test]
+fn crt_gaussian_empty_batches_preserve_output_and_rng() {
+    let gaussian = SignedDiscreteGaussian::<i64>::new(3.2).unwrap();
+    let moduli = [97u64, 193];
+    let mut rng = Words(vec![42].into_iter());
+    let mut output = [19];
+    for (length, moduli) in [(0, moduli.as_slice()), (0, &[]), (1, &[])] {
+        sample_crt_gaussian_values_to(&mut output[..0], length, moduli, &gaussian, &mut rng);
+        assert!(sample_crt_gaussian_values(length, moduli, &gaussian, &mut rng).is_empty());
+    }
+    assert_eq!(output, [19]);
+    assert_eq!(rng.next_u64(), 42);
+}
 
 /// Scripted words make packed-bit order and partial-block RNG consumption deterministic.
 #[test]
@@ -84,6 +119,7 @@ fn ternary_threshold_boundaries_and_public_validation() {
         );
         assert_eq!(output, expected);
         let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::ternary(negative, positive));
+        output.fill(19);
         sampler.sample_signed_to(&mut output, &mut Words(words.into_iter()));
         assert_eq!(output, expected);
     }

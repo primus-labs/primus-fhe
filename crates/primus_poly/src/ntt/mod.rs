@@ -162,7 +162,11 @@ where
         self.0.iter().all(Zero::is_zero)
     }
 
-    /// Performs `result = self * b + c`.
+    /// Writes the pointwise product of `self` and `b` plus `c` to `output`.
+    ///
+    /// # Correctness
+    /// All four polynomials must have the same length and NTT order for
+    /// `modulus`. Input ranges follow [`ReduceMulAddSlice::reduce_mul_add_slice_to`].
     #[inline]
     pub fn mul_add_to<M, B, C, D>(
         &self,

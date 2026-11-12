@@ -1,12 +1,7 @@
 // cargo bench -p primus_distr --bench gen_sampler
 //
-// Benchmarks sampler construction time across sigma ranges.
-// Each sampler is tested only in its applicable range:
-//   - DiscreteZiggurat:  sigma >= 10   (large sigma)
-//   - CDTSampler:        sigma <= 20   (default, binary-search CDT)
-//   - PreciseCDTSampler: sigma <= 20 (high_precision feature only)
-//
-// The overlap [10, 20] lets us compare CDT and Ziggurat side by side.
+// Measures constructing and dropping samplers at small and large supports. Sigma 20
+// compares the backends near the portable CDT table limit.
 
 use std::hint::black_box;
 
@@ -22,31 +17,22 @@ const TAIL_CUT: f64 = 12.0;
 fn bench_different_sampler(c: &mut Criterion) {
     let mut group = c.benchmark_group("GenSampler");
 
-    for sigma in [1.0, 3.0, 10.0, 20.0, 30.0] {
-        // CDTSampler — sigma ≤ 20
-        if sigma <= 20.0 {
-            group.bench_function(format!("CDTSampler/σ={sigma}"), |b| {
-                b.iter(|| black_box(CDTSampler::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap()))
-            });
-        }
+    for sigma in [1.0, 3.0, 20.0] {
+        group.bench_function(format!("CDTSampler/σ={sigma}"), |b| {
+            b.iter(|| black_box(CDTSampler::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap()))
+        });
 
         #[cfg(feature = "high_precision")]
-        if sigma <= 20.0 {
-            group.bench_function(format!("PreciseCDTSampler/σ={sigma}"), |b| {
-                b.iter(|| {
-                    black_box(PreciseCDTSampler::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap())
-                })
-            });
-        }
-
-        // DiscreteZiggurat — sigma ≥ 10
-        if sigma >= 10.0 {
-            group.bench_function(format!("DiscreteZiggurat/σ={sigma}"), |b| {
-                b.iter(|| {
-                    black_box(DiscreteZiggurat::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap())
-                })
-            });
-        }
+        group.bench_function(format!("PreciseCDTSampler/σ={sigma}"), |b| {
+            b.iter(|| {
+                black_box(PreciseCDTSampler::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap())
+            })
+        });
+    }
+    for sigma in [20.0, 30.0] {
+        group.bench_function(format!("DiscreteZiggurat/σ={sigma}"), |b| {
+            b.iter(|| black_box(DiscreteZiggurat::new(sigma, TAIL_CUT, MODULUS_MINUS_ONE).unwrap()))
+        });
     }
 
     group.finish();

@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于显式域模数和 NTT 的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary、sparse fixed-weight binary 或直接 block binary 盲旋转。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
+基于显式域模数和 NTT 的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 Classic binary/ternary（包括固定重量 binary）和直接 Block 盲旋转。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -32,18 +32,16 @@ let context = TfheContext::<u64, Table, _>::try_from_pbs_config(config)?;
 
 ## 操作示例
 
-示例均使用 u64，在请求循环外准备可复用状态。替换快速开始命令中的示例名即可运行其他本库流程，高精度查表示例请在独立的 `primus_high_prec_lut` 仓库根目录运行。
+示例均使用 u64，在请求循环外准备可复用状态。替换快速开始命令中的示例名即可运行其他本库流程。
 
 | 流程 | `experimental` 配置 | 完整示例 |
 | --- | --- | --- |
 | 两次连续 PBS | `CLASSIC_PBS_U64` | [ntru_ntt_basic](examples/ntru_ntt_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`，消息 4→4 | [ntru_ntt_boolean](examples/ntru_ntt_boolean.rs) |
-| 使用 sparse BR 的相同评分流程 | `SPARSE_PBS_U64` | [ntru_ntt_sparse](examples/ntru_ntt_sparse.rs) |
 | ManyLUT grade/flag，再做密文组合 | `CLASSIC_MANY_LUT_U64` | [ntru_ntt_many_lut](examples/ntru_ntt_many_lut.rs) |
 | CBS 谓词 → CMux → 环加法 → LWE | `CLASSIC_CBS_U64` | [ntru_ntt_circuit_bootstrap](examples/ntru_ntt_circuit_bootstrap.rs) |
 | 同一输入产生 17 个数值阈值标志 | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_ntt_mvb_thresholds](examples/ntru_ntt_mvb_thresholds.rs) |
 | One-hot CBS → 四路记录选择 | `CLASSIC_ONE_HOT_U64` | [ntru_ntt_one_hot](examples/ntru_ntt_one_hot.rs) |
-| 高精度整数查表 | 独立 LUT 仓库的 `NTT_LOW_PREC_C4_O4_DFR128_LOOKUP_U64` | [ntt_lookup](../../../primus_high_prec_lut/examples/ntt_lookup.rs) |
 
 普通 PBS/ManyLUT 和 MVB 使用 `context.try_generate_keys(rng)`。将 `client.external_lwe_secret_key()` 绑定到 `context.encryptor`；Rounded PBS/ManyLUT 输出用 `pbs_decryptor`，Scaled MVB 输出用 `mvb_decryptor`。公钥输入使用 `public_encryptor`，客户端不接收 LUT 或手工 codec。
 
@@ -91,25 +89,9 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 
 CBS/one-hot 操作和已编译 MVB 表必须使用原 context 绑定，即使另一个 context 的数值参数相等也不能混用。串行复用时，CBS/one-hot 操作在执行时借用 `BootstrapResources`。通过 `Evaluator::try_from_resources` 恢复普通 PBS 时，传入原 context 和 `server.server_key()`。
 
-## Sparse 盲旋转
-
-在 `config.method`（CBS 的 `config.pbs.method`）中选择 `BlindRotationMethod::Sparse`。它要求 fixed-weight binary 外部秘密，满足 `0<h<n`、`copy_count>=1`、`bucket_count>=max(copy_count,h)`；仅修改秘密分布不会选择 sparse，classic 同样支持固定重量秘密。
-
-PBS、ManyLUT、MVB、CBS 和 one-hot 均支持此模式。Sparse CBS/one-hot 可从 `CLASSIC_ONE_HOT_U64` 开始，其外部秘密为 n800/h32 fixed-weight binary。Dense `CLASSIC_CBS_U64` 不能仅修改算法就改为 sparse：
-
-```rust,ignore
-use primus_tfhe_ntru_ntt::BlindRotationMethod;
-
-let mut config = experimental::CLASSIC_ONE_HOT_U64;
-config.pbs.method = BlindRotationMethod::Sparse { copy_count: 3, bucket_count: 64 };
-let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
-```
-
-随后用 `try_generate_circuit_bootstrap_keys` 生成完整 CBS 组合，使用相同的 CBS/one-hot evaluator 工厂。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
-
 ## Block 盲旋转
 
-设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }`（CBS 位于 `config.pbs` 内）。逻辑 LWE 维数须是正块宽的非零整数倍。`AtMostOne` 允许空块并增加加密 dummy；`ExactlyOne` 每块恰有一个 `1`，无需 dummy。两者均无需 matching 或重复控制。建钥以及 PBS、ManyLUT、MVB、CBS 和 one-hot 沿用相同 context 工厂。每块加密全部 bit 及模式要求的独立 dummy；首块即使所有指数为零也通过 NLEV 完成提升，后续 NGSW 复用相同外积算术。单输入共享工作区只在构造时分配，不保存占用信息。One-hot 的 `new_pair_workspace` / `with_pair` 共享 Sparse 和 Block 的分组 BR 遍历；classic 资源不提供 pair 工作区，保留单输入调用。预设不变，block 的噪声与安全成本须单独评估。
+设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }`（CBS 位于 `config.pbs` 内）。逻辑 LWE 维数须是正块宽的非零整数倍。`AtMostOne` 允许空块并增加加密 dummy；`ExactlyOne` 每块恰有一个 `1`，无需 dummy。建钥以及 PBS、ManyLUT、MVB、CBS 和 one-hot 沿用相同 context 工厂。每块加密全部 bit 及模式要求的独立 dummy；首块即使所有指数为零也通过 NLEV 完成提升，后续 NGSW 复用相同外积算术。单输入共享工作区只在构造时分配，不保存占用信息。One-hot 的 `new_pair_workspace` / `with_pair` 共享 Block BR 遍历；classic 资源不提供 pair 工作区，保留单输入调用。Block 配置的噪声与安全成本须单独评估。
 
 ## One-hot CBS
 
@@ -131,12 +113,6 @@ one_hot.cmux_k_to(
 
 示例候选使用独立 Scaled t_ring=8，占用环系数而非 SIMD 槽。NLev 输出为 Q 下系数域，公开多项式提升前须用 `write_ntt_form` 转换；NGSW 输出已在 NTT 表示。其他消费方可使用单控制的 `cmux_to` 和 `external_product_to`。
 
-## 高精度查表
-
-独立仓库中的 [primus_tfhe_ntru_lut](../../../primus_high_prec_lut/README.zh_CN.md) 用于统一位宽、输入输出数量独立的 chunk。其 `NttHighPrecLutContext` 准备整数客户端、完整密钥和求值，调用方无需组合提升或返回工作区。[ntt_lookup 示例](../../../primus_high_prec_lut/examples/ntt_lookup.rs)将 16 位输入映射为 16 位分段费用结果。
-
-LUT 流程组合 one-hot CBS、固定完整选表树、聚合负向旋转和独立 LWE 返回。推荐配置采用 classic BR，显式选择时也支持 sparse；几何、公开表成本及数值限制由 LUT crate 说明。
-
 ## Features
 
 默认 features 为空，普通依赖已启用 `ntt`，无需后端开关，单独使用不引入 Fourier/FFT。可选 `simd` 启用依赖中的 nightly SIMD 算术；内置 NTT 表另有自身的[运行时 SIMD 分派](../primus_ntt/README.zh_CN.md#simd-backend-与编译目标)。
@@ -149,13 +125,13 @@ cargo bench -p primus_tfhe_ntru_ntt --bench pbs
 
 | Target | 计时请求 |
 | --- | --- |
-| [pbs](benches/pbs.rs) | 一次完整 PBS；dense u32/u64、fixed-weight classic/sparse u64 |
+| [pbs](benches/pbs.rs) | 一次完整 PBS；dense Classic u32/u64 |
 | [many_lut](benches/many_lut.rs) | 一次双输出 grade/flag ManyLUT，u64 |
 | [mvb](benches/mvb.rs) | 一次 17 输出阈值 MVB，u64 |
 | [cbs](benches/cbs.rs) | 一次谓词 CBS、CMux 和单系数 LWE 返回，u64 |
 | [one_hot](benches/one_hot.rs) | 三个非零 selector 加四路 `cmux_k_to`，u64 |
 
-每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。只有 fixed-weight classic/sparse PBS 配对仅改变 BR 算法，dense 用例使用不同参数。见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
+每次迭代使用已准备的密钥、LUT 和缓冲测量一个服务端请求，准备和解密校验不计时。ManyLUT/CBS 基准不包含示例后续的密文算术。u32 和 u64 PBS 用例使用不同参数。见[基准指南](../../guides/development/testing.md#tfhe-benchmarks)。
 
 ## 进一步阅读
 

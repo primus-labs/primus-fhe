@@ -80,19 +80,19 @@ impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
         let mut key = vec![T::ZERO; key_len];
 
         let key_iter = DcrtGlevIterMut::new(key.as_mut_slice(), dcrt_glev_len);
-        let mut secret_buffer = Zeroizing::new(vec![T::ZERO; input_params.size().rns_poly_len()]);
+        let mut secret_buffer = Zeroizing::new(vec![T::ZERO; ksk_params.rns_poly_len()]);
         let mut secret_mod_q = CrtPolynomial(secret_buffer.as_mut_slice());
 
         input_sk
             .iter()
             .zip(key_iter)
-            .for_each(|(secret_polynomial, mut dcrt_glev)| {
+            .for_each(|(secret_polynomial, dcrt_glev)| {
                 encode_secret_polynomial_to_rns(
                     secret_polynomial,
                     secret_mod_q.as_mut(),
                     ksk_params.cipher_moduli_value(),
                 );
-                encryptor.encrypt_crt_to(&secret_mod_q, &mut dcrt_glev, rng);
+                encryptor.encrypt_crt_glev_kernel_to(secret_mod_q.as_view(), dcrt_glev, rng);
             });
 
         Self {

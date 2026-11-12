@@ -92,24 +92,32 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if a slice length does not match the stated layout.
+    /// Panics if a complete length overflows `usize` or a slice length does
+    /// not match the stated layout.
     pub fn decompose_big_uint_values_to(
         &self,
         big_uint_values: &[T],
         multi_residues: &mut [T],
         value_count: usize,
     ) {
-        assert_eq!(multi_residues.len(), self.moduli_count() * value_count);
+        assert_eq!(
+            multi_residues.len(),
+            self.moduli_count()
+                .checked_mul(value_count)
+                .expect("RNS residue array length overflow")
+        );
+        let value_len = self.big_uint_value_len();
         assert_eq!(
             big_uint_values.len(),
-            self.big_uint_value_len() * value_count
+            value_len
+                .checked_mul(value_count)
+                .expect("RNS big-integer array length overflow")
         );
 
         if value_count == 0 {
             return;
         }
 
-        let value_len = self.big_uint_value_len();
         for (residues, &modulus) in multi_residues
             .chunks_exact_mut(value_count)
             .zip(self.moduli())

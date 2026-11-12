@@ -32,7 +32,7 @@ pub struct PbsParameters<T: FheUint, M: RingContext<T>, LM: RingContext<T> = M> 
 impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> {
     /// Prepares the common q/Q domain and return state from numerical choices.
     /// External controls must be binary or ternary and 2N must fit T. Ring
-    /// invertibility, sparse-map feasibility and the joint noise budget are separate.
+    /// invertibility and the joint noise budget are separate.
     /// The Block method requires a block-binary distribution with explicit occupancy.
     pub fn try_from_config(config: crate::PbsConfig<T, M, LM>) -> Result<Self, TfheParameterError>
     where

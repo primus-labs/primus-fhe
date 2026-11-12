@@ -19,10 +19,12 @@ use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::{hint::black_box, time::Duration};
 
+// Compare a high-level-count small ring and a lower-level-count larger ring.
+const PROFILES: [(usize, u32); 2] = [(1024, 3), (4096, 10)];
 const CONSTANTS: [i64; 8] = [0, 1, 0, 1, 1, 0, 1, 0];
 
 fn ntt(c: &mut Criterion) {
-    for n in [1024usize, 4096] {
+    for (n, log_basis) in PROFILES {
         let mut rng = StdRng::seed_from_u64(42);
         let modulus = BarrettModulus::new(1_125_899_906_826_241u64);
         let poly_length = PolyLength::new(n);
@@ -33,51 +35,49 @@ fn ntt(c: &mut Criterion) {
             NttNtruSecretKey::generate_pair(params.encryption_parameters(), &table, &mut rng)
                 .unwrap();
         let mut workspace = NttNtruGadgetEncryptWorkspace::new(poly_length);
-        for log_basis in [3, 10] {
-            let gadget = NlevParameters::with_ntru_params(
-                &params,
-                DecompositionConfig {
-                    log_basis: DecompositionBaseLog::new(log_basis),
-                    level_count: None,
-                },
-            );
-            let mut nlev = NttNlevCiphertext::<Vec<u64>>::zero(gadget.nlev_len());
-            let mut batch = vec![0; CONSTANTS.len() * gadget.nlev_len()];
-            let mut group = c.benchmark_group(format!("ntru/ntt/n{n}/log_basis{log_basis}"));
-            group.throughput(Throughput::Elements(1));
-            group.bench_function("encrypt_nlev_constant_to", |b| {
-                b.iter(|| {
-                    key.encrypt_nlev_constant_to(
-                        black_box(1),
-                        &mut nlev,
-                        &gadget,
-                        &table,
-                        &mut rng,
-                        &mut workspace,
-                    );
-                    black_box(nlev.as_ref());
-                })
-            });
-            group.throughput(Throughput::Elements(CONSTANTS.len() as u64));
-            group.bench_function("encrypt_ngsw_signed_constant_batch_to", |b| {
-                b.iter(|| {
-                    key.encrypt_ngsw_signed_constant_batch_to(
-                        black_box(&CONSTANTS),
-                        &mut batch,
-                        &gadget,
-                        &table,
-                        &mut rng,
-                    );
-                    black_box(&batch);
-                })
-            });
-            group.finish();
-        }
+        let gadget = NlevParameters::with_ntru_params(
+            &params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(log_basis),
+                level_count: None,
+            },
+        );
+        let mut nlev = NttNlevCiphertext::<Vec<u64>>::zero(gadget.nlev_len());
+        let mut batch = vec![0; CONSTANTS.len() * gadget.nlev_len()];
+        let mut group = c.benchmark_group(format!("ntru/ntt/n{n}/log_basis{log_basis}"));
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("encrypt_nlev_constant_to", |b| {
+            b.iter(|| {
+                key.encrypt_nlev_constant_to(
+                    black_box(1),
+                    &mut nlev,
+                    &gadget,
+                    &table,
+                    &mut rng,
+                    &mut workspace,
+                );
+                black_box(nlev.as_ref());
+            })
+        });
+        group.throughput(Throughput::Elements(CONSTANTS.len() as u64));
+        group.bench_function("encrypt_ngsw_signed_constant_batch_to", |b| {
+            b.iter(|| {
+                key.encrypt_ngsw_signed_constant_batch_to(
+                    black_box(&CONSTANTS),
+                    &mut batch,
+                    &gadget,
+                    &table,
+                    &mut rng,
+                );
+                black_box(&batch);
+            })
+        });
+        group.finish();
     }
 }
 
 fn fourier(c: &mut Criterion) {
-    for n in [1024usize, 4096] {
+    for (n, log_basis) in PROFILES {
         let mut rng = StdRng::seed_from_u64(42);
         let poly_length = PolyLength::new(n);
         let params = NtruParameters::new(
@@ -93,47 +93,45 @@ fn fourier(c: &mut Criterion) {
             FourierNtruSecretKey::generate_pair(params.encryption_parameters(), &mut fft, &mut rng)
                 .unwrap();
         let mut workspace = FourierNtruGadgetEncryptWorkspace::new(poly_length);
-        for log_basis in [3, 10] {
-            let gadget = NlevParameters::with_ntru_params(
-                &params,
-                DecompositionConfig {
-                    log_basis: DecompositionBaseLog::new(log_basis),
-                    level_count: None,
-                },
-            );
-            let mut nlev = FourierNlevCiphertext::<Vec<Complex64>>::zero(gadget.fourier_nlev_len());
-            let mut batch = vec![Complex64::default(); CONSTANTS.len() * gadget.fourier_nlev_len()];
-            let mut group = c.benchmark_group(format!("ntru/fourier/n{n}/log_basis{log_basis}"));
-            group.throughput(Throughput::Elements(1));
-            group.bench_function("encrypt_nlev_constant_to", |b| {
-                b.iter(|| {
-                    key.encrypt_nlev_constant_to(
-                        black_box(1),
-                        &mut nlev,
-                        &gadget,
-                        &mut fft,
-                        &mut rng,
-                        &mut workspace,
-                    );
-                    black_box(nlev.as_ref());
-                })
-            });
-            group.throughput(Throughput::Elements(CONSTANTS.len() as u64));
-            group.bench_function("encrypt_ngsw_signed_constant_batch_to", |b| {
-                b.iter(|| {
-                    key.encrypt_ngsw_signed_constant_batch_to(
-                        black_box(&CONSTANTS),
-                        &mut batch,
-                        &gadget,
-                        &mut fft,
-                        &mut rng,
-                        &mut workspace,
-                    );
-                    black_box(&batch);
-                })
-            });
-            group.finish();
-        }
+        let gadget = NlevParameters::with_ntru_params(
+            &params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(log_basis),
+                level_count: None,
+            },
+        );
+        let mut nlev = FourierNlevCiphertext::<Vec<Complex64>>::zero(gadget.fourier_nlev_len());
+        let mut batch = vec![Complex64::default(); CONSTANTS.len() * gadget.fourier_nlev_len()];
+        let mut group = c.benchmark_group(format!("ntru/fourier/n{n}/log_basis{log_basis}"));
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("encrypt_nlev_constant_to", |b| {
+            b.iter(|| {
+                key.encrypt_nlev_constant_to(
+                    black_box(1),
+                    &mut nlev,
+                    &gadget,
+                    &mut fft,
+                    &mut rng,
+                    &mut workspace,
+                );
+                black_box(nlev.as_ref());
+            })
+        });
+        group.throughput(Throughput::Elements(CONSTANTS.len() as u64));
+        group.bench_function("encrypt_ngsw_signed_constant_batch_to", |b| {
+            b.iter(|| {
+                key.encrypt_ngsw_signed_constant_batch_to(
+                    black_box(&CONSTANTS),
+                    &mut batch,
+                    &gadget,
+                    &mut fft,
+                    &mut rng,
+                    &mut workspace,
+                );
+                black_box(&batch);
+            })
+        });
+        group.finish();
     }
 }
 

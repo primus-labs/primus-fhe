@@ -219,47 +219,51 @@ fn check_decode<
     modulus: M,
 ) {
     let codec = RoundedCodec::<T, _>::new(to_value(t), modulus);
-    let mut phases = if q <= 256 {
+    let phases = if q <= 256 {
         (0..q).collect::<Vec<_>>()
     } else {
         // The first integer phase rounding up from m to m+1 is
         // ceil((2m+1)*q/(2t)); test both sides, including the last cell.
-        messages(t)
+        let mut phases: Vec<_> = messages(t)
             .into_iter()
             .flat_map(|m| {
                 let boundary = ((2 * m + 1) * q).div_ceil(2 * t);
                 [boundary - 1, boundary % q, (boundary + 1) % q]
             })
-            .collect()
+            .collect();
+        phases.extend([0, q - 1]);
+        phases.sort_unstable();
+        phases.dedup();
+        phases
     };
-    phases.extend([0, q - 1]);
-    phases.sort_unstable();
-    phases.dedup();
     let expected: Vec<T> = phases
         .iter()
         .map(|&c| to_value(round_half_up(c * t, q) % t))
         .collect();
     let phases: Vec<T> = phases.into_iter().map(to_value).collect();
-    let mut output = vec![T::ZERO; phases.len()];
+    let mut output = vec![T::MAX; phases.len()];
     codec.decode_slice_to(&phases, &mut output);
     assert_eq!(output, expected, "t={t}, q={q}");
     for (&phase, &decoded) in phases.iter().zip(&expected) {
         assert_eq!(codec.decode_value(phase), decoded);
     }
-    // Both codecs expose the same prepared decoder; check it against the
-    // integer oracle, including cells that do not contain encoding centers.
-    let scaled = ScaledCodec::<T, _>::try_new(to_value(t), modulus).ok();
-    for decoder in std::iter::once(MessageDecoder::from(&codec))
-        .chain(scaled.as_ref().map(MessageDecoder::from))
-    {
-        decoder.decode_slice_to(&phases, &mut output);
-        assert_eq!(output, expected);
-        for (&phase, &decoded) in phases.iter().zip(&expected) {
-            assert_eq!(decoder.decode_value(phase), decoded);
+    // Both owners expose the same decoder. Check their binding in representative
+    // native and explicit domains, including phases between centers.
+    if (t, q) == (7, 1u128 << T::BITS) || (t, q) == (16, 131) {
+        let scaled = ScaledCodec::new(to_value(t), modulus);
+        for decoder in [MessageDecoder::from(&codec), MessageDecoder::from(&scaled)] {
+            assert_eq!(decoder.plaintext_modulus(), to_value(t));
+            assert_eq!(decoder.ciphertext_modulus(), modulus);
+            output.fill(T::MAX);
+            decoder.decode_slice_to(&phases, &mut output);
+            assert_eq!(output, expected);
+            for (&phase, &decoded) in phases.iter().zip(&expected) {
+                assert_eq!(decoder.decode_value(phase), decoded);
+            }
+            output.copy_from_slice(&phases);
+            decoder.decode_slice_assign(&mut output);
+            assert_eq!(output, expected);
         }
-        output.copy_from_slice(&phases);
-        decoder.decode_slice_assign(&mut output);
-        assert_eq!(output, expected);
     }
     let mut inplace = phases;
     codec.decode_slice_assign(&mut inplace);

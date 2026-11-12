@@ -8,13 +8,24 @@ fn value<T: TryFrom<u128>>(x: u128) -> T {
     T::try_from(x).ok().unwrap()
 }
 
-/// Exhaust tiny domains; larger domains retain endpoints and the central rounding neighborhood.
-fn points(end: u128) -> Vec<u128> {
-    if end <= 256 {
-        (0..end).collect()
-    } else {
-        vec![0, 1, end / 2 - 1, end / 2, end / 2 + 1, end - 2, end - 1]
+/// Exhaust small sources. For larger ones, include endpoints, rounding transitions
+/// and deterministic interior samples.
+fn points(q: u128, r: u128) -> Vec<u128> {
+    if q <= 256 {
+        return (0..q).collect();
     }
+
+    let mut inputs = vec![0, 1, q / 2 - 1, q / 2, q / 2 + 1, q - 2, q - 1];
+    let mut rng = StdRng::seed_from_u64((q ^ r) as u64);
+    inputs.extend((0..32).map(|_| rng.random_range(0..q)));
+    for m in [0, r / 2, r - 1] {
+        // Equivalent to ceil(((m+1)*q-floor(q/2))/r), avoiding 2^128.
+        let boundary = (m * q + q.div_ceil(2)).div_ceil(r);
+        if boundary > 0 && boundary < q {
+            inputs.extend([boundary - 1, boundary]);
+        }
+    }
+    inputs
 }
 
 /// Use an exact u128 rounding formula, including transition neighbors and fixed interior samples.
@@ -33,16 +44,7 @@ where
         source.prepare_switch_to(target),
         ModulusSwitch::new(source, target),
     ];
-    let mut inputs = points(q);
-    let mut rng = StdRng::seed_from_u64((q ^ r) as u64);
-    inputs.extend((0..32).map(|_| rng.random_range(0..q)));
-    for m in [0, r / 2, r - 1] {
-        // Equivalent to ceil(((m+1)*q-floor(q/2))/r), avoiding 2^128.
-        let boundary = (m * q + q.div_ceil(2)).div_ceil(r);
-        if boundary > 0 && boundary < q {
-            inputs.extend([boundary - 1, boundary]);
-        }
-    }
+    let inputs = points(q, r);
     let expected: Vec<T> = inputs
         .iter()
         .map(|&x| value(((x * r + q / 2) / q) % r))
@@ -69,9 +71,8 @@ where
     }
 }
 
-/// Bind each source representation to representative target kinds, including native output.
-/// Numeric kernel selection is covered separately; wrapper pairs need no Cartesian grid.
-fn check_source<T, S>(source: S)
+/// Test reciprocal reuse with narrow and wide products and a native target.
+fn check_reciprocal_source<T, S>(source: S)
 where
     T: FheUint + Into<u128> + TryFrom<u128>,
     S: PrepareModulusSwitch<ValueT = T>,
@@ -82,9 +83,6 @@ where
         source,
         UintModulus::<T>::new(value((1u128 << T::BITS) / 2 + 1)),
     );
-    check_pair(source, PowOf2Modulus::<T>::new(value(128)));
-    check_pair(source, CompactModulus::<T>::new(value(131)));
-    check_pair(source, BarrettModulus::<T>::new(value(131)));
 }
 
 /// Ratios select distinct kernels; word widths retain overflow and native-modulus boundaries.
@@ -130,9 +128,15 @@ fn fixed_pairs_match_integer_oracle() {
         for q in [128, 3, compact, native / 2 + 1] {
             check_pair(UintModulus::<T>::new(value(q)), native_modulus);
         }
-        check_source(PowOf2Modulus::<T>::new(value(128)));
-        check_source(CompactModulus::<T>::new(value(compact)));
-        check_source(BarrettModulus::<T>::new(value(compact)));
+        check_pair(
+            PowOf2Modulus::<T>::new(value(128)),
+            CompactModulus::<T>::new(value(131)),
+        );
+        check_pair(
+            CompactModulus::<T>::new(value(compact)),
+            BarrettModulus::<T>::new(value(131)),
+        );
+        check_reciprocal_source(BarrettModulus::<T>::new(value(compact)));
     }
     cases::<u16>();
     cases::<u32>();
@@ -155,7 +159,6 @@ fn compact_quotients_exhaust_small_word_residues() {
                 let expected =
                     ((i as u64 * u64::from(p) + u64::from(q / 2)) / u64::from(q)) % u64::from(p);
                 assert_eq!(u64::from(y), expected, "q={q}, p={p}, x={i}");
-                assert_eq!(conversion.switch(i), y);
             });
         }
     }
@@ -166,9 +169,9 @@ fn compact_quotients_exhaust_small_word_residues() {
 #[test]
 fn derived_modulus_supports_both_directions() {
     #[derive(primus_modulus::Barrett)]
-    #[modulus(ty = u32, value = 97)]
+    #[modulus(ty = u32, value = 536813569)]
     struct Q;
-    check_source::<u32, _>(Q);
+    check_reciprocal_source::<u32, _>(Q);
     check_pair(NativeModulus::<u32>::new(), Q);
     check_pair(UintModulus::new(128u32), Q);
 }

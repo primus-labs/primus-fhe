@@ -19,6 +19,8 @@
 
 相位提取不包含解码；trace 与 reverse trace 的输出尺度不同。`lwe_return` 不包含盲旋转，输入为规范系数多项式。`ternary_cmux` 比较两条路径的完整旋转，Fourier 结果可能有不同的舍入误差。
 
+`primitives` 在 NTT 和两个 Fourier 引擎上用 N=4096、log₂ B=3 测量全部操作。Key switching、reverse trace 和 scheme switching 额外测量 N=1024、log₂ B=3 以及 N=4096、log₂ B=10。对同一尺寸和后端，scheme switch 共用一个输出 basis 固定的输入 NLev。
+
 ## 运行
 
 ```sh

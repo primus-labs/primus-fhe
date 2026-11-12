@@ -111,8 +111,8 @@ where
     /// Panics if the supplied polynomial storage length exceeds the ciphertext length.
     #[inline]
     pub fn a_b_slices(&self, poly_length: usize) -> (&[T], &[T]) {
-        let glwe_len = self.as_ref().len();
-        self.0.split_at(glwe_len - poly_length)
+        let data = self.as_ref();
+        data.split_at(data.len() - poly_length)
     }
 
     /// Splits this GLWE into its mask polynomials and body polynomial.

@@ -2,7 +2,7 @@ use primus_data::{Data, DataMut};
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
-use primus_lattice::lwe::Lwe;
+use primus_lattice::lwe::{Lwe, LweIterMut};
 use primus_reduce::RingContext;
 
 mod batch;
@@ -87,14 +87,14 @@ impl<T: FheUint> LweKeySwitchingKey<T> {
         // Each coefficient owns a contiguous block of decomposition-level entries.
         let blocks = data.chunks_exact_mut(coefficient_len);
         let encrypt_levels = |(secret, block): (T, &mut [T])| {
-            for (scalar, entry) in basis
+            for (scalar, mut entry) in basis
                 .scalar_iter()
-                .zip(block.chunks_exact_mut(output_lwe_len))
+                .zip(LweIterMut::new(block, output_lwe_len))
             {
                 let plaintext = modulus.reduce_mul(secret, scalar);
-                output_key.encrypt_encoded_to(
+                output_key.encrypt_mask_body(
                     plaintext,
-                    &mut Lwe::new(entry),
+                    entry.a_b_mut(),
                     modulus,
                     uniform,
                     gaussian,
@@ -185,14 +185,15 @@ impl<T: FheUint> LweKeySwitchingKey<T> {
             self.output_dimension.get(),
             "output LWE ciphertext dimension mismatch"
         );
+        let modulus_value = modulus.explicit_value();
         assert_eq!(
             basis.modulus(),
-            modulus.explicit_value(),
+            modulus_value,
             "LWE key-switching modulus mismatch"
         );
 
         output_mask.fill(T::ZERO);
-        if modulus.explicit_value().is_none() {
+        if modulus_value.is_none() {
             // Native multiplication is cheap: accumulate (0, b) - sum(digit * entry).
             *output_body = input_body;
             self.key_switch_kernel::<true, _>(input_mask, output.as_mut(), modulus);

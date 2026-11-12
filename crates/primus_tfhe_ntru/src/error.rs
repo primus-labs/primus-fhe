@@ -129,9 +129,6 @@ pub enum CircuitBootstrapParameterError {
 /// Failure to generate blind-rotation or circuit-bootstrap keys for this TFHE family.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KeyGenerationError {
-    /// The selected blind-rotation method is not supported by this backend.
-    #[error("unsupported blind-rotation method: {0:?}")]
-    UnsupportedBlindRotationMethod(primus_tfhe::BlindRotationMethod),
     /// The context has no complete ring-output CBS configuration.
     #[error("context has no circuit-bootstrap parameters")]
     MissingCircuitBootstrapParameters,
@@ -142,9 +139,6 @@ pub enum KeyGenerationError {
     /// Direct block blind-rotation key generation failed.
     #[error(transparent)]
     BlockBootstrapping(#[from] BlockBootstrappingKeyError),
-    /// Sparse blind-rotation key generation failed.
-    #[error(transparent)]
-    SparseBootstrapping(#[from] SparseBootstrappingKeyError),
     /// The supplied client secrets do not match the TFHE parameters.
     #[error(transparent)]
     ClientKey(#[from] TfheKeyError),
@@ -157,34 +151,6 @@ pub enum KeyGenerationError {
     /// NTRU rejection sampling or transform conversion failed.
     #[error("NTRU key generation or conversion failed")]
     Ntru(#[from] primus_ntru::NtruError),
-}
-
-/// Failure to construct an experimental NTRU sparse bootstrapping key.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum SparseBootstrappingKeyError {
-    /// Bucket selections require a fixed-weight binary client secret.
-    #[error("sparse bootstrapping requires a fixed-weight binary client secret")]
-    UnsupportedSecretDistribution,
-    /// The public weight must satisfy `0 < h < n`.
-    #[error("sparse Hamming weight must satisfy 0 < h < n")]
-    InvalidHammingWeight,
-    /// Actual client coefficients have a different weight from the declared one.
-    #[error("client coefficients do not match the declared Hamming weight")]
-    InvalidSecretWeight,
-    /// Public map validation or private matching failed.
-    #[error(transparent)]
-    BucketMap(#[from] primus_tfhe::sparse::BucketMapError),
-    /// Coefficient NGSW storage exceeds addressable allocation sizes.
-    #[error("sparse NGSW storage size overflow")]
-    StorageSizeOverflow,
-    /// Coefficient storage must contain every public selection and one dummy per bucket.
-    #[error("sparse coefficient storage length mismatch: expected {expected}, got {actual}")]
-    StorageLengthMismatch {
-        /// Required coefficient count, including all dummy controls.
-        expected: usize,
-        /// Supplied coefficient count.
-        actual: usize,
-    },
 }
 
 /// Failure to bind or generate direct block-binary NTRU controls.

@@ -6,7 +6,7 @@ use std::{
 use primus_distr::{
     CenteredBinomial, CenteredBinomialError, ErrorDistribution, ErrorSampler, ErrorSamplerError,
 };
-use primus_integer::{AsInto, FheUint};
+use primus_integer::{AsInto, ConstBounded, FheUint};
 use rand::{Rng, SeedableRng, TryCryptoRng, TryRng, distr::Distribution, rngs::StdRng};
 
 struct WordRng {
@@ -95,6 +95,7 @@ fn centered_binomial_support_and_unused_bits_are_exact() {
 fn signed_and_crt_batches_share_samples_and_rng_consumption() {
     fn check<T: FheUint>() {
         let moduli = [769_u64, 1153].map(T::as_from);
+        let replay_rng = || StdRng::seed_from_u64(504);
         for distribution in [
             ErrorDistribution::Gaussian {
                 standard_deviation: 3.2,
@@ -109,19 +110,19 @@ fn signed_and_crt_batches_share_samples_and_rng_consumption() {
             let sampler = ErrorSampler::<T>::try_new(distribution).unwrap();
             assert_eq!(sampler.distribution(), distribution);
             for length in [0, 1, 17] {
-                let mut scalar_rng = StdRng::seed_from_u64(504);
+                let mut scalar_rng = replay_rng();
                 let signed: Vec<T::SignedInteger> = (0..length)
                     .map(|_| sampler.sample(&mut scalar_rng))
                     .collect();
                 let next = scalar_rng.next_u64();
-                let mut batch = signed.clone();
-                let mut batch_rng = StdRng::seed_from_u64(504);
+                let mut batch = vec![T::SignedInteger::MAX; length];
+                let mut batch_rng = replay_rng();
                 sampler.sample_signed_to(&mut batch, &mut batch_rng);
                 assert_eq!(batch, signed);
                 assert_eq!(batch_rng.next_u64(), next);
 
                 let mut encoded = vec![T::MAX; length * moduli.len()];
-                let mut crt_rng = StdRng::seed_from_u64(504);
+                let mut crt_rng = replay_rng();
                 sampler.sample_crt_to(&mut encoded, length, &moduli, &mut crt_rng);
                 assert_eq!(crt_rng.next_u64(), next);
                 for (index, modulus) in moduli.iter().enumerate() {
@@ -168,10 +169,10 @@ fn error_sampler_validates_configuration_and_batch_boundaries() {
         })
     ));
     for (length, moduli) in [
-        (1, vec![97]),
-        (2, vec![97, 17]),
-        (2, vec![97, 0]),
-        (usize::MAX, vec![97, 193]),
+        (1, &[97][..]),
+        (2, &[97, 17]),
+        (2, &[97, 0]),
+        (usize::MAX, &[97, 193]),
     ] {
         let mut output = [87_u32; 4];
         let mut rng = WordRng {
@@ -180,7 +181,7 @@ fn error_sampler_validates_configuration_and_batch_boundaries() {
         };
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
-                sampler.sample_crt_to(&mut output, length, &moduli, &mut rng);
+                sampler.sample_crt_to(&mut output, length, moduli, &mut rng);
             }))
             .is_err()
         );

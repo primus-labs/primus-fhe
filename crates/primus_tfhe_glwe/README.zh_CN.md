@@ -43,15 +43,15 @@
 
 底层 GLWE 盲旋转接收独立准备的 `RotationModulusSwitch<T>`，对应密钥的输入 q 和环旋转域 2N。普通 PBS 使用步长 1，交错操作使用 LUT 补齐后的输出宽度。Context evaluator 自动完成绑定，应用无需管理量化器；详见[旋转量化](../primus_tfhe/src/rotation.rs)和后端 BR 契约。
 
-## Sparse 系数密钥
+## 盲旋转密钥
 
-Classic binary/ternary 和 sparse fixed-weight binary 均支持两种顺序下的 PBS、ManyLUT、MVB 和 CBS。Sparse 须显式设置 `config.method = BlindRotationMethod::Sparse { copy_count, bucket_count }`，遵循[共享选择规则](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
+两种 PBS 顺序都支持 Classic binary/ternary 和 Block binary 的 PBS、ManyLUT、MVB 和 CBS。要沿用已有的固定重量二进制秘密，可选择 `BlindRotationMethod::Classic`，重新生成计算密钥并复核噪声预算。
 
-两后端共享 `GlweBlindRotationControls<T, M>` 系数控制及数值布局，`SparseGlweBootstrappingKey` 在其上保留公开 bucket map 和固定重量。分配原始 BR 工作区时，通过 `key.controls()` 借用控制材料。NTT 使用 Barrett 剩余类，Fourier 使用 Native 系数，不能互换。优先用 context/key-generator 工厂和普通 evaluator；存储及导入契约见 [sparse 密钥类型](src/sparse.rs)。
+使用 Block 时，设置 `config.method = BlindRotationMethod::Block` 和 `SecretKeyDistr::BlockBinary { block_size, occupancy }`。`BlockOccupancy::AtMostOne` 允许空块，每块在 bit 控制后保存独立加密的 dummy。`ExactlyOne` 要求每块恰好有一个 `1`，只保存 bit 控制。采用分块秘密后需重新评估安全性和噪声。
 
-两个 GLWE 后端也支持在 `SecretKeyDistr::BlockBinary { block_size, occupancy }` 下设置 `config.method = BlindRotationMethod::Block`。它按连续块处理，无映射或 matching；`BlockOccupancy::AtMostOne` 在每块 bit 控制后保存独立加密的空块 dummy；`ExactlyOne` 仅保存 bit 控制，要求每块恰好一个 `1`。两种 PBS 顺序、ManyLUT、MVB 和 CBS 沿用相同 context/evaluator 工厂。Fourier 先在 native 系数域精确聚合，再使用普通 FFT 和外积；trace 精度仍独立选择。导入布局与数学前提见 [block 材料契约](src/block.rs)。
+两后端通过 `BlockGlweBootstrappingKey` 和 `GlweBlindRotationControls<T, M>` 共享系数控制布局。NTT 使用 Barrett 剩余类，Fourier 使用 native 环面系数。Fourier 在系数域精确聚合，再执行普通 FFT 与外积，trace 精度独立选择。导入契约见 [Block 密钥类型](src/block.rs)，算法选择见[共享规则](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
-两种模式都可使用 Classic BR。密钥绑定实际秘密分布；纯 scratch 在输入维数与 gadget 布局相同时可跨模式复用。
+两种分块占用模式也支持 Classic BR。输入维数和 gadget 布局相同时，Block scratch 可以跨占用模式复用。
 
 ## 客户端与 LUT
 
@@ -69,7 +69,7 @@ CBS 创建对应 context 后，调用 `context.try_generate_circuit_bootstrap_ke
 
 `CbsConfig::input_encoding` 选择 `Padded`（继承 PBS 输入 t）或 `MsbBoolean`（t=2，无 padding bit）。使用 `cbs_encryptor` / `cbs_public_encryptor` 后，两种模式均调用 `encrypt` / `encrypt_to`，客户端检查各自的输入域；普通 `encryptor` 保持 PBS 编码。MSB 编译要求 gadget 权重可精确折半（native Q 下为偶数），准备居中的符号 LUT 并绑定 trace 后修正，但不证明噪声预算。保护区间见 [`CircuitBootstrapLookupTable`](../primus_tfhe/src/lookup_table/circuit_bootstrap.rs)。
 
-通过 `compile_cbs_identity`、`compile_cbs_fn` 或 `compile_cbs_slice` 编译恒等/自定义函数，再用 `circuit_bootstrap_evaluator_with_lookup_table` 绑定；`circuit_bootstrap_evaluator` 是恒等快捷入口。输出使用环秘密下的 gadget 缩放，无输出消息 codec。CMux 要求完整输入域上的 F 为 bit；两后端均支持两种顺序及 classic binary/ternary、sparse binary。
+通过 `compile_cbs_identity`、`compile_cbs_fn` 或 `compile_cbs_slice` 编译恒等/自定义函数，再用 `circuit_bootstrap_evaluator_with_lookup_table` 绑定；`circuit_bootstrap_evaluator` 是恒等快捷入口。输出使用环秘密下的 gadget 缩放，无输出消息 codec。CMux 要求完整输入域上的 F 为 bit；两后端均支持两种顺序及 Classic binary/ternary、Block binary。
 
 `CbsConfig::fourier_trace_precision` 将 CBS trace 表示保存在准备后的参数中。
 NTT 和普通 Fourier 使用 `FourierTracePrecision::Ordinary`；`Split35` 要求

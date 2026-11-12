@@ -14,7 +14,6 @@ dashu-int = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-comfy-table = { workspace = true }
 
 [features]
 high_precision = ["dep:dashu-float", "dep:dashu-int"]

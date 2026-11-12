@@ -9,28 +9,39 @@ use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_reduce::RingContext;
 
 fn dot_product<T: FheUint>(c: &mut Criterion, name: &str, modulus: impl RingContext<T>) {
-    // Short inputs, full vectors, a scalar tail, and larger repeated buffers.
-    for length in [16, 1024, 1025, 4096] {
-        let mut state = 0x8356_125f_334d_aaaa_u64;
-        let mut lhs = Vec::with_capacity(length);
-        let mut signed = Vec::with_capacity(length);
-        for _ in 0..length {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            lhs.push(modulus.reduce(T::as_from(state)));
-            signed.push(T::SignedInteger::as_from((state % 3) as i64 - 1));
-        }
-        let encoded: Vec<T> = signed.iter().map(|&s| modulus.encode_signed(s)).collect();
+    const POLYNOMIAL_LENGTH: usize = 1024;
+    let max_length = POLYNOMIAL_LENGTH + 1;
+    let mut state = 0x8356_125f_334d_aaaa_u64;
+    let mut lhs = Vec::with_capacity(max_length);
+    let mut signed = Vec::with_capacity(max_length);
+    for _ in 0..max_length {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        lhs.push(modulus.reduce(T::as_from(state)));
+        signed.push(T::SignedInteger::as_from((state % 3) as i64 - 1));
+    }
+    let encoded: Vec<T> = signed.iter().map(|&s| modulus.encode_signed(s)).collect();
+
+    // Short scalar input, full vector blocks, and a one-element tail.
+    for length in [16, POLYNOMIAL_LENGTH, max_length] {
+        let lhs = &lhs[..length];
+        let signed = &signed[..length];
+        let encoded = &encoded[..length];
+        assert_eq!(
+            modulus.reduce_dot_product(lhs, encoded),
+            modulus.reduce_dot_product_signed(lhs, signed)
+        );
+
         let mut group = c.benchmark_group(format!("slice/signed_dot_product/{name}/{length}"));
         group.throughput(Throughput::Elements(length as u64));
         // Same mathematical input; encoding and allocation are outside timing.
         group.bench_function("encoded", |b| {
-            b.iter(|| black_box(modulus).reduce_dot_product(black_box(&lhs), black_box(&encoded)));
+            b.iter(|| black_box(modulus).reduce_dot_product(black_box(lhs), black_box(encoded)));
         });
         group.bench_function("signed", |b| {
             b.iter(|| {
-                black_box(modulus).reduce_dot_product_signed(black_box(&lhs), black_box(&signed))
+                black_box(modulus).reduce_dot_product_signed(black_box(lhs), black_box(signed))
             });
         });
         group.finish();

@@ -19,11 +19,12 @@ use primus_modulus::BarrettModulus;
 /// Both exponents must be in `[0, 2N)`. Sources must be in `[0, q)` and the
 /// initialized accumulator in `[0, 2q)`. The Barrett modulus's two spare bits
 /// bound all intermediate values below `4q`, including negative rotations.
+/// Debug builds check the length, batch layout and exponent ranges.
 ///
 /// # Panics
 ///
-/// Panics if `poly_length` is zero. Debug builds also check layouts and exponent
-/// ranges. Violating the contract can panic after partial writes in release builds.
+/// Invalid lengths can panic during slicing or chunking, possibly after partial
+/// writes in release builds.
 #[inline]
 pub fn lazy_add_mul_monomial_pair_assign<T: FheUint>(
     acc: &mut [T],
@@ -36,7 +37,6 @@ pub fn lazy_add_mul_monomial_pair_assign<T: FheUint>(
 ) {
     let n = poly_length;
     let q = modulus.value();
-    assert_ne!(n, 0, "polynomial length must be nonzero");
     debug_assert!(n.is_power_of_two(), "invalid polynomial length");
     debug_assert!(
         first_exponent < 2 * n && second_exponent < 2 * n,
@@ -87,8 +87,8 @@ fn add_segment<T: FheUint, const A_NEG: bool, const B_NEG: bool>(
 ) {
     let two_q = q + q;
     let bias = (if A_NEG { q } else { T::ZERO }) + (if B_NEG { q } else { T::ZERO });
-    // Keep the canonical pair kernel's slice traversal here: polynomial-view
-    // iterators regressed measured u64 sparse PBS with otherwise identical work.
+    // Visit the same contiguous interval of every polynomial under one sign
+    // specialization, as in the canonical pair kernel's interval traversal.
     for ((acc, a), b) in acc
         .chunks_exact_mut(n)
         .zip(first.chunks_exact(n))
@@ -120,11 +120,11 @@ fn add_segment<T: FheUint, const A_NEG: bool, const B_NEG: bool>(
 /// The exponent must be in `[0, 2N)`, source coefficients in `[0, q)`, and the
 /// initialized accumulator in `[0, 2q)`. Normalize the output before passing it
 /// to an operation that requires canonical coefficients.
+/// Debug builds check the length, batch layout and exponent range.
 ///
 /// # Panics
 ///
-/// Panics if `poly_length` is zero. Debug builds also check layouts and exponent
-/// range. Violating the contract can panic after partial writes in release builds.
+/// Invalid lengths can panic during slicing or chunking.
 #[inline]
 pub fn lazy_add_mul_monomial_assign<T: FheUint>(
     acc: &mut [T],
@@ -135,7 +135,6 @@ pub fn lazy_add_mul_monomial_assign<T: FheUint>(
 ) {
     let n = poly_length;
     let q = modulus.value();
-    assert_ne!(n, 0, "polynomial length must be nonzero");
     debug_assert!(n.is_power_of_two(), "invalid polynomial length");
     debug_assert_eq!(acc.len(), source.len(), "coefficient batch length mismatch");
     debug_assert_eq!(acc.len() & (n - 1), 0, "incomplete coefficient polynomial");

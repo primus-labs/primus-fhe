@@ -99,7 +99,10 @@ where
         self.0.fill(T::ZERO);
     }
 
-    /// Copy the coefficients from another slice.
+    /// Copies the DCRT point values in storage order.
+    ///
+    /// # Panics
+    /// Panics if the storage lengths differ.
     #[inline]
     pub fn copy_from<A>(&mut self, src: &DcrtPolynomial<A>)
     where

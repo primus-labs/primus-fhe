@@ -6,7 +6,7 @@ use primus_lattice::ntru::Ntru;
 use primus_ntru::FourierNtruSplitWorkspace;
 
 use super::BlockNtruBootstrappingKey;
-use crate::sparse::{
+use crate::grouped_rotation::{
     AggregationWorkspace, SplitAggregationWorkspace, rotate_groups, rotate_groups_split,
 };
 
@@ -306,7 +306,7 @@ mod tests {
                             let buffers = [&mut current, &mut scratch];
                             match &mut workspace {
                                 OracleWorkspace::Ordinary(workspace) => {
-                                    crate::sparse::rotate_groups_pair(
+                                    crate::grouped_rotation::rotate_groups_pair(
                                         blocks(&key),
                                         workspace,
                                         &mut second,
@@ -316,7 +316,7 @@ mod tests {
                                     );
                                 }
                                 OracleWorkspace::Split(workspace) => {
-                                    crate::sparse::rotate_groups_split_pair(
+                                    crate::grouped_rotation::rotate_groups_split_pair(
                                         blocks(&key),
                                         workspace,
                                         &mut second,

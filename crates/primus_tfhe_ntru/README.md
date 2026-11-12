@@ -36,13 +36,11 @@ BR and KS use separate `GadgetEncryptionConfig { decomposition, noise_standard_d
 
 Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q rounding → phase extraction → LWE KS at q to s. ManyLUT shares BR and returns each output separately; `context.allocate_lwe_ciphertext()` uses n. The LUT itself is public, but NTRU lifting and BR controls contribute encryption noise. Parameter construction does not establish security or a complete noise budget.
 
-## Sparse coefficient keys
+## Blind-rotation methods
 
-Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Boolean, MVB, CBS and one-hot. Select sparse explicitly through `config.method`; the `SparseTernary` secret distribution alone does not select bucket aggregation. External fixed weights may be even; [shared sparse restrictions](../primus_tfhe/README.md#selecting-blind-rotation) still apply.
+Classic accepts binary and ternary external secrets, including fixed-weight binary. Classic and Block support PBS, ManyLUT, Boolean gates, MVB, CBS and one-hot through the same factories.
 
-Both backends share `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. NTT residues and native coefficients remain distinct representations. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
-
-Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Both backends support scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
+Set `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Each block stores all bit controls and an independently encrypted dummy for `AtMostOne`. `ExactlyOne` requires one `1` per block. The first block uses NLEV to lift the public LUT, including when its rotation is zero. Later blocks use NGSW. Fourier Block requires u64 and supports ordinary and split BR with exact native coefficient key generation. Trace and SS precision are independent. See the [block material contract](src/block.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
 ## Clients and LUTs
 
@@ -70,7 +68,7 @@ NTT reverse trace uses modular inverses; Fourier uses native integer halving wit
 
 ## One-hot CBS
 
-`context.one_hot_evaluator(&server)?` uses the same CBS bundle with classic binary/ternary, sparse fixed-weight binary or direct Block BR. Require t=2M, M=2^tau with tau>=1; encrypt `0..M` with `encrypt_padded`. For L output levels, let `W=next_power_of_two(L)` and require `2MW<=N`.
+`context.one_hot_evaluator(&server)?` uses the same CBS bundle with Classic binary/ternary or Block BR. Require t=2M, M=2^tau with tau>=1; encrypt `0..M` with `encrypt_padded`. For L output levels, let `W=next_power_of_two(L)` and require `2MW<=N`.
 
 | Output | Allocation / evaluation |
 | --- | --- |
@@ -79,7 +77,7 @@ NTT reverse trace uses modular inverses; Fourier uses native integer halving wit
 | Nonzero NGSW branches only | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
 | Both representations | `one_hot_to`, or `one_hot_nlev_and_nonzero_ngsw_to` for full NLev plus nonzero NGSW |
 
-For Sparse and Block BR, split an owning one-hot evaluator with `into_parts`,
+For Block BR, split an owning one-hot evaluator with `into_parts`,
 then call `new_pair_workspace(&resources)` and `with_pair`. The additional
 `bootstrap::BlindRotationPairWorkspace` owns only the second input's exponents,
 coefficient aggregate and accumulator; transforms, product scratch and selector
@@ -89,7 +87,7 @@ Classic returns `None`; consume every input through the single-input methods,
 which also handle an odd final input. Paired inputs still share key errors.
 
 Public lookup lifting needs `NLEV[1]` when no CMux selection layer performs the
-first lift (`c=d`). Grouped BR has no independent classic initializer: request
+first lift (`c=d`). Block BR has no independent classic initializer: request
 `KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` or
 `try_generate_public_lift_key`. Do not derive this material by summing the
 first group's bit/dummy controls. The lift retains its own generation parameters
@@ -101,8 +99,6 @@ Full output covers δ_r(m), r=0..M-1. Compact NGSW slot r-1 represents r=1..M-1;
 Borrow branch views with `nlev_selectors`, `ngsw_selectors` or `nonzero_ngsw_selectors`. `selector(r)` takes the mathematical branch number; `iter()` yields `(r, ciphertext)`. Views allocate nothing. Full layout, basis and representation requirements are on the [selector types](src/one_hot/selectors.rs) and backend evaluators.
 
 Let S=N/M and A=N/(2MW). Correct selection requires quantized phase `u_bar=S*m+W*e mod 2N` with `-A<=e<A`: the window is left-closed/right-open. e includes input noise, encoding rounding and per-coordinate quantization; shape checks prove neither this guard nor output decryptability. See the [one-hot derivation](../../guides/development/bootstrapping-contracts.md#one-hot-cbs).
-
-The separate repository’s [high-precision LUT crate](../../../primus_high_prec_lut/README.md) handles multiple input chunks and table polynomials, with classic as the default BR and sparse available explicitly.
 
 ## NTRU→LWE returns
 

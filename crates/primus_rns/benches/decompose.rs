@@ -1,10 +1,12 @@
-use primus_rns::{BaseConverter, RNSBase, ResidueFactors};
-use std::hint::black_box;
-use std::time::Duration;
+// cargo bench -p primus_rns --bench decompose
+// cargo +nightly bench -p primus_rns --bench decompose --features simd
+
+use std::{hint::black_box, time::Duration};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use primus_factor::ShoupFactor;
 use primus_modulus::BarrettModulus;
+use primus_rns::{BaseConverter, RNSBase, ResidueFactors};
 
 type Value = u64;
 type Modulus = BarrettModulus<Value>;
@@ -61,64 +63,69 @@ fn shoup_factors(base: &Base) -> ResidueFactors<Vec<ShoupFactor<Value>>> {
     )
 }
 
-// These are the allocation-free slice operations used by polynomial paths.
+/// Measures small-value kernels on one basis and batch CRT on two basis widths.
 fn bench_base_slice_operations(c: &mut Criterion) {
-    let cases = [
-        ("2mod/logB=18", MODULI_2, 1 << 18),
-        ("3mod/logB=15", MODULI_3, 1 << 15),
-    ];
+    let two_moduli_label = "2mod/logB=18";
+    let two_moduli = base(MODULI_2);
+    let small_modulus = 1 << 18;
+    let small_values = wrapping_values(POLY_LENGTH, small_modulus);
+    let factors = shoup_factors(&two_moduli);
+    let two_moduli_residues = crt_residues(&two_moduli, POLY_LENGTH);
     let mut group = c.benchmark_group("rns/slice_decompose_compose");
     group.throughput(Throughput::Elements(POLY_LENGTH as u64));
 
-    for (label, moduli, small_modulus) in cases {
-        let base = base(moduli);
-        let small_values = wrapping_values(POLY_LENGTH, small_modulus);
-        let factors = shoup_factors(&base);
+    let mut output = vec![0; two_moduli_residues.len()];
+    group.bench_function(
+        BenchmarkId::new("wrapping_decompose_small_values_to", two_moduli_label),
+        |b| {
+            b.iter(|| {
+                two_moduli.wrapping_decompose_small_values_to(
+                    black_box(&small_values),
+                    black_box(&mut output),
+                    black_box(small_modulus),
+                );
+            });
+        },
+    );
 
-        let mut output = vec![0; base.moduli_count() * POLY_LENGTH];
-        group.bench_function(
-            BenchmarkId::new("wrapping_decompose_small_values_to", label),
-            |b| {
-                b.iter(|| {
-                    base.wrapping_decompose_small_values_to(
-                        black_box(&small_values),
-                        black_box(&mut output),
-                        black_box(small_modulus),
-                    );
-                });
-            },
-        );
+    let mut wrapping_acc = two_moduli_residues.clone();
+    group.bench_function(
+        BenchmarkId::new(
+            "add_wrapping_decompose_small_values_scaled_assign",
+            two_moduli_label,
+        ),
+        |b| {
+            b.iter(|| {
+                two_moduli.add_wrapping_decompose_small_values_scaled_assign(
+                    black_box(&small_values),
+                    black_box(&mut wrapping_acc),
+                    black_box(small_modulus),
+                    black_box(factors.view()),
+                );
+            });
+        },
+    );
 
-        let mut wrapping_acc = crt_residues(&base, POLY_LENGTH);
-        group.bench_function(
-            BenchmarkId::new("add_wrapping_decompose_small_values_scaled_assign", label),
-            |b| {
-                b.iter(|| {
-                    base.add_wrapping_decompose_small_values_scaled_assign(
-                        black_box(&small_values),
-                        black_box(&mut wrapping_acc),
-                        black_box(small_modulus),
-                        black_box(factors.view()),
-                    );
-                });
-            },
-        );
+    let mut unsigned_acc = two_moduli_residues.clone();
+    group.bench_function(
+        BenchmarkId::new("add_decompose_small_values_scaled_assign", two_moduli_label),
+        |b| {
+            b.iter(|| {
+                two_moduli.add_decompose_small_values_scaled_assign(
+                    black_box(&small_values),
+                    black_box(&mut unsigned_acc),
+                    black_box(factors.view()),
+                );
+            });
+        },
+    );
 
-        let mut unsigned_acc = crt_residues(&base, POLY_LENGTH);
-        group.bench_function(
-            BenchmarkId::new("add_decompose_small_values_scaled_assign", label),
-            |b| {
-                b.iter(|| {
-                    base.add_decompose_small_values_scaled_assign(
-                        black_box(&small_values),
-                        black_box(&mut unsigned_acc),
-                        black_box(factors.view()),
-                    );
-                });
-            },
-        );
-
-        let residues = crt_residues(&base, POLY_LENGTH);
+    let three_moduli = base(MODULI_3);
+    let three_moduli_residues = crt_residues(&three_moduli, POLY_LENGTH);
+    for (label, base, residues) in [
+        (two_moduli_label, two_moduli, two_moduli_residues),
+        ("3mod/logB=15", three_moduli, three_moduli_residues),
+    ] {
         let values = composed_values(&base, &residues, POLY_LENGTH);
         let mut decomposed = vec![0; residues.len()];
         group.bench_function(
@@ -193,10 +200,10 @@ fn bench_base_conversion(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
+    // Short warm-up and sample count keep the batch matrix practical to run.
     config = Criterion::default()
         .sample_size(20)
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5));
+        .warm_up_time(Duration::from_secs(1));
     targets = bench_base_slice_operations, bench_base_conversion
 }
 criterion_main!(benches);

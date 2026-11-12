@@ -6,10 +6,6 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 const RANDOM_CASES: usize = 128;
 
-fn seeded_rng(seed: u64) -> StdRng {
-    StdRng::seed_from_u64(seed)
-}
-
 /// Use an independent arbitrary-precision implementation, with the zero convention adapted below.
 fn big_gcd<T>(x: T, y: T) -> UBig
 where
@@ -67,33 +63,34 @@ fn u8_gcdinv_is_exhaustive() {
     }
 }
 
-/// Verifies every odd `u8` for every supported power-of-two mask and for the
-/// native-word inverse operation.
+/// Checks inverses of odd words and rejection of even words at every `u8` mask width.
 #[test]
 fn u8_power_of_two_inverses_are_exhaustive() {
-    for value in (1..=u8::MAX).step_by(2) {
-        for bits in 1..=u8::BITS {
-            let mask = if bits == u8::BITS {
-                u8::MAX
-            } else {
-                (1u8 << bits) - 1
-            };
-            let inverse = u8::gcdinv_pow_of_2(value, mask).unwrap();
+    for value in u8::MIN..=u8::MAX {
+        let expected = (value & 1 != 0).then_some(1);
+        for bits in 1..u8::BITS {
+            let mask = (1u8 << bits) - 1;
+            let inverse = u8::gcdinv_pow_of_2(value, mask);
             assert_eq!(
-                inverse.wrapping_mul(value) & mask,
-                1,
-                "value={value}, bits={bits}, inverse={inverse}",
+                inverse.map(|x| x.wrapping_mul(value) & mask),
+                expected,
+                "value={value}, bits={bits}",
             );
         }
 
-        let inverse = u8::gcdinv_native(value).unwrap();
-        assert_eq!(inverse.wrapping_mul(value), 1, "value={value}");
+        let native = u8::gcdinv_native(value);
+        assert_eq!(
+            native.map(|x| x.wrapping_mul(value)),
+            expected,
+            "value={value}"
+        );
+        assert_eq!(u8::gcdinv_pow_of_2(value, u8::MAX), native, "value={value}");
     }
 }
 
 fn assert_xgcd_identity<T>(x: T, y: T)
 where
-    T: Xgcd + Copy + Debug + Ord,
+    T: Xgcd + Copy + Debug,
     UBig: From<T>,
 {
     let (a, b, gcd) = T::xgcd(x, y);
@@ -164,7 +161,7 @@ macro_rules! check_integer_identities {
 /// primitive unsigned integer type against an arbitrary-precision oracle.
 #[test]
 fn integer_identities_match_big_integer_oracles() {
-    let mut rng = seeded_rng(0x7769_6465_5f69_6465);
+    let mut rng = StdRng::seed_from_u64(0x7769_6465_5f69_6465);
 
     check_integer_identities!(rng, u16);
     check_integer_identities!(rng, u32);
@@ -207,7 +204,7 @@ macro_rules! check_power_of_two_inverse {
 /// `u8` is covered separately by its exhaustive test.
 #[test]
 fn power_of_two_inverses_cover_wider_integer_widths() {
-    let mut rng = seeded_rng(0x706f_7732_5f77_6964);
+    let mut rng = StdRng::seed_from_u64(0x706f_7732_5f77_6964);
 
     check_power_of_two_inverse!(rng, u16);
     check_power_of_two_inverse!(rng, u32);
@@ -220,7 +217,7 @@ fn power_of_two_inverses_cover_wider_integer_widths() {
 /// against exact arbitrary-precision identities.
 #[test]
 fn u64_high_bit_paths_match_big_integer_oracles() {
-    let mut rng = seeded_rng(0x7536_345f_6d73_625f);
+    let mut rng = StdRng::seed_from_u64(0x7536_345f_6d73_625f);
     const TOP_BIT: u64 = 1 << (u64::BITS - 1);
 
     for _ in 0..RANDOM_CASES {

@@ -131,7 +131,14 @@ impl<T: FheUint> LweSecretKey<T> {
         for (mut ciphertext, plaintext) in
             LweIterMut::new(output, self.dimension() + 1).zip(plaintexts)
         {
-            key.encrypt_encoded_to(plaintext, &mut ciphertext, modulus, uniform, noise, rng);
+            key.encrypt_mask_body(
+                plaintext,
+                ciphertext.a_b_mut(),
+                modulus,
+                uniform,
+                noise,
+                rng,
+            );
         }
     }
 

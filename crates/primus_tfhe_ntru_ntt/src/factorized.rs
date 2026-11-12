@@ -116,7 +116,7 @@ where
     /// Takes ownership of a prepared PBS evaluator and allocates one extra NTT
     /// polynomial for MVB. Its existing BR and scalar/batch return buffers are
     /// moved without copying key material or preparing them again.
-    /// Both classic and sparse PBS keys use the same factor/return path.
+    /// Classic and Block keys use the same factor/return path.
     #[must_use]
     pub fn new(evaluator: Evaluator<'a, T, Table, LM>) -> Self {
         let context = evaluator.resources.context;
@@ -153,8 +153,8 @@ where
     /// its external client secret and unsigned Rounded encoding, with a message
     /// in `0..lookup_table.input_domain_len()`. Input noise and coefficient-wise
     /// quantization error must stay within that message's LUT interval. Each
-    /// difference factor amplifies the shared public-lift and BR noise, including
-    /// sparse bucket aggregation. Modulus conversion and LWE key-switch errors
+    /// difference factor amplifies the shared public-lift and BR noise. Modulus
+    /// conversion and LWE key-switch errors
     /// follow each product. These conditions are not checked. The output scale
     /// is q/Q times the compilation scale. Decode using a Scaled
     /// codec at q with the same plaintext modulus, budgeting the difference

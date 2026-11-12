@@ -12,8 +12,7 @@ Choose one target to measure a lattice operation. Parameters and case names are 
 | [ntru_fourier](ntru_fourier.rs) | NGSW coefficient/Fourier-output external product and monomial CMux; both FFT engines | `rustfft,tfhe-fft` |
 | [ntru_ntt](ntru_ntt.rs) | NGSW coefficient/NTT-output external product and monomial CMux | `ntt` |
 | [extraction](extraction.rs) | Full NTRU extraction, compact GLWE extraction and inverse GLWE extraction | None |
-| [rns_glev](rns_glev.rs) | CRT/BigUint polynomial × DCRT GLev, with DCRT output or accumulation | `rns` |
-| [rns_ggsw](rns_ggsw.rs) | CRT GLWE × DCRT GGSW, with DCRT output | `rns` |
+| [rns_gadget](rns_gadget.rs) | CRT/BigUint polynomial × DCRT GLev and CRT GLWE × DCRT GGSW, with DCRT output or GLev accumulation | `rns` |
 
 ## Measurement boundaries
 
@@ -33,8 +32,7 @@ cargo bench -p primus_lattice --bench glwe_ntt --features ntt
 cargo bench -p primus_lattice --bench ntru_fourier --features rustfft,tfhe-fft
 cargo bench -p primus_lattice --bench ntru_ntt --features ntt
 cargo bench -p primus_lattice --bench extraction
-cargo bench -p primus_lattice --bench rns_glev --features rns
-cargo bench -p primus_lattice --bench rns_ggsw --features rns
+cargo bench -p primus_lattice --bench rns_gadget --features rns
 ```
 
 Append `-- '<regex>'` to select cases, or `-- --test` to execute each fixture once without collecting timings. See the workspace [testing guide](../../../guides/development/testing.md) for validation entry points.

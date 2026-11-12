@@ -17,7 +17,7 @@ use crate::{
     context::EvaluationContext,
 };
 
-/// Classic binary/ternary or sparse binary CBS producing NTT GGSW controls.
+/// Classic binary/ternary or Block binary CBS producing NTT GGSW controls.
 ///
 /// Owns the programmed LUT and projection buffers. Common input/BR/EP resources
 /// are borrowed per call; both BR variants share trace and scheme switching.
@@ -49,7 +49,7 @@ where
     /// a compatible basis with the same key layout. Checks the key/parameters
     /// and program's N, q/Q and exact output basis at this binding boundary.
     /// Common resources are borrowed only for construction and each online call;
-    /// both classic/sparse BR and both PBS orders are supported.
+    /// both Classic and Block BR and both PBS orders are supported.
     ///
     /// # Correctness
     /// CBS and resource keys must use the same paired secrets and this context's
@@ -134,8 +134,8 @@ where
     /// this context's external LWE modulus and the bound program's padded or MSB
     /// Boolean encoding, with canonical residues. Noise must fit that program's
     /// rotation intervals; trace and scheme-switching errors must also fit the independent CBS
-    /// budget described by [`CbsGadgetParameters`]. For sparse keys, include
-    /// aggregation noise from every bucket, including zero selections and dummies.
+    /// budget described by [`CbsGadgetParameters`]. For Block BR, include all
+    /// controls and any encrypted dummy in the aggregation noise.
     /// CMux requires `F(m)` in `{0, 1}` throughout the programmed domain.
     /// The output remains under the accumulator GLWE
     /// secret and uses gadget scales, not ordinary LWE or Boolean encoding.

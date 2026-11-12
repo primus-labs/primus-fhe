@@ -6,382 +6,164 @@ use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
     CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator,
     DcrtGlweCiphertext, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
-    DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey,
 };
-use primus_lattice::GlweDimension;
 use primus_lattice::glwe::CrtGlwe;
-use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-/// Test coefficient expansion in the coefficient (CRT) domain.
-///
-/// Expands a GLWE ciphertext encrypting m(X) into N ciphertexts,
-/// one per coefficient: the i-th output encrypts m_i (the i-th coefficient).
-/// Verifies full expansion and partial expansion with N/2 and one output.
-#[test]
-fn crt_expansion_matches_parallel_and_plaintext() {
-    type ValueT = u64;
-
-    let dimension = 2;
-    let poly_length = PolyLength::new(32);
-    let n = poly_length.get();
-
-    let t: ValueT = 12289;
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
-    let mut rng = StdRng::seed_from_u64(42);
-
-    let glwe_params = support::RawParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.20,
+fn assert_rejected_outputs<C: AsRef<[u64]>>(output: &mut [C], expand: impl FnOnce(&mut [C])) {
+    assert!(catch_unwind(AssertUnwindSafe(|| expand(output))).is_err());
+    assert!(
+        output
+            .iter()
+            .all(|cipher| cipher.as_ref().iter().all(|&v| v == 1))
     );
+}
 
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-
-    let sk = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
-
-    let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
-
-    let expand_key = CrtGlweExpandCoeffKey::new(
-        &glev_params,
-        glwe_params.encryption_parameters(),
-        &table,
-        &sk,
-        &dcrt_sk,
-        &mut rng,
-    );
-
-    let mut input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
-    let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c_expand: Vec<CrtGlwe<Vec<ValueT>>> = vec![CrtGlwe::zero(rns_glwe_len); n];
-    let mut evaluator = CrtGlweExpandCoeffEvaluator::new(&expand_key, &glev_params, &table);
-    let mut parallel_evaluator =
-        CrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &glev_params, &table, 2);
-    let mut parallel_output = c_expand.clone();
-    // Use a local pool so this small correctness test does not create a worker
-    // per CI core. Parallel evaluations reuse the two preallocated workspaces.
-    let workers = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-    let mut transformed = DcrtGlweCiphertext::<Vec<ValueT>>::zero(rns_glwe_len);
-
-    let dcrt_sk_context = dcrt_sk
-        .try_bind_raw(
-            glwe_params.encryption_parameters(),
-            glwe_params.base_q(),
-            &table,
-        )
-        .unwrap();
-    let bound = support::tree_error_bound(&glev_params, glwe_params.encryption_parameters());
-    dcrt_sk_context.encrypt_encoded_crt_to(
-        &support::unsigned_probe(input1.as_ref(), &glwe_params),
-        &mut c1,
-        &mut rng,
-    );
-
-    // Requires conversion to coefficient domain first.
-    let c1 = c1.into_coeff_form(&table);
-
-    // Full expansion rejects even a valid partial count; partial expansion
-    // rejects zero, non-powers of two and powers of two above N.
-    // Dirty sentinels must survive every rejection before either kernel writes.
-    for full in [true, false] {
-        let invalid_counts = if full {
-            [0, n / 2, n + 1]
-        } else {
-            [0, 3, 2 * n]
-        };
-        for count in invalid_counts {
-            let mut rejected = vec![CrtGlwe::new(vec![1; rns_glwe_len]); count];
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if full {
-                        evaluator.expand_coefficients_to(&c1, &mut rejected);
-                    } else {
-                        evaluator.expand_partial_coefficients_to(&c1, &mut rejected);
-                    }
-                }))
-                .is_err()
-            );
-            assert!(
-                rejected
-                    .iter()
-                    .all(|cipher| cipher.as_ref().iter().all(|&v| v == 1))
-            );
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if full {
-                        parallel_evaluator.expand_coefficients_to(&c1, &mut rejected);
-                    } else {
-                        parallel_evaluator.expand_partial_coefficients_to(&c1, &mut rejected);
-                    }
-                }))
-                .is_err()
-            );
-            assert!(
-                rejected
-                    .iter()
-                    .all(|cipher| cipher.as_ref().iter().all(|&v| v == 1))
-            );
-        }
-    }
-
-    evaluator.expand_coefficients_to(&c1, &mut c_expand);
-    workers.install(|| {
-        parallel_evaluator.expand_coefficients_to(&c1, &mut parallel_output);
-    });
-    for (sequential, parallel) in c_expand.iter().zip(&parallel_output) {
-        assert_eq!(sequential.as_ref(), parallel.as_ref());
-    }
-
-    // N is also a valid partial count. Both entry points must use the same
-    // normalization and overwrite dirty outputs with identical ciphertexts.
-    let full_output = c_expand.clone();
-    evaluator.expand_partial_coefficients_to(&c1, &mut c_expand);
-    workers.install(|| {
-        parallel_evaluator.expand_partial_coefficients_to(&c1, &mut parallel_output);
-    });
-    for ((sequential, parallel), full) in c_expand.iter().zip(&parallel_output).zip(&full_output) {
-        assert_eq!(sequential.as_ref(), full.as_ref());
-        assert_eq!(parallel.as_ref(), full.as_ref());
-    }
-
-    // Each output phase approximates (m_i, 0, …, 0)
-    for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-        cipher.write_ntt_form(&mut transformed, &table);
-        support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, &transformed, input, bound);
-    }
-
-    // Wraps back to DCRT domain, zeros out high coefficients, re-encrypts.
-    let mut c1 = DcrtGlweCiphertext::new(c1.0);
-
-    // This case has zero omitted coefficients; the nonzero-tail case is below. Reuse dirty
-    // output buffers and both workspaces from the full expansion.
-    for retained in [n / 2, 1] {
-        input1[retained..].fill(0);
-
-        dcrt_sk_context.encrypt_encoded_crt_to(
-            &support::unsigned_probe(input1.as_ref(), &glwe_params),
-            &mut c1,
-            &mut rng,
-        );
-
-        let crt_input = c1.clone().into_coeff_form(&table);
-
-        c_expand.truncate(retained);
-        parallel_output.truncate(retained);
-
-        evaluator.expand_partial_coefficients_to(&crt_input, &mut c_expand);
-        workers.install(|| {
-            parallel_evaluator.expand_partial_coefficients_to(&crt_input, &mut parallel_output);
-        });
-        for (sequential, parallel) in c_expand.iter().zip(&parallel_output) {
-            assert_eq!(sequential.as_ref(), parallel.as_ref());
-        }
-
-        for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-            cipher.write_ntt_form(&mut transformed, &table);
-            support::assert_scalar_probe(
-                &dcrt_sk,
-                &glwe_params,
-                &table,
-                &transformed,
-                input,
-                bound,
-            );
+fn check_expansion_counts<C: AsRef<[u64]>>(
+    n: usize,
+    leaf: impl Fn() -> C,
+    mut serial: impl FnMut(bool, &mut [C]),
+    mut parallel: impl FnMut(bool, &mut [C]),
+) {
+    // Full rejects a valid partial count. Partial rejects empty, irregular
+    // and oversized counts. The parallel entry points each get a witness.
+    for (full, count) in [
+        (true, n / 2),
+        (true, n + 1),
+        (false, 0),
+        (false, 3),
+        (false, 2 * n),
+    ] {
+        let mut output: Vec<_> = (0..count).map(|_| leaf()).collect();
+        assert_rejected_outputs(&mut output, |output| serial(full, output));
+        if count == n / 2 || count == 3 {
+            assert_rejected_outputs(&mut output, |output| parallel(full, output));
         }
     }
 }
 
-/// Test coefficient expansion in the NTT (DCRT) domain.
-///
-/// Same as [`crt_expansion_matches_parallel_and_plaintext`] but the ciphertext stays
-/// in the NTT domain — no conversion to coefficient form required.
 #[test]
-fn dcrt_expansion_matches_parallel_and_plaintext() {
-    type ValueT = u64;
-
-    let dimension = 2;
-    let poly_length = PolyLength::new(32);
-    let n = poly_length.get();
-
-    let t: ValueT = 12289;
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
+fn crt_and_dcrt_full_and_partial_expansion_match_parallel_and_plaintext() {
+    let parameters = support::probe_parameters(2);
+    let n = parameters.poly_length().get();
+    let len = parameters.rns_glwe_len();
+    let table = UintDcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
+    let sampling = parameters.encryption_parameters();
     let mut rng = StdRng::seed_from_u64(42);
-
-    let glwe_params = support::RawParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    );
-
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-
-    let sk = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
+    let secret = GlweSecretKey::generate(
+        parameters.glwe_size(),
+        parameters.secret_key_sampler(),
         &mut rng,
     );
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let context = key
+        .try_bind_raw(sampling, parameters.base_q(), &table)
+        .unwrap();
 
-    let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
-
-    let expand_key = DcrtGlweExpandCoeffKey::new(
-        &glev_params,
-        glwe_params.encryption_parameters(),
-        &table,
-        &dcrt_sk,
-        &mut rng,
-    );
-
-    let mut input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
-    let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c_expand: Vec<DcrtGlweCiphertext<Vec<ValueT>>> =
-        vec![DcrtGlweCiphertext::zero(rns_glwe_len); n];
-    let mut evaluator = DcrtGlweExpandCoeffEvaluator::new(&expand_key, &glev_params, &table);
-    let mut parallel_evaluator =
-        DcrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &glev_params, &table, 2);
-    let mut parallel_output = c_expand.clone();
-    // Use a local pool so this small correctness test does not create a worker
-    // per CI core. Parallel evaluations reuse the two preallocated workspaces.
+    let crt_key = CrtGlweExpandCoeffKey::new(&gadget, sampling, &table, &secret, &key, &mut rng);
+    let dcrt_key = DcrtGlweExpandCoeffKey::new(&gadget, sampling, &table, &key, &mut rng);
+    let mut crt = CrtGlweExpandCoeffEvaluator::new(&crt_key, &gadget, &table);
+    let mut dcrt = DcrtGlweExpandCoeffEvaluator::new(&dcrt_key, &gadget, &table);
+    let mut crt_parallel = CrtGlweExpandCoeffParallelEvaluator::new(&crt_key, &gadget, &table, 2);
+    let mut dcrt_parallel =
+        DcrtGlweExpandCoeffParallelEvaluator::new(&dcrt_key, &gadget, &table, 2);
     let workers = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
         .build()
         .unwrap();
 
-    let dcrt_sk_context = dcrt_sk
-        .try_bind_raw(
-            glwe_params.encryption_parameters(),
-            glwe_params.base_q(),
-            &table,
-        )
-        .unwrap();
-    let bound = support::tree_error_bound(&glev_params, glwe_params.encryption_parameters());
-    dcrt_sk_context.encrypt_encoded_crt_to(
-        &support::unsigned_probe(input1.as_ref(), &glwe_params),
-        &mut c1,
-        &mut rng,
-    );
-
-    // Full expansion rejects even a valid partial count; partial expansion
-    // rejects zero, non-powers of two and powers of two above N.
-    // Dirty sentinels must survive every rejection before either kernel writes.
-    for full in [true, false] {
-        let invalid_counts = if full {
-            [0, n / 2, n + 1]
-        } else {
-            [0, 3, 2 * n]
-        };
-        for count in invalid_counts {
-            let mut rejected = vec![DcrtGlweCiphertext::new(vec![1; rns_glwe_len]); count];
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if full {
-                        evaluator.expand_coefficients_to(&c1, &mut rejected);
-                    } else {
-                        evaluator.expand_partial_coefficients_to(&c1, &mut rejected);
-                    }
-                }))
-                .is_err()
-            );
-            assert!(
-                rejected
-                    .iter()
-                    .all(|cipher| cipher.as_ref().iter().all(|&v| v == 1))
-            );
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if full {
-                        parallel_evaluator.expand_coefficients_to(&c1, &mut rejected);
-                    } else {
-                        parallel_evaluator.expand_partial_coefficients_to(&c1, &mut rejected);
-                    }
-                }))
-                .is_err()
-            );
-            assert!(
-                rejected
-                    .iter()
-                    .all(|cipher| cipher.as_ref().iter().all(|&v| v == 1))
-            );
-        }
-    }
-
-    evaluator.expand_coefficients_to(&c1, &mut c_expand);
-    workers.install(|| {
-        parallel_evaluator.expand_coefficients_to(&c1, &mut parallel_output);
-    });
-    for (sequential, parallel) in c_expand.iter().zip(&parallel_output) {
-        assert_eq!(sequential.as_ref(), parallel.as_ref());
-    }
-
-    // N is also a valid partial count. Both entry points must use the same
-    // normalization and overwrite dirty outputs with identical ciphertexts.
-    let full_output = c_expand.clone();
-    evaluator.expand_partial_coefficients_to(&c1, &mut c_expand);
-    workers.install(|| {
-        parallel_evaluator.expand_partial_coefficients_to(&c1, &mut parallel_output);
-    });
-    for ((sequential, parallel), full) in c_expand.iter().zip(&parallel_output).zip(&full_output) {
-        assert_eq!(sequential.as_ref(), full.as_ref());
-        assert_eq!(parallel.as_ref(), full.as_ref());
-    }
-
-    // Results are already in NTT domain; inspect their raw phase.
-    for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-        support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, cipher, input, bound);
-    }
-
-    // This case has zero omitted coefficients; the nonzero-tail case is below. Reuse dirty
-    // output buffers and both workspaces from the full expansion.
-    for retained in [n / 2, 1] {
-        input1[retained..].fill(0);
-
-        dcrt_sk_context.encrypt_encoded_crt_to(
-            &support::unsigned_probe(input1.as_ref(), &glwe_params),
-            &mut c1,
+    let mut message: Vec<_> = (1..=n as u64).collect();
+    let mut ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(len);
+    let mut transformed = DcrtGlweCiphertext::<Vec<u64>>::zero(len);
+    let mut crt_output = vec![CrtGlwe::<Vec<u64>>::zero(len); n];
+    let mut crt_other = crt_output.clone();
+    let mut dcrt_output = vec![DcrtGlweCiphertext::<Vec<u64>>::zero(len); n];
+    let mut dcrt_other = dcrt_output.clone();
+    let bound = support::tree_error_bound(&gadget, sampling);
+    for count in [n, n / 2] {
+        // Partial expansion with known zero tail yields constants. The
+        // residue-class oracle below covers nonzero omitted coefficients.
+        message[count..].fill(0);
+        context.encrypt_encoded_crt_to(
+            &support::unsigned_probe(&message, &parameters),
+            &mut ciphertext,
             &mut rng,
         );
-
-        c_expand.truncate(retained);
-        parallel_output.truncate(retained);
-
-        evaluator.expand_partial_coefficients_to(&c1, &mut c_expand);
-        workers.install(|| {
-            parallel_evaluator.expand_partial_coefficients_to(&c1, &mut parallel_output);
-        });
-        for (sequential, parallel) in c_expand.iter().zip(&parallel_output) {
-            assert_eq!(sequential.as_ref(), parallel.as_ref());
+        let coefficients = ciphertext.clone().into_coeff_form(&table);
+        let crt_output = &mut crt_output[..count];
+        let crt_other = &mut crt_other[..count];
+        let dcrt_output = &mut dcrt_output[..count];
+        let dcrt_other = &mut dcrt_other[..count];
+        if count == n {
+            crt.expand_coefficients_to(&coefficients, crt_output);
+            dcrt.expand_coefficients_to(&ciphertext, dcrt_output);
+            workers.install(|| {
+                crt_parallel.expand_coefficients_to(&coefficients, crt_other);
+                dcrt_parallel.expand_coefficients_to(&ciphertext, dcrt_other);
+            });
+        } else {
+            // The destinations and workspaces still hold the full expansion.
+            crt.expand_partial_coefficients_to(&coefficients, crt_output);
+            dcrt.expand_partial_coefficients_to(&ciphertext, dcrt_output);
+            workers.install(|| {
+                crt_parallel.expand_partial_coefficients_to(&coefficients, crt_other);
+                dcrt_parallel.expand_partial_coefficients_to(&ciphertext, dcrt_other);
+            });
         }
-
-        for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-            support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, cipher, input, bound);
+        for ((leaf, parallel), &expected) in crt_output.iter().zip(crt_other).zip(&message) {
+            assert_eq!(leaf.as_ref(), parallel.as_ref());
+            leaf.write_ntt_form(&mut transformed, &table);
+            support::assert_scalar_probe(&key, &parameters, &table, &transformed, expected, bound);
+        }
+        for ((leaf, parallel), &expected) in dcrt_output.iter().zip(dcrt_other).zip(&message) {
+            assert_eq!(leaf.as_ref(), parallel.as_ref());
+            support::assert_scalar_probe(&key, &parameters, &table, leaf, expected, bound);
         }
     }
+
+    let coefficients = ciphertext.clone().into_coeff_form(&table);
+    check_expansion_counts(
+        n,
+        || CrtGlwe::new(vec![1; len]),
+        |full, output| {
+            if full {
+                crt.expand_coefficients_to(&coefficients, output);
+            } else {
+                crt.expand_partial_coefficients_to(&coefficients, output);
+            }
+        },
+        |full, output| {
+            if full {
+                crt_parallel.expand_coefficients_to(&coefficients, output);
+            } else {
+                crt_parallel.expand_partial_coefficients_to(&coefficients, output);
+            }
+        },
+    );
+    check_expansion_counts(
+        n,
+        || DcrtGlweCiphertext::new(vec![1; len]),
+        |full, output| {
+            if full {
+                dcrt.expand_coefficients_to(&ciphertext, output);
+            } else {
+                dcrt.expand_partial_coefficients_to(&ciphertext, output);
+            }
+        },
+        |full, output| {
+            if full {
+                dcrt_parallel.expand_coefficients_to(&ciphertext, output);
+            } else {
+                dcrt_parallel.expand_partial_coefficients_to(&ciphertext, output);
+            }
+        },
+    );
 }
 
 // Count actual transform work to detect padded automorphism evaluation. This
@@ -447,16 +229,9 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
     use primus_ntt::DcrtTable;
     use std::sync::atomic::Ordering;
 
-    let n = PolyLength::new(32);
-    let moduli = [1125899906826241u64, 1125899906629633].map(BarrettModulus::new);
-    let parameters = support::RawParameters::new(
-        GlweDimension::new(2),
-        n,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    );
-    let table = DcrtTable::<CountingNtt>::new(n, &moduli).unwrap();
+    let parameters = support::probe_parameters(2);
+    let n = parameters.poly_length();
+    let table = DcrtTable::<CountingNtt>::new(n, parameters.base_q().moduli()).unwrap();
     let work = || {
         table
             .iter()
@@ -511,10 +286,9 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
     let mut one_auto_work = None;
     let mut one_crt_auto_work = None;
 
-    // Every support size, including 1/3/5/N-1/N; every output has a distinct
-    // known coefficient. The oracle reads the original message, never a decoded
-    // intermediate or another expansion implementation.
-    for count in 1..=n.get() {
+    // Select one irregular support per tree depth and the zero-work, paired
+    // and full boundaries. Read the original message for every phase check.
+    for count in [1, 2, 3, 5, 9, 17, n.get() - 1, n.get()] {
         let mut message = Polynomial::<Vec<u64>>::zero(n.get());
         for (index, coefficient) in message[..count].iter_mut().enumerate() {
             *coefficient = (17 * index + 3) as u64;
@@ -546,9 +320,8 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         for (expected, actual) in output.iter().zip(&other) {
             assert_eq!(expected.as_ref(), actual.as_ref());
         }
-        // Pool capacity does not change the tree mathematics. Keep one-workspace
-        // checks for the zero-work, first irregular and deepest irregular cases;
-        // two-workspace equivalence above still covers every support size.
+        // Check a tighter one-workspace budget at the zero-work, first
+        // irregular and deepest irregular cases.
         if count == 1 || count == 3 || count == n.get() - 1 {
             workers.install(|| {
                 parallel_one.expand_supported_coefficients_to(&ciphertext, &mut other);
@@ -612,31 +385,18 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         for index in 0..count {
             let mut expected = vec![0; n.get()];
             for source in (index..n.get()).step_by(count) {
-                expected[source - index] = message[source];
+                expected[source - index] = i128::from(message[source]);
             }
             support::assert_probe_phase(
                 &key,
                 &parameters,
                 &table,
                 &output[index],
-                &expected
-                    .iter()
-                    .map(|&value| i128::from(value))
-                    .collect::<Vec<_>>(),
+                &expected,
                 bound,
             );
             crt_output[index].write_ntt_form(&mut transformed, &table);
-            support::assert_probe_phase(
-                &key,
-                &parameters,
-                &table,
-                &transformed,
-                &expected
-                    .iter()
-                    .map(|&value| i128::from(value))
-                    .collect::<Vec<_>>(),
-                bound,
-            );
+            support::assert_probe_phase(&key, &parameters, &table, &transformed, &expected, bound);
         }
     }
 

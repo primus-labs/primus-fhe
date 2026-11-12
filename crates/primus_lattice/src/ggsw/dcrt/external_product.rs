@@ -28,8 +28,9 @@ where
     /// and `m = rns_base.moduli_count()`.
     /// The bound size must match `N`, `m`, the GLWE dimension, and
     /// `basis.level_count().get()`; `workspace.is_compatible(size, rns_base)`
-    /// must hold. The table uses the base's modulus order and the gadget
-    /// uses its evaluation order and `basis.decomposer_iter()` level order.
+    /// must hold. The table may contain additional higher limbs when its
+    /// first `m` limbs match the active base's modulus order. The gadget
+    /// uses that prefix's evaluation order and `basis.decomposer_iter()` level order.
     /// CRT/DCRT values must be canonical residues.
     /// Input and output each have `size.rns_glwe_size().rns_glwe_len()`
     /// elements, and the gadget has `size.rns_ggsw_len()` evaluations in
@@ -40,6 +41,7 @@ where
     ///
     /// # Panics
     ///
+    /// Debug builds check the complete input, output and gadget lengths before writes.
     /// Processed CRT polynomial blocks pass through the RNS recomposition
     /// checks described by [`crate::glev::DcrtGlev::mul_crt_polynomial_to`].
     /// A failure can occur after `output` has been cleared or partially updated;
@@ -58,13 +60,18 @@ where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
-        let rns_poly_len = table.rns_poly_len();
-        let dcrt_glev_len = basis.level_count().get() * input.as_ref().len();
+        let size = workspace.size();
+        let glwe_size = size.rns_glwe_size();
+        debug_assert_eq!(input.as_ref().len(), glwe_size.rns_glwe_len());
+        debug_assert_eq!(output.as_ref().len(), glwe_size.rns_glwe_len());
+        debug_assert_eq!(self.as_ref().len(), size.rns_ggsw_len());
 
         output.set_zero();
 
-        self.iter_dcrt_glev(dcrt_glev_len)
-            .zip(input.iter_crt_poly(rns_poly_len))
+        // Ciphertext storage follows the active base even when the table
+        // also contains higher limbs.
+        self.iter_dcrt_glev(size.rns_glev_len())
+            .zip(input.iter_crt_poly(glwe_size.rns_poly_len()))
             .for_each(|(dcrt_glev, crt_poly)| {
                 output.add_dcrt_glev_mul_crt_polynomial_assign(
                     &dcrt_glev, &crt_poly, basis, table, rns_base, workspace,

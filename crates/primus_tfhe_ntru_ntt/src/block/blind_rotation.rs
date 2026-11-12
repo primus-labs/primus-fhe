@@ -11,7 +11,7 @@ use primus_ntt::MonomialNttTable;
 use super::BlockNtruBootstrappingKey;
 use crate::{
     bootstrap::BlindRotationPairWorkspace,
-    sparse::{AggregationWorkspace, rotate_groups, rotate_groups_pair},
+    grouped_rotation::{AggregationWorkspace, rotate_groups, rotate_groups_pair},
 };
 
 /// Consumes every block, including empty blocks and zero exponents. `scratch`
@@ -40,9 +40,9 @@ pub(crate) fn rotate_blocks<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     );
 }
 
-/// Visits each contiguous block for both inputs without bucket maps or replicated
-/// controls. Both current buffers hold the public LUT rotation on entry, so the
-/// entire first block must be consumed for both NLEV lifts, including empty blocks.
+/// Visits each contiguous block once for both inputs. Both current buffers
+/// hold the rotated public LUT on entry. The entire first block is consumed
+/// for both NLEV lifts, including an empty block.
 /// The owning evaluator established key, exponent and workspace compatibility.
 pub(crate) fn rotate_blocks_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     key: &BlockNtruBootstrappingKey<T>,

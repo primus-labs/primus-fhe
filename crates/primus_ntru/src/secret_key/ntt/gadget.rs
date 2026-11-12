@@ -215,7 +215,7 @@ impl<T: FheUint> NttNtruSecretKey<T> {
     /// Adds the scaled message in NTT form after encrypting zero, giving NGSW phase
     /// `f * g_l * message + e_l`. The caller validates complete operands,
     /// the key/parameter/table domain and polynomial scratch.
-    fn encrypt_ngsw_kernel_to<M, Table, R>(
+    pub(crate) fn encrypt_ngsw_kernel_to<M, Table, R>(
         &self,
         message: Polynomial<&[T]>,
         mut result: NttNgswCiphertext<&mut [T]>,

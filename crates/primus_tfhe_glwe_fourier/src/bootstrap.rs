@@ -16,7 +16,6 @@ use crate::{
     block::{BlockGlweBlindRotationWorkspace, BlockGlweBootstrappingKey},
     bootstrapping_key::FourierGlweBootstrappingKey,
     key::BlindRotationKey,
-    sparse::{SparseGlweBlindRotationWorkspace, SparseGlweBootstrappingKey},
 };
 
 /// Borrowed ring key-switch key with owned scratch and switched output.
@@ -80,10 +79,6 @@ enum BlindRotationResources<'a, T: TorusFftValue> {
     Classic {
         key: &'a FourierGlweBootstrappingKey<T>,
         scratch: FourierGlweBlindRotationWorkspace<T>,
-    },
-    Sparse {
-        key: &'a SparseGlweBootstrappingKey<T, NativeModulus<T>>,
-        scratch: SparseGlweBlindRotationWorkspace<T>,
     },
     Block {
         key: &'a BlockGlweBootstrappingKey<T, NativeModulus<T>>,
@@ -182,10 +177,6 @@ where
                     key,
                     scratch: FourierGlweBlindRotationWorkspace::new(key),
                 },
-                BlindRotationKey::Sparse(key) => BlindRotationResources::Sparse {
-                    key,
-                    scratch: SparseGlweBlindRotationWorkspace::new(key.controls()),
-                },
                 BlindRotationKey::Block(key) => BlindRotationResources::Block {
                     key,
                     scratch: BlockGlweBlindRotationWorkspace::new(key),
@@ -245,9 +236,6 @@ where
             BlindRotationResources::Classic { scratch, .. } => {
                 scratch.with_external_product(size, operation)
             }
-            BlindRotationResources::Sparse { scratch, .. } => {
-                scratch.with_external_product(size, operation)
-            }
             BlindRotationResources::Block { scratch, .. } => {
                 scratch.with_external_product(size, operation)
             }
@@ -298,15 +286,6 @@ where
                     self.accumulator.as_mut_view(),
                     &mut self.fft,
                     scratch,
-                ),
-            BlindRotationResources::Sparse { key, scratch } => scratch
-                .blind_rotate_interleaved_lookup_table_kernel_to(
-                    key,
-                    small_lwe,
-                    lookup_table.as_view(),
-                    &modulus_switch,
-                    self.accumulator.as_mut_view(),
-                    &mut self.fft,
                 ),
             BlindRotationResources::Block { key, scratch } => scratch
                 .blind_rotate_interleaved_lookup_table_kernel_to(

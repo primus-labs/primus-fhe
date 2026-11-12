@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-NTRU-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation (Block requires u64). External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
+NTRU-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary and direct block-binary blind rotation (Block requires u64). External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
 
 ## Quick start
 
@@ -32,18 +32,16 @@ Start with an operation config from [experimental](src/experimental.rs). `PbsCon
 
 ## Operation examples
 
-All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow; high-precision lookup runs from the separate `primus_high_prec_lut` repository root.
+All examples use u64 and prepare reusable state outside the request loop. Replace the example name in the quick-start command to run another local workflow.
 
 | Workflow | Config in `experimental` | Complete example |
 | --- | --- | --- |
 | Two successive PBS calls | `CLASSIC_PBS_U64` | [ntru_fourier_basic](examples/ntru_fourier_basic.rs) |
 | `admin OR (member AND NOT revoked)` | `CLASSIC_PBS_U64`, messages 4→4 | [ntru_fourier_boolean](examples/ntru_fourier_boolean.rs) |
-| The same scoring workflow with sparse BR | `SPARSE_PBS_U64` | [ntru_fourier_sparse](examples/ntru_fourier_sparse.rs) |
 | ManyLUT grade/flag, then encrypted combination | `CLASSIC_MANY_LUT_U64` | [ntru_fourier_many_lut](examples/ntru_fourier_many_lut.rs) |
 | CBS predicate → CMux → ring addition → LWE | `CLASSIC_CBS_U64` | [ntru_fourier_circuit_bootstrap](examples/ntru_fourier_circuit_bootstrap.rs) |
 | 17 numeric threshold flags from one input | `CLASSIC_THRESHOLD_MVB_U64` | [ntru_fourier_mvb_thresholds](examples/ntru_fourier_mvb_thresholds.rs) |
 | Split one-hot CBS → four-way record selection | `CLASSIC_ONE_HOT_U64` + split40 / `PairedTrace` | [ntru_fourier_one_hot](examples/ntru_fourier_one_hot.rs) |
-| High-precision integer lookup | Separate LUT repository's `FOURIER_LOW_PREC_C4_O4_DFR128_LOOKUP_U64` | [fourier_lookup](../../../primus_high_prec_lut/examples/fourier_lookup.rs) |
 
 Ordinary PBS/ManyLUT and MVB use `context.try_generate_keys(rng)`. Bind `client.external_lwe_secret_key()` to `context.encryptor`; use `pbs_decryptor` for Rounded PBS/ManyLUT output and `mvb_decryptor` for Scaled MVB output. Public-key input uses `public_encryptor`. Clients receive no LUT or manual codec.
 
@@ -57,7 +55,7 @@ PBS evaluates under ring secret f at Q, then performs coefficient-wise nearest Q
 
 Ring Q supports `NativeModulus<T>` only; `PowOf2Modulus` rings are unsupported, although external LWE q may independently use `PowOf2Modulus`. Both `RustFftTable` and `TfheFftTable` support u32/u64. Transformed keys, values and evaluators must use the **same FFT table instance**; equal length does not establish representation identity.
 
-Classic, public lift and CBS build native modular coefficient rows before Fourier conversion. Sparse and block controls are retained in coefficient form. Ordinary classic and sparse support u32/u64. Split precision and direct block BR require u64. Use `TfheContext::try_from_parameters` to bind already prepared PBS parameters with word-size validation.
+Classic, public lift and CBS build native modular coefficient rows before Fourier conversion. Block controls are retained in coefficient form. Ordinary classic supports u32/u64, including fixed-weight binary secrets. Split precision and direct block BR require u64. Use `TfheContext::try_from_parameters` to bind already prepared PBS parameters with word-size validation.
 
 When migrating from the former unreduced complex generation, regenerate affected ciphertexts and evaluation keys. If affected material was disclosed, replace the associated ring secrets and any external LWE secrets protected by the affected BR material. Re-evaluate the numerical budget for existing parameter sets.
 
@@ -81,27 +79,11 @@ The CBS example transfers its buffers with `cbs.into_parts()` and `Evaluator::tr
 
 CBS/one-hot operations and prepared MVB tables require their original context binding, even when another context has equal numerical parameters. For serial reuse, CBS/one-hot operations borrow `BootstrapResources` when executed. To recover ordinary PBS through `Evaluator::try_from_resources`, pass the original context and `server.server_key()`.
 
-## Sparse blind rotation
-
-Select `BlindRotationMethod::Sparse` in `config.method` (or `config.pbs.method` for CBS). It requires a fixed-weight binary external secret with `0<h<n`, `copy_count>=1` and `bucket_count>=max(copy_count,h)`. Changing the secret distribution alone does not select sparse; classic also supports fixed-weight secrets.
-
-PBS, ManyLUT, MVB, CBS and one-hot support this mode. For sparse CBS/one-hot, start from `CLASSIC_ONE_HOT_U64`, whose external secret is n800/h32 fixed-weight binary. The dense `CLASSIC_CBS_U64` cannot become sparse by changing only its algorithm:
-
-```rust,ignore
-use primus_tfhe_ntru_fourier::BlindRotationMethod;
-
-let mut config = experimental::CLASSIC_ONE_HOT_U64;
-config.pbs.method = BlindRotationMethod::Sparse { copy_count: 3, bucket_count: 64 };
-let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
-```
-
-Generate the complete CBS bundle through `try_generate_circuit_bootstrap_keys` and use the same CBS/one-hot evaluator factories. A working PBS configuration alone does not establish CBS output precision or CMux noise margin.
-
 ## Block blind rotation
 
 Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size, occupancy }` (under `config.pbs` for CBS). Use u64 and a logical dimension divisible by that positive block width; `AtMostOne` allows empty blocks and adds a dummy, while `ExactlyOne` has one `1` per block with no dummy. The exact native generator writes every bit control and any required dummy directly in coefficient form: first-block NLEV lifts the public LUT, later NGSW rotates the ciphertext. Native aggregation is exact modulo 2^64. With split BR, the canonical aggregate is split and transformed once per block; negacyclic signs and carries are resolved before splitting. Ordinary and split external products each require a numerical error budget. PBS, ManyLUT, MVB, CBS and single-input one-hot use the existing factories and workspace.
 
-Select BR precision through `CbsConfig.fourier_precision.blind_rotation`; PBS-only contexts use ordinary BR. Trace and SS precision remain independent, including split trace/SS with the supported projection strategies. Only the selected aggregate spectra are allocated; split conversion reuses product scratch. Standalone high-precision LUT integration is separate. Context construction rejects u32 Block before preparing the transform table. One-hot `new_pair_workspace` / `with_pair` support Sparse and Block, including split Block BR; classic resources return no pair workspace. Defaults and presets are unchanged; block security and complete DFR are unassessed.
+Select BR precision through `CbsConfig.fourier_precision.blind_rotation`; PBS-only contexts use ordinary BR. Trace and SS precision remain independent, including split trace/SS with the supported projection strategies. Only the selected aggregate spectra are allocated; split conversion reuses product scratch. Context construction rejects u32 Block before preparing the transform table. One-hot `new_pair_workspace` and `with_pair` support ordinary and split Block BR. Block security and complete DFR are unassessed.
 
 ## One-hot CBS
 
@@ -122,12 +104,6 @@ one_hot.cmux_k_to(
 The fused operation computes `C0 + sum_r delta_r*(Cr-C0)` with one inverse transform. Controls must encrypt mutually exclusive bits with the bound basis, secret and transform representation; candidates must share f, Q and encoding. Budget the sum of all external-product errors, not serial CMux estimates. Fourier rounding occurs after the sum, so ciphertext coefficients need not match a sequence of CMux calls. The [one-hot evaluator contract](src/circuit_bootstrap/one_hot_workflow.rs) specifies layouts and write/error behavior.
 
 Candidates in the example use independent Scaled t_ring=8 and occupy ring coefficients, not SIMD slots. NLev output is coefficient-domain at Q and needs `write_fourier_form` before public-polynomial lifting; NGSW output is already in Fourier representation. Single-control `cmux_to` and `external_product_to` remain available for other consumers.
-
-## High-precision lookup
-
-Use the separate repository’s [primus_tfhe_ntru_lut](../../../primus_high_prec_lut/README.md) for uniform-width input/output chunks with independent counts. Its `FourierHighPrecLutContext` prepares integer clients, complete keys and evaluation; callers do not assemble lifting or return workspaces. The [fourier_lookup example](../../../primus_high_prec_lut/examples/fourier_lookup.rs) evaluates a piecewise fee from 16 input bits to 16 output bits.
-
-The LUT workflow combines one-hot CBS, a fixed complete selection tree, aggregated negative rotations and independent LWE return. Recommended configs use classic BR; sparse is supported when explicitly selected. Geometry, public-table costs and numerical limits belong to the LUT crate.
 
 ## Features
 
@@ -150,13 +126,13 @@ cargo bench -p primus_tfhe_ntru_fourier --bench pbs
 
 | Target | Timed request |
 | --- | --- |
-| [pbs](benches/pbs.rs) | One complete PBS; dense u32/u64 and fixed-weight classic/sparse u64 |
+| [pbs](benches/pbs.rs) | One complete dense Classic PBS, u32/u64 |
 | [many_lut](benches/many_lut.rs) | One two-output grade/flag ManyLUT, u64 |
 | [mvb](benches/mvb.rs) | One 17-output threshold MVB, u64 |
 | [cbs](benches/cbs.rs) | One predicate CBS, CMux and a coefficient returned as LWE, u64 |
 | [one_hot](benches/one_hot.rs) | Three nonzero selectors plus four-way `cmux_k_to`, u64 |
 
-Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. ManyLUT/CBS benchmarks exclude the examples' subsequent ciphertext arithmetic. Only the fixed-weight classic/sparse PBS pair changes the BR algorithm alone; dense cases use different parameters. See the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
+Each iteration measures one server request with prebuilt keys, LUTs and buffers; setup and decryption checks are untimed. ManyLUT/CBS benchmarks exclude the examples' subsequent ciphertext arithmetic. See the [benchmark guide](../../guides/development/testing.md#tfhe-benchmarks).
 
 Measure TFHE-FFT alone with:
 
@@ -192,10 +168,10 @@ let config = CbsConfig {
 Pass this config to `TfheContext::try_from_cbs_config`, then use the same key and
 evaluator factories. Callers do not provide limb buffers or scratch. For a
 trace-only split experiment, keep `Separate` and set only
-`config.fourier_precision.trace`. Lookup uses `HighPrecLutConfig.one_hot`.
+`config.fourier_precision.trace`.
 
 Split requires native u64; split BR supports classic binary and block binary.
-Ordinary binary/ternary/sparse BR, and u64 Block BR, may accompany split trace or SS.
+Ordinary Classic and Block BR may accompany split trace or SS.
 `FusedLastStage` and `PairedTrace` both require split trace and SS, whose widths
 may differ. These strategies fuse only NGSW output; NLEV/dual retain separate
 trace/SS at the configured precision. SS outputs ordinary Fourier controls for

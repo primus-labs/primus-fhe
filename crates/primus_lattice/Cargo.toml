@@ -59,35 +59,14 @@ name = "extraction"
 harness = false
 
 [[bench]]
-name = "rns_glev"
-harness = false
-required-features = ["rns"]
-
-[[bench]]
-name = "rns_ggsw"
+name = "rns_gadget"
 harness = false
 required-features = ["rns"]
 
 # Targets declare the representations and concrete FFT engines they exercise.
 [[test]]
-name = "cmux_k"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
-name = "external_product"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
-name = "external_product_sum"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
 name = "fourier"
 required-features = ["rustfft", "tfhe-fft"]
-
-[[test]]
-name = "ternary_cmux"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "polynomial_products"

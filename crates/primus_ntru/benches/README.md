@@ -19,6 +19,8 @@ Key/table setup and buffer allocation stay outside timing. Encryption includes s
 
 Phase extraction does not include decoding. Trace and reverse trace have different output scales. `lwe_return` excludes blind rotation; its inputs are canonical coefficient polynomials. `ternary_cmux` compares the complete rotation in each path; Fourier results can have different rounding errors.
 
+`primitives` measures every operation at N=4096 and log₂ B=3 across NTT and both Fourier engines. Key switching, reverse trace and scheme switching also run at N=1024 with log₂ B=3 and at N=4096 with log₂ B=10. For each size and backend, the scheme-switch cases share one input NLev with a fixed output basis.
+
 ## Run
 
 ```sh

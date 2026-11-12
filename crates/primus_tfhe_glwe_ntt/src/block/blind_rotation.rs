@@ -11,9 +11,8 @@ use primus_ntt::NttTable;
 use primus_poly::Polynomial;
 use primus_tfhe::rotation::RotationModulusSwitch;
 
-use crate::sparse::{
-    ControlAggregationWorkspace, aggregation::aggregate_controls_assign,
-    blind_rotate_groups_batch_kernel,
+use super::aggregation::{
+    ControlAggregationWorkspace, aggregate_controls_assign, blind_rotate_groups_batch_kernel,
 };
 
 use super::BlockGlweBootstrappingKey;
@@ -22,8 +21,7 @@ use super::BlockGlweBootstrappingKey;
 ///
 /// Stores n public input exponents, one aggregate, GLWE output scratch and the
 /// existing external-product workspace. Multi-tile u64 layouts cache at most
-/// floor(w/4) rotation descriptors for the current block of width w. No bucket
-/// map, secret support, repeated controls or online allocation is needed.
+/// floor(w/4) rotation descriptors for the current block of width w.
 pub struct BlockGlweBlindRotationWorkspace<T: FheUint> {
     inner: ControlAggregationWorkspace<T>,
 }

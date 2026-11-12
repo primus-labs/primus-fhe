@@ -1,6 +1,5 @@
 // cargo bench -p primus_integer --bench word_ops
-
-mod support;
+// cargo +nightly bench -p primus_integer --bench word_ops --features simd
 
 use core::hint::black_box;
 
@@ -11,9 +10,7 @@ use criterion::{
 use primus_integer::{CarryingMul, UnsignedInteger, WideningMul};
 #[cfg(feature = "simd")]
 use primus_integer::{SimdArray, SimdUnsignedInteger};
-use rand::{Fill, SeedableRng, rngs::StdRng};
-
-use support::{RNG_SEED, random_values};
+use rand::{Fill, RngExt, SeedableRng, rngs::StdRng};
 
 const BATCH_LEN: usize = 8192;
 
@@ -24,24 +21,20 @@ struct WordInputs<T> {
     add: Vec<T>,
 }
 
-impl<T> WordInputs<T> {
-    fn assert_batch_len(&self) {
-        assert_eq!(self.lhs.len(), BATCH_LEN);
-        assert_eq!(self.rhs.len(), BATCH_LEN);
-        assert_eq!(self.carry.len(), BATCH_LEN);
-        assert_eq!(self.add.len(), BATCH_LEN);
-    }
-}
-
 fn word_inputs<T>(rng: &mut StdRng) -> WordInputs<T>
 where
     T: UnsignedInteger + Fill,
 {
+    let mut fill_words = || {
+        let mut values = vec![T::ZERO; BATCH_LEN];
+        rng.fill(values.as_mut_slice());
+        values
+    };
     WordInputs {
-        lhs: random_values(rng, BATCH_LEN),
-        rhs: random_values(rng, BATCH_LEN),
-        carry: random_values(rng, BATCH_LEN),
-        add: random_values(rng, BATCH_LEN),
+        lhs: fill_words(),
+        rhs: fill_words(),
+        carry: fill_words(),
+        add: fill_words(),
     }
 }
 
@@ -138,8 +131,6 @@ fn bench_simd_word_ops<T>(
 ) where
     T: SimdUnsignedInteger,
 {
-    assert_eq!(BATCH_LEN % T::LANE_COUNT, 0);
-
     let (lhs, lhs_tail) = T::simd_as_chunks(inputs.lhs.as_slice());
     let (rhs, rhs_tail) = T::simd_as_chunks(inputs.rhs.as_slice());
     let (carry, carry_tail) = T::simd_as_chunks(inputs.carry.as_slice());
@@ -248,13 +239,11 @@ fn bench_simd_word_ops<T>(
 }
 
 fn bench_word_ops(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(RNG_SEED);
+    let mut rng = StdRng::seed_from_u64(0x696e_7465_6765_725f);
     // Full-width values make high halves and carry outputs common, as they are
     // in Barrett/Shoup reduction and CRT accumulation.
     let u32_inputs = word_inputs::<u32>(&mut rng);
     let u64_inputs = word_inputs::<u64>(&mut rng);
-    u32_inputs.assert_batch_len();
-    u64_inputs.assert_batch_len();
 
     let mut group = c.benchmark_group("word_ops");
     group.throughput(Throughput::Elements(BATCH_LEN as u64));

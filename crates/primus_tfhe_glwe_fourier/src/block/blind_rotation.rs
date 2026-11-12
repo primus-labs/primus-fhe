@@ -8,15 +8,15 @@ use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use primus_tfhe::rotation::RotationModulusSwitch;
 
-use crate::sparse::{ControlAggregationWorkspace, aggregate_controls_assign};
-
-use super::BlockGlweBootstrappingKey;
+use super::{
+    BlockGlweBootstrappingKey,
+    aggregation::{ControlAggregationWorkspace, aggregate_controls_assign},
+};
 
 /// Reusable single-input workspace for native-torus block-binary blind rotation.
 ///
 /// Owns n public input exponents, coefficient and Fourier aggregates, one GLWE
-/// buffer and the existing external-product scratch. Contiguous blocks need no
-/// bucket map, secret support, repeated controls or online allocation.
+/// buffer and external-product scratch. All storage is allocated at construction.
 pub struct BlockGlweBlindRotationWorkspace<T: TorusFftValue> {
     inner: ControlAggregationWorkspace<T>,
 }

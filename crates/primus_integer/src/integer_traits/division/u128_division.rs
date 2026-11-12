@@ -163,7 +163,7 @@ fn udiv256_by_128_to_128(u1: u128, u0: u128, mut v: NonZeroU128, r: &mut u128) -
         un128 = (u1 << s) | (u0 >> (N_UDWORD_BITS - s));
         un10 = u0 << s;
     } else {
-        // Avoid undefined behavior of (u0 >> 128).
+        // The divisor is already normalized. The dividend limbs need no shift.
         un128 = u1;
         un10 = u0;
     }

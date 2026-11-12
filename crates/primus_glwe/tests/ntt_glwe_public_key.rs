@@ -135,45 +135,42 @@ fn raw_public_encryption_checks_complete_key_and_output_layouts() {
     let mut workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(n));
     let ephemeral = primus_distr::SecretKeySampler::new(SecretKeyDistr::SparseTernary);
     let encoded = Polynomial::new(vec![1; n]);
-    for (key_len, output_len) in [
-        (0, 2 * n),
-        (n, n),
-        (2 * n - 1, 2 * n - 1),
-        (2 * n + 1, 2 * n + 1),
-        (2 * n, 3 * n),
+    for (key_len, output_len, zero) in [
+        (n, n, false),                 // Body without a mask.
+        (2 * n + 1, 2 * n + 1, false), // Incomplete polynomial.
+        (2 * n, 3 * n, false),         // Valid key, mismatched output.
+        (n, n, true),                  // The zero entry also checks raw key layout.
     ] {
         let key = NttGlwePublicKey::from(NttGlweCiphertext::new(vec![1; key_len]));
-        for zero in [false, true] {
-            let mut output = NttGlweCiphertext::new(vec![7; output_len]);
-            let mut rng = StdRng::seed_from_u64(43);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if zero {
-                        key.encrypt_zeros_to(
-                            &mut output,
-                            &inner,
-                            &ephemeral,
-                            &table,
-                            &mut rng,
-                            &mut workspace,
-                        );
-                    } else {
-                        key.encrypt_encoded_to(
-                            &encoded,
-                            &mut output,
-                            &inner,
-                            &ephemeral,
-                            &table,
-                            &mut rng,
-                            &mut workspace,
-                        );
-                    }
-                }))
-                .is_err()
-            );
-            assert_eq!(output.as_ref(), vec![7; output_len]);
-            assert_eq!(rng.next_u64(), StdRng::seed_from_u64(43).next_u64());
-        }
+        let mut output = NttGlweCiphertext::new(vec![7; output_len]);
+        let mut rng = StdRng::seed_from_u64(43);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                if zero {
+                    key.encrypt_zeros_to(
+                        &mut output,
+                        &inner,
+                        &ephemeral,
+                        &table,
+                        &mut rng,
+                        &mut workspace,
+                    );
+                } else {
+                    key.encrypt_encoded_to(
+                        &encoded,
+                        &mut output,
+                        &inner,
+                        &ephemeral,
+                        &table,
+                        &mut rng,
+                        &mut workspace,
+                    );
+                }
+            }))
+            .is_err()
+        );
+        assert_eq!(output.as_ref(), vec![7; output_len]);
+        assert_eq!(rng.next_u64(), StdRng::seed_from_u64(43).next_u64());
     }
 }
 

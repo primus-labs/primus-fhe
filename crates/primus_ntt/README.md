@@ -23,6 +23,8 @@ Transforms run in place without per-call scratch allocation. Construct and reuse
 
 ## Example
 
+Add `primus_ntt`, `primus_modulus` and `primus_shape` as direct dependencies. This example uses the default features.
+
 ```rust
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttTable, U32NttTable};
@@ -57,7 +59,7 @@ Every single-modulus input or output slice must contain exactly `table.poly_leng
 | `lazy_transform_slice` | `[0, 4q)` | `[0, 4q)` |
 | `lazy_inverse_transform_slice` | `[0, 2q)` | `[0, 2q)` |
 
-Lazy values represent residues modulo `q`, but their wider integer ranges are part of the calling contract. In particular, a lazy forward result is not automatically a valid lazy-inverse input; normalize it to the inverse method's accepted range first.
+Lazy values represent residues modulo `q`. Bring a lazy forward result into the inverse transform's accepted range before passing it to the lazy inverse.
 
 Transforms operate on mutable slices. When using [`primus_poly`](../primus_poly/README.md) wrappers, borrow their storage for the transform and wrap that same storage in the resulting representation.
 
@@ -92,29 +94,25 @@ This matches `CrtPolynomial` and `DcrtPolynomial` in [`primus_poly`](../primus_p
 
 `DcrtTable` provides full-polynomial forward/inverse transforms and `transform_coeff_one_monomial` for all limbs. Use `iter()` or `ntt_tables()` to access component tables for their lazy and general monomial operations.
 
+For an active modulus prefix, use `transform_prefix_slice` or `inverse_transform_prefix_slice`. Pass complete limbs in the original modulus order. Both methods reject empty, partial-limb and overlong slices before writing, including in release builds.
+
 ## SIMD backends and build target
 
 Default features are empty. Specialized x86-64 tables select available scalar or SIMD kernels at runtime; these kernels do not require the optional `simd` feature. Other architectures use scalar implementations. The `simd` feature enables portable-SIMD support in dependencies and requires nightly Rust.
 
-`parallel` enables bounded scheduling for the checked DCRT prefix forward/inverse
-transforms: each prefix with N≥4096 and at least two limbs uses at most four
-contiguous tasks in the current Rayon pool. Bound the pool's total threads with
-`RAYON_NUM_THREADS` or `ThreadPool::install`; the task cap does not resize it.
-This feature is off by default, leaving that NTT path serial without pool
-initialization. Random sampling is not parallelized.
-Eligible table construction prepares the current pool registry, but does not
-wait for every worker to finish starting. For kernel-only allocation measurements,
-make the configured pool ready first, for example with `ThreadPool::broadcast`;
-the transform itself need not be warmed up.
+`parallel` enables bounded scheduling of eligible DCRT prefix transforms in the
+current Rayon pool. Configure the default pool with
+`RAYON_NUM_THREADS`, or set an explicit pool's size with
+`ThreadPoolBuilder::num_threads` and select it with `ThreadPool::install`.
+The feature is off by default. See the [prefix transform contract](src/dcrt/mod.rs)
+for scheduling conditions.
 
 The repository [build configuration](../../.cargo/config.toml) uses `target-cpu=native`. Override its rustflags when producing portable binaries; runtime dispatch alone does not make a host-targeted build portable.
 
 ## Testing and benchmarks
 
-```text
-cargo test -p primus_ntt
-cargo bench -p primus_ntt --bench bench_ntt
-```
+See the workspace [testing guide](../../guides/development/testing.md) and the
+[`bench_ntt` target](benches/bench_ntt.rs) for commands and measurement boundaries.
 
 ## License
 

@@ -21,7 +21,7 @@
 //!
 //! # Other operations
 //!
-//! [`experimental`] pairs sparse PBS, ManyLUT, MVB and CBS with their teaching
+//! [`experimental`] pairs PBS, ManyLUT, MVB and CBS with their teaching
 //! message domains. Each example prepares its matching config once.
 //!
 //! - [`InterleavedLookupTable`]: several functions of one input using ordinary PBS workspace.
@@ -29,8 +29,6 @@
 //! - [`boolean`]: Boolean clients and gates with plaintext modulus four.
 //! - [`circuit_bootstrap`]: optional trace/scheme-switch material and
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
-//! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
-//!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
 //! - [`block`]: contiguous block-binary controls with independently encrypted
 //!   empty-block dummies, single-input and bounded batch workspaces; choose
 //!   [`BlindRotationMethod::Block`] with a matching secret distribution.
@@ -62,7 +60,7 @@
 //! [`bootstrapping_key`] and [`blind_rotation`] expose raw ring-control operations.
 //! [`Evaluator::try_from_parts`] borrows independent BR and ring KS material.
 //! CBS component binding omits KS for BR→KS, but requires it for KS→BR input preparation.
-//! Both PBS orders support classic binary/ternary, sparse binary and block-binary keys.
+//! Both PBS orders support Classic binary/ternary and Block binary keys.
 //! Keys and values must use this context's NTT root and ordering convention.
 //! Raw ciphertexts do not record secret identity, encoding or noise margins.
 
@@ -89,14 +87,13 @@ mod evaluator;
 pub mod factorized;
 pub mod key;
 mod lookup_table;
-pub mod sparse;
 
 pub mod boolean;
 
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
-    LookupTableError, SparseBootstrappingKeyError, TfheClientError, TfheContextError,
-    TfheEvaluationError, TfheKeyError, TfheParameterError,
+    LookupTableError, TfheClientError, TfheContextError, TfheEvaluationError, TfheKeyError,
+    TfheParameterError,
 };
 
 pub use accumulator::AccumulatorClient;

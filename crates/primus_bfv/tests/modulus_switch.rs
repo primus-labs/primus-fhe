@@ -118,7 +118,11 @@ fn integer_components(
 
 #[test]
 fn adjacent_drops_match_integer_division_and_odd_rounding_composes() {
-    for moduli in [SMALL_Q, [SMALL_Q[2], SMALL_Q[1], SMALL_Q[0]]] {
+    for moduli in [
+        SMALL_Q,
+        [SMALL_Q[2], SMALL_Q[1], SMALL_Q[0]],
+        [SMALL_Q[2], SMALL_Q[0], SMALL_Q[1]],
+    ] {
         let context = context(&moduli);
         let q: u128 = moduli.iter().map(|&q| u128::from(q)).product();
         let p = u128::from(moduli[2]);
