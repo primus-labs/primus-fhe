@@ -1,7 +1,8 @@
 use primus_data::{Data, DataMut};
 use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_ntt::NttTable;
-use primus_reduce::{Reduce, ReduceInv, ReduceMul, ReduceSub, ReduceSubSlice};
+use primus_reduce::{Reduce, ReduceInv, ReduceMul, ReduceSubSlice};
+use primus_rns::lift_centered_residues_to;
 
 use crate::{BgvCiphertext, BgvContext};
 
@@ -142,7 +143,6 @@ impl<'a> BgvModulusSwitch<'a> {
         let target = self.context.base_q(self.source_level + 1);
         let dropped_index = source.moduli_count() - 1;
         let prime = source.moduli_values()[dropped_index];
-        let prime_half = prime / 2;
         self.dropped_coefficients
             .copy_from_slice(&input[dropped_index * n..]);
         self.context.table().ntt_tables()[dropped_index]
@@ -161,31 +161,13 @@ impl<'a> BgvModulusSwitch<'a> {
             )
             .enumerate()
         {
-            if prime < modulus.value() {
-                // The dropped residues are canonical modulo prime. Their
-                // negative centered lifts are already canonical after adding q.
-                let negative_offset = modulus.value() - prime;
-                for (&residue, correction) in
-                    self.dropped_coefficients.iter().zip(output_limb.iter_mut())
-                {
-                    *correction = if residue > prime_half {
-                        residue + negative_offset
-                    } else {
-                        residue
-                    };
-                }
-            } else {
-                for (&residue, correction) in
-                    self.dropped_coefficients.iter().zip(output_limb.iter_mut())
-                {
-                    let residue_mod_q = modulus.reduce(residue);
-                    *correction = if residue > prime_half {
-                        modulus.reduce_sub(residue_mod_q, self.prime_mod_q[index])
-                    } else {
-                        residue_mod_q
-                    };
-                }
-            }
+            lift_centered_residues_to(
+                &self.dropped_coefficients,
+                output_limb,
+                prime,
+                modulus,
+                self.prime_mod_q[index],
+            );
             self.plain_factors[index].factor_mul_slice_assign(output_limb, modulus.value());
             table.transform_slice(output_limb);
             modulus.reduce_sub_slice_rev_assign(input_limb, output_limb);

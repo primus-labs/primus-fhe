@@ -37,7 +37,7 @@ pub use hps::{HpsRns, HpsRnsWorkspace};
 
 pub use error::RnsError;
 
-pub use base::RNSBase;
+pub use base::{RNSBase, lift_centered_residues_to};
 pub use converter::{
     BaseConverter, CenteredBaseConverter, CenteredConversionWorkspace, CorrectedConversionWorkspace,
 };
