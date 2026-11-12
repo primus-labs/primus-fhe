@@ -82,7 +82,7 @@ Construct [PolyLength](../primus_shape/README.md#polynomial-length) once and reu
 
 Pass `encryption_parameters()` to `NttNtruSecretKey::generate_pair` or `FourierNtruSecretKey::generate_pair`. The returned signed coefficient secret generates evaluation keys; the transformed secret supports encryption and phase extraction. `try_from_coeff_secret_key` converts an existing secret and can reject it. NTT import requires signed coefficient magnitudes below q. Keep the construction representation: matching q/N does not prove NTT roots, evaluation order or secret identity.
 
-NTT generation rejects zero evaluations. Fourier checks native-ring invertibility (odd coefficient sum) and complex-inverse stability. Bounded rejection sampling can fail; attempt counts and inversion routines are not promised constant time. Native fixed binary/ternary distributions with even nonzero count return `NonInvertibleSecretKey`; an unsuccessful candidate search returns `KeyGenerationExhausted`. Accepted secrets follow the proposal distribution **conditioned on backend acceptance**; `distr()` records the proposal.
+NTT generation rejects zero evaluations. Fourier requires an odd coefficient sum and a stable complex inverse. Choose an odd nonzero count for native fixed-weight binary/ternary proposals. Bounded rejection can fail, and generation is variable-time. The accepted distribution is **conditioned on backend acceptance**; `distr()` records the proposal. See [NTT](src/secret_key/ntt/mod.rs) and [Fourier](src/secret_key/fourier/mod.rs) key generation.
 
 General NTRU supports nonbinary ring secrets. NTRU TFHE uses an independent external LWE secret for binary/ternary blind-rotation controls, without requiring a zero-padded binary ring secret.
 
@@ -107,11 +107,9 @@ Message methods take `NtruParameters`; encoded/zero encryption takes `NtruEncryp
 
 NTT secret-key operations need no workspace. Fourier encryption/decryption reuse an FFT engine and `FourierNtruEncryptWorkspace<T>` / `FourierNtruDecryptWorkspace`. Encoded NTT inputs must be canonical coefficients at q. Match key, parameters, table and output; invalid plaintext values can fail after partial writes or randomness consumption. See the [secret-key methods](src/secret_key) for exact buffer and failure contracts.
 
-Fourier encryption and key generation first compute complete coefficient rows modulo `2^T::BITS` using an exact native inverse. Fourier conversion happens afterward and has its own precision budget. Use `encrypt_message_coeff_to` when the consumer takes a coefficient ciphertext.
+Fourier encryption and key generation form exact native coefficient rows before transformation. Include Fourier conversion error in the noise budget. Use `encrypt_message_coeff_to` when the consumer takes a coefficient ciphertext. Regenerate material produced by the former unreduced complex path and replace affected secrets if it was disclosed. See [Fourier encryption](src/secret_key/fourier/encrypt.rs).
 
-Regenerate ciphertexts and evaluation material produced by the former unreduced complex path. Replace associated secrets if affected material was disclosed.
-
-For [phase-error diagnostics](../primus_encoding/README.md#phase-error-diagnostics), compare the phase with the **expected message** encoded using the actual codec and embedding. Decoding and re-encoding is not an independent reference. Fourier phase error also includes transform rounding.
+To compare a phase with its expected message, use the [phase-error diagnostics](../primus_encoding/README.md#phase-error-diagnostics).
 
 ## Gadget and evaluation primitives
 
@@ -126,7 +124,7 @@ For [phase-error diagnostics](../primus_encoding/README.md#phase-error-diagnosti
 
 Evaluation keys retain their decomposition bases; construct matching workspaces once and reuse them. Automorphism requires odd `d` in `[1, 2N)`. NLev rows can each use scalar automorphism, but applying it row-wise to NGSW does **not** preserve the NGSW message/key relation.
 
-`NttNlev::lift_monomial_to` / `FourierNlev::lift_monomial_to` fuse public-polynomial lifting with the first binary/ternary rotation. Supply NLev[1], a positive NLev bit and an optional negative NLev bit; a zero exponent still performs the lift. Subsequent ternary `cmux_ternary_monomial_to` uses positive/negative NGSW bits, which must be mutually exclusive. Exponents are already quantized into `0..2N`. Reuse `NttNtruCmuxWorkspace::new(poly_length, levels)` or its Fourier counterpart.
+`NttNlev::lift_monomial_to` and `FourierNlev::lift_monomial_to` combine public lifting with the first binary or ternary rotation. A zero exponent still lifts. Later ternary CMUX steps use mutually exclusive positive and negative NGSW bits. Supply quantized exponents in `0..2N` and reuse a matching workspace. See the [first-lift contract](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
 Fourier controls use the native decomposition basis and torus scale. Values, evaluation keys and maps must use the exact FFT table instance from generation. Direct Fourier output can round differently from a coefficient roundtrip. Actual secret identity, canonical inputs and sufficient encryption/decomposition/FFT error budgets remain caller obligations.
 
@@ -146,9 +144,9 @@ Inputs are coefficient-domain NTRU ciphertexts; recover transformed outputs to c
 
 Shared-input returns reuse one Q→q conversion. `return_many_at_to` preserves arbitrary index order and repeats; `return_prefix_to` selects `0..outputs.len()`. Empty requests write nothing, and singleton requests use the scalar path.
 
-`LweReturnBatchWorkspace` tracks the valid prefix of a stream. Each append releases the source borrow; submit exactly the appended count, up to `batch_capacity()`. Finish or discard the stream before shared-input returns or reuse with another binding. Workspace state does not establish key identity: all appends and submission must use the same actual secrets and Q/q. See [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs) for state and failure contracts. Intermediate slots are internal; callers cannot submit unprepared samples.
+`LweReturnBatchWorkspace` tracks a valid prefix. Submit one output per append within capacity, using the same actual secrets and Q/q throughout the stream. Finish or discard it before reuse for another binding or a shared-input return. See [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs).
 
-The operation first computes `c' = round(q*c/Q) mod q` coefficient-wise (nearest, ties upward), then extracts under f and key-switches at q. The extracted phase is `b-<a,f> = (f*c')[index]`. **Rounding precedes extraction negation**; reversing them changes half-tie results. See [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs) for the mask layout.
+The return computes `c' = round(q*c/Q) mod q` coefficient-wise (nearest, ties upward), then extracts under f and key-switches at q. The extracted phase is `b-<a,f> = (f*c')[index]`. Preserve this order at half ties. See the [return arithmetic contract](src/key_switch/lwe/evaluator.rs).
 
 Q and q may be native or explicit, including equal moduli. Returns keep the coefficient type (u32→u32 or u64→u64); reducing q does not narrow the word. Inputs must be canonical at Q. Budget f-weighted rounding, secret-weighted decomposition error and LWE key noise, plus previous NTRU/FFT error. Scaling an encoded message from Q to q is not generally identical to freshly encoding at q.
 
@@ -178,13 +176,11 @@ Partial expansion produces constants only when **message** coefficients `count..
 
 The evaluation material is `NGSW_f[f]`. Input errors are multiplied by f, decomposition errors by f², and key/FFT errors also contribute. Publishing this secret-dependent material requires a justified key-dependent-message/circular-security assumption and suitable parameters; functional correctness provides neither a security proof nor a CBS parameter recommendation. A bit-valued m can control CMUX. See [scheme switching](src/scheme_switch) for the full phase contract.
 
-For packed coefficients that only need NGSW output, [`NttNtruProjectionKey`](src/scheme_switch/projection.rs) accepts an explicit `NtruProjectionMethod`: `Separate` (the enum default), `FusedLastStage`, `FusedLastThreeStages`, or `PairedTrace`. The last method pairs reverse-trace stages and fuses the remaining two or three with SS. `project_to` accepts general message tails; allocate its reusable buffer with `scratch_len()` (2N, 2N, 8N, or 5N/8N respectively, with paired size depending on even/odd log₂N). Only the selected fusion material is generated. Fused strategies change decomposition residuals and key errors; switching strategies requires a new noise budget. Borrow the owned ordinary trace/SS keys for NLev or dual outputs.
+For packed coefficients that only need NGSW output, choose `NtruProjectionMethod` when building the NTT projection key. The default is `Separate`. Fused strategies have different decomposition and key errors and require their own budgets. `project_to` accepts general message tails. Use `scratch_len()` to allocate its reusable buffer, and borrow the ordinary trace and scheme-switch keys for NLev or dual outputs. See [`NttNtruProjectionKey`](src/scheme_switch/projection.rs).
 
 ## Features
 
-Default features are empty; the NTRU-to-LWE return path needs no transform backend. `ntt` enables NTT operations; `fourier` enables Fourier APIs but does not select an FFT engine. Use `rustfft` or `tfhe-fft` to enable Fourier with a concrete engine; both can coexist. `simd` forwards to active arithmetic dependencies without enabling a transform backend.
-
-Tests, examples and benchmarks declare `required-features`; Cargo skips an entire target when these are missing. Select the features shown by its run command.
+NTRU-to-LWE return is available with the empty default feature set. `ntt` enables NTT operations. Use `rustfft` or `tfhe-fft` for Fourier with a concrete engine, or `fourier` for engine-independent Fourier APIs. `simd` forwards to active arithmetic dependencies.
 
 ## Further reading
 

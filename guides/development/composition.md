@@ -1,6 +1,6 @@
 # Composing libraries and reusing workspaces
 
-Start from the [library guide](README.md) to choose a crate. This guide covers the contracts that cross crate boundaries when combining lower-level APIs. For complete TFHE workflows, prefer the backend examples and context factories; they prepare the operation's encodings, paired material and workspace together. Numerical conditions specific to bootstrapping are in [bootstrapping contracts](bootstrapping-contracts.md).
+Find crate examples in the [workspace map](../../README.md#workspace-map). For complete TFHE workflows, use the backend examples and context factories to prepare the operation's encodings, paired material and workspace together. Numerical conditions specific to bootstrapping are in [bootstrapping contracts](bootstrapping-contracts.md).
 
 ## Establish the arithmetic domain
 
@@ -57,9 +57,9 @@ BFV's `encrypt_plaintext_lift_crt_to` takes unscaled CRT lifts and applies delta
 
 ## Bind material before evaluation
 
-Create contexts, tables, keys, programs and evaluators before repeated online calls. Prefer paired key generation and operation factories; explicit assembly must pair source/target secrets, moduli, layouts, bases and representations. Numerical metadata checks cannot establish actual secret identity, and a successful constructor does not certify a joint noise or security budget. Report construction errors through their `source()` chain to retain both the failed operation and its underlying cause.
+Create contexts, tables, keys, programs and evaluators before repeated online calls. Prefer paired key generation and operation factories. Explicit assembly must pair source and target secrets, moduli, layouts, bases and representations. Numerical metadata checks cannot establish actual secret identity, and a successful constructor does not certify a joint noise or security budget. Report construction errors through their `source()` chain to retain both the failed operation and its underlying cause.
 
-Client secrets stay with the client. Evaluation/public keys and request ciphertexts can be supplied to the server; public parameters and LUTs can be prepared by either side. The server prepares and reuses its evaluators and outputs. Sharing a context does not make independently generated keys interchangeable.
+Client secrets stay with the client. The server can receive evaluation keys, public encryption keys and request ciphertexts. Either side can prepare public parameters and LUTs. The server prepares and reuses its evaluators and outputs. A shared context leaves each evaluation key tied to the secrets used to generate it.
 
 RNS GLWE binds raw encryption directly with `key.try_bind_raw(&sampling, &base, &table)`. `CrtGlevParameters` owns layout, ordered base, decomposition and weights without sampling state; gadget encryption/key generation receives sampling separately. Its evaluators take `(&key, &gadget, &table)`, or `(&key, &hybrid_rns, &qp_table)` for hybrid switching, and check compatibility before allocating reusable scratch. Standalone `DcrtGlweSecretKey::phase_to` and `partial_phase_to` require only the input, output and ordered moduli, with no sampler or transform table. See [RNS resource composition](../../crates/primus_glwe_rns/README.md#evaluation-resources).
 

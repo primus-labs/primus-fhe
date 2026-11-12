@@ -5,7 +5,7 @@
 `primus_fft` 为 `Z[X] / (X^N + 1)` 中的多项式提供负循环 Fourier 变换。它在 RustFFT 和 `tfhe-fft` 之上提供统一的 table 与 workspace API，并实现 [Primus FHE](../../README.zh_CN.md) 的 Fourier FHE 路径所需的 torus 转换。
 
 > [!WARNING]
-> 本 crate 属于实验性的 Primus FHE workspace。其 API、Fourier 表示和数值契约 尚不稳定，可能随时发生不兼容修改。
+> 本 crate 属于实验性的 Primus FHE workspace。其 API、Fourier 表示和数值契约尚不稳定，可能随时发生不兼容修改。
 
 ## 核心类型
 
@@ -26,9 +26,11 @@
 - `rustfft` 导出 `RustFftTable` / `RustFftWorkspace`。
 - `tfhe-fft` 导出 `TfheFftTable` / `TfheFftWorkspace`。
 
-两者可以同时启用。依赖声明显式选择，例如 `primus_fft = { path = "../primus_fft", features = ["rustfft"] }`；未选择引擎时仍可实现自己的 `FftTable`。下方示例使用 `rustfft`。
+两者可以同时启用。使用默认 features 时，可通过通用 API 接入自定义 `FftTable`。
 
 ## 示例
+
+将启用 `rustfft` feature 的 `primus_fft` 和 `primus_shape` 添加为直接依赖。
 
 ```rust
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
@@ -65,7 +67,7 @@ Table 不可变并实现 `Send + Sync`，可在线程间共享；每个并发 wo
 - 系数 slice 包含 `poly_length().get()` 个值；
 - Fourier slice 包含 `fourier_length() == poly_length().fourier_poly_len()` 个值。
 
-推荐使用 `FftEngine::new(table)`，并保留 engine 以重复执行变换。完整方法契约见 [table 与 engine API](src/table.rs)。
+完整方法契约见 [table 与 engine API](src/table.rs)。
 
 内置工作区在析构时擦除缓冲区；`fft.zeroize_workspace()` 可擦除并保留分配。变换不会在每次调用后擦除 scratch。调用方持有的输入/输出、寄存器和栈副本不在此缓冲区保证内，自定义后端自行定义擦除行为。
 
@@ -73,18 +75,14 @@ Table 不可变并实现 `Send + Sync`，可在线程间共享；每个并发 wo
 
 ## 长度与精度
 
-`FftTable::new` 接收 [`primus_shape::PolyLength`](../primus_shape/README.zh_CN.md#多项式长度)。Table 和 engine 的 `poly_length()` 返回此类型，`fourier_length()` 返回复数元素数量。构造包含 planning 和分配，应放在重复变换路径之外。
+`FftTable::new` 接收 [`primus_shape::PolyLength`](../primus_shape/README.zh_CN.md#多项式长度)。在重复变换路径之外构造 table，便可复用变换计划和分配。
 
 变换使用 `f64`，属于近似计算，不保证整字宽 torus 输入逐位往返一致。正确舍入取决于累积浮点误差和整数操作数大小，外层算法须维持合适的精度预算。转换与舍入规则见 [torus API](src/torus.rs)。
 
 ## 测试与 benchmark
 
-```text
-cargo test -p primus_fft --features rustfft,tfhe-fft
-cargo bench -p primus_fft --bench fft --features rustfft,tfhe-fft
-```
-
-变换基准在 N=1024 和 N=4096 上比较两种引擎的 u32、u64 路径。正反变换共用已准备的 table，建表和缓冲分配在计时外。
+命令、引擎 features 和工作负载见 workspace [测试指南](../../guides/development/testing.md)
+和 [`fft` 基准](benches/fft.rs)。
 
 ## 许可证
 

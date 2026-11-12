@@ -3,51 +3,24 @@
 [English](README.md) | 简体中文
 
 > [!WARNING]
-> [Primus FHE](../../README.zh_CN.md) 是实验性项目；其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
+> [Primus FHE](../../README.zh_CN.md) 是实验性项目。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-从拥有目标运算的最低层开始。完整 TFHE 应用优先阅读后端示例，按需使用底层组合接口。Core 库见 [workspace 导航](../../README.zh_CN.md#workspace-导航)。
-
-## 选择入口
-
-| 需求 | 入口 |
-| --- | --- |
-| 模数、算术与 gadget 分解 | [primus_modulus](../../crates/primus_modulus/README.zh_CN.md)、[primus_reduce](../../crates/primus_reduce/README.zh_CN.md)、[primus_decompose](../../crates/primus_decompose/README.zh_CN.md) |
-| 存储、多项式与变换 | [primus_shape](../../crates/primus_shape/README.zh_CN.md)、[primus_data](../../crates/primus_data/README.zh_CN.md)、[primus_poly](../../crates/primus_poly/README.zh_CN.md)、[primus_ntt](../../crates/primus_ntt/README.zh_CN.md)、[primus_fft](../../crates/primus_fft/README.zh_CN.md) |
-| 密文布局与算术 | [primus_lattice](../../crates/primus_lattice/README.zh_CN.md) |
-| 消息、编码与 phase 诊断 | [primus_encoding](../../crates/primus_encoding/README.zh_CN.md) |
-| 独立加密与 key switch | [LWE](../../crates/primus_lwe/README.zh_CN.md)、[GLWE](../../crates/primus_glwe/README.zh_CN.md)、[NTRU](../../crates/primus_ntru/README.zh_CN.md) |
-| RNS 转换、raw GLWE 与 gadget 求值 | [primus_rns](../../crates/primus_rns/README.zh_CN.md)、[primus_glwe_rns](../../crates/primus_glwe_rns/README.zh_CN.md) |
-| BFV 系数/槽加密、精确乘法、relin、旋转与层级 | [primus_bfv](../../crates/primus_bfv/README.zh_CN.md) |
-| BGV 系数/槽加密、乘法、relin、旋转与层级 | [primus_bgv](../../crates/primus_bgv/README.zh_CN.md) |
-| PBS、ManyLUT、MVB、CBS 与 Boolean 门 | [运算选择](../../crates/primus_tfhe/README.zh_CN.md)，然后阅读 [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.zh_CN.md)、[GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.zh_CN.md)、[NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.zh_CN.md) 或 [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.zh_CN.md) |
-| One-hot selectors | [NTRU CBS 与 one-hot](../../crates/primus_tfhe_ntru/README.zh_CN.md#one-hot-cbs)，然后阅读后端示例 |
+从 [workspace 导航](../../README.zh_CN.md#workspace-导航) 查找 crate 和示例。跨 crate 组合时，按任务查阅以下指南。
 
 ## 跨库阅读顺序
 
-阅读目标库的示例后，按组合需求选择以下专题。精确布局、检查和 scratch 契约仍以 rustdoc 为准。
+精确布局、检查和工作区要求以接口的 rustdoc 为准。下表标明专题正文语言。
 
-导航提供中英双语，下表标明专题正文语言；外部工具使用其各自的语言入口。
-
-| 主题 | 指南 |
+| 任务 | 指南 |
 | --- | --- |
-| 数值域、表示、借用、phase 与可复用状态 | [跨库组合](composition.md)（English） |
-| 原生 BFV/raw GLWE 的组件符号、密钥与显式桥接 | [RNS phase 约定](rns-phase-conventions.md)（English） |
-| BFV/BGV 本地 context/level 绑定、raw 导入及 collective 分工 | [方案绑定与互操作](scheme-context-binding.md)（中文） |
-| 版本化公共参数、密文/key持久化和checked本地恢复 | [公共对象持久化](public-storage.md)（中文） |
-| 原生 BFV 整数 tensor、精确缩放、unscaled keys 与 degree 生命周期 | [BFV 求值](bfv-evaluation.md)（English） |
-| 普通BFV临时Q_l与恢复、深度/误差准入 | [临时工作基](bfv-working-basis.md) |
-| 原生 BGV key roles、p-preserving gadget residual 与精确 prime drop | [BGV 求值](bgv-evaluation.md)（English） |
-| 普通 BFV/BGV 素数生成、电路预算与独立安全参考 | [参数与预算入口](ordinary-parameter-budgets.md)（中文） |
-| 原生 BFV/BGV Hybrid QP keys、分区、精确 correction 与 collective 角色 | [Native Hybrid 密钥](native-hybrid-keys.md)（English） |
-| 旋转舍入、q/Q 返回、CBS 精度/投影支持、Fourier 预算与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md)（English） |
-| 当前实验配置及其证据边界 | [TFHE 参数目录](tfhe-parameters.md)（English） |
-| 测试、示例、feature 与 benchmark 命令 | [测试指南](testing.md)（中文） |
+| 选择算术域、借用多项式或密文视图、复用工作区 | [跨库组合](composition.md)（英文） |
+| 选择 TFHE 参数、组合运算输出或绑定 CBS 精度与投影 | [参数目录](tfhe-parameters.md)、[自举契约](bootstrapping-contracts.md)（英文） |
+| 绑定 BFV/BGV context 和 level，或为其他方案导入 raw 密文 | [方案绑定](scheme-context-binding.md)（中文）、[RNS phase 约定](rns-phase-conventions.md)（英文） |
+| 持久化公共参数、密文和求值密钥 | [公共对象持久化](public-storage.md)（中文） |
+| 选择 BFV 乘法路径或准备临时工作基 | [BFV 求值](bfv-evaluation.md)（英文）、[临时工作基](bfv-working-basis.md)（中文） |
+| 跟踪 BGV 的校正因子和降模 | [BGV 求值](bgv-evaluation.md)（英文） |
+| 构建 BFV/BGV 原生 Hybrid 密钥或组合 collective 密钥角色 | [原生 Hybrid 密钥](native-hybrid-keys.md)（英文） |
+| 选择 BFV/BGV 参数、核对电路预算与安全参考 | [参数与预算入口](ordinary-parameter-budgets.md)（中文） |
+| 运行测试、示例、feature 检查和基准 | [测试指南](testing.md)（中文） |
 
-性能取舍与测量见[性能指南](../performance/README.zh_CN.md)，开发规范见 [AGENTS.md](../../AGENTS.md)。
-
-## 常见陷阱
-
-- 维数或缓冲区长度相同，不证明秘密、模数、basis 或变换身份一致。
-- 借用视图不转换表示，也不验证系数。批量数据使用多项式/密文语义迭代器，在入口检查完整长度与配对数量。
-- 构造成功不证明安全性或完整运算的噪声余量；实验配置只是功能样例。
-- 重复调用前分配 evaluator 与输出，遵循覆盖/累加契约，并发请求各自使用独立可变状态。
+测量口径与性能取舍见[性能指南](../performance/README.zh_CN.md)。开发规范见 [AGENTS.md](../../AGENTS.md)。

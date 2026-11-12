@@ -105,23 +105,23 @@ NTT 的 `generate_pair` 同时返回系数私钥和变换私钥。Fourier 先用
 
 消息方法使用 `GlweParameters`；encoded/零加密和公钥生成使用 `GlweEncryptionParameters`。`Unsigned` 与 `Centered` 均接收 `[0, t)` 中的规范剩余类，centered 的 `t-1` 表示 `-1`；两者使用相同解码器。解码结果保留系数类型 `T`。
 
-NTT 私钥运算不需要工作区。Fourier 加密复用准备好的 encryptor，无需额外传工作区；解密使用 `FourierGlweDecryptWorkspace`。NTT 公钥加密使用 `NttGlwePublicEncryptWorkspace<T>`。复用这些资源，调用方持有的明文和相位输出按自身生命周期擦除。Encryptor 只在准备时检查声明的 sampler 支持，拥有析构时擦除的精确乘积缓存和一行系数缓冲。导入任意系数可用 `FourierGlweEncryptor::from_coeff_secret_key`，采用完整 signed 字宽界；u64 此时使用成本较高的 O(kN²) schoolbook 乘法。
+Fourier 加密复用已准备的 encryptor，Fourier 解密复用 `FourierGlweDecryptWorkspace`，NTT 公钥加密复用 `NttGlwePublicEncryptWorkspace<T>`。已声明系数幅度界的秘密优先用 `FourierGlweEncryptor::try_new`。导入不受幅度约束的 u64 系数时，准备成本可能高得多。见 [Fourier encryptor 契约](src/secret_key/fourier/encrypt.rs)。
 
-NTT 公钥加密还显式借用 `SecretKeySampler<T>`，用于一个完整长度 N 的临时多项式 r。通过 `params.try_ephemeral_sampler(None)?` 跟随完整 rank-one 接收方秘密分布，或通过 `params.try_ephemeral_sampler(Some(distribution))?` 在任意 rank 下显式选择长度 N 的分布，并复用返回的 sampler。rank>1 不支持隐式跟随；带公开零尾的 LWE 密钥须显式选择分布。调用时将 sampler 与加密参数一同传入，scratch 保持独立复用。`Some(SecretKeyDistr::SparseTernary)` 保留原公钥加密分布。每次加密重新采样 r；更换分布须单独评估噪声和安全性。
+NTT 公钥加密需准备并复用临时秘密采样器。用 `params.try_ephemeral_sampler(None)?` 沿用完整 rank-one 接收方的秘密分布，或传入 `Some(distribution)` 为长度 N 的临时秘密另选分布。更高 rank 和带公开零尾的 LWE 密钥须显式指定分布。所选分布需要单独评估噪声和安全性。见[采样器契约](src/parameter/ordinary.rs)。
 
-NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt_message_coeff_to`，用于系数密文。最后一个参数是无需预先清零的 N 元素 scratch 切片。加密后其中保留秘密相关乘积，宜使用 `zeroize::Zeroizing<Vec<T>>` 等可擦除的拥有者。
+处理系数密文时使用 `*_coeff_to` 方法。NTT 系数加密会在调用方的工作区留下秘密相关乘积，宜用 `zeroize::Zeroizing<Vec<T>>` 等可擦除的拥有者。明文和相位缓冲区由调用方按生命周期管理。见 [NTT 消息加密](src/secret_key/ntt/message.rs)和[相位提取](src/secret_key/ntt/coefficient.rs)。
 
 已编码 NTT 输入必须是 `[0, q)` 中的规范系数。密钥、参数、表和输出布局须匹配；Fourier 值须使用密钥生成时的同一 FFT 表实例。非法明文可能在部分写入或消耗随机数后失败。精确缓冲区及失败契约见[私钥](src/secret_key)和[公钥](src/public_key)方法。
 
-做[相位误差诊断](../primus_encoding/README.zh_CN.md#相位误差诊断)时，用实际 codec 和 embedding 编码**预期消息**，再与相位比较。先解码再重新编码不能提供独立参考。
+要比较相位与预期消息，参见[相位误差诊断](../primus_encoding/README.zh_CN.md#相位误差诊断)。
 
-Fourier 建钥先在 native 环中精确完成每行及 gadget 对角项，再进行浮点变换；ordinary u64 的转换误差仍须纳入噪声预算。旧版未约简频域乘积路径生成的材料必须重新生成；若相关材料已公开，应更换受影响的秘密，事后转换不能撤销泄露。精确支持范围及准备方式见 `FourierGlweEncryptor` 的 rustdoc。
+Fourier 建钥先生成 native 系数行，再做变换。噪声预算须包含 Fourier 转换误差。旧版未约简频域乘积路径生成的材料须重新生成。若材料已公开，还须更换受影响的秘密。见 [Fourier encryptor 契约](src/secret_key/fourier/encrypt.rs)。
 
 ## Gadget 密文
 
-`encrypt_glev_to` 和 `encrypt_ggsw_to` 对系数域环多项式应用 gadget 缩放，不做普通明文编码。GGSW 控制位是常数多项式 `0` 或 `1`。NTT 从 `GadgetSize` 构造 gadget 工作区：GLev 需要匹配多项式长度，GGSW 还需匹配层数。Fourier 在不同 gadget 基与层数间复用同一 encryptor，行对角项在 native 环中完成后才 FFT。
+`encrypt_glev_to` 和 `encrypt_ggsw_to` 对系数域环多项式应用 gadget 缩放。GGSW 控制位是常数多项式 `0` 或 `1`。为 NTT 准备匹配的工作区，或在不同 gadget 基和层数间复用 Fourier encryptor。见 [NTT](src/secret_key/ntt/gadget.rs) 和 [Fourier](src/secret_key/fourier/gadget.rs) 方法。
 
-`encrypt_ggsw_constant_batch_to` 写入连续的变换域 GGSW：NTT 为 `input.len() * params.ggsw_len()` 个剩余类，Fourier 为 `input.len() * params.fourier_ggsw_len()` 个复数。NTT 常数须是模 q 的规范剩余类，Fourier 常数使用原生环值。两后端也提供 `encrypt_ggsw_constant_batch_coeff_to` 写入系数输出；Fourier 直接写出精确 native 行，不需要 FFT scratch 或 inverse 舍入。`encrypt_message_coeff_to` 同样可直接写出普通系数密文。
+`encrypt_ggsw_constant_batch_to` 写入连续的变换域 GGSW。NTT 常数须是模 q 的规范剩余类，Fourier 常数使用原生环值。需要系数输出时使用 `encrypt_ggsw_constant_batch_coeff_to`。见 [NTT](src/secret_key/ntt/batch.rs) 和 [Fourier](src/secret_key/fourier/batch.rs) 批量接口契约。
 
 ## 求值原语
 
@@ -135,9 +135,7 @@ Fourier 建钥先在 native 环中精确完成每行及 gadget 对角项，再�
 
 求值密钥持有布局及分解基，匹配的工作区构造一次即可复用。自同构提供系数域 `apply_to` 和变换域 `apply_ntt_to` / `apply_fourier_to`；直接 Fourier 输出的舍入可能不同于系数往返路径。
 
-[Scheme switching](src/scheme_switch) 在 NTT 生成时使用相互匹配的系数及变换私钥，Fourier 生成时只传一个目标准备态。Fourier 自同构和 trace 生成同样只接收准备态，内部从目标秘密派生所需明文。输出 gadget 缩放继承输入 GLev；`key_basis()` 控制分解，可以不同于输出基。传入的外积工作区须匹配 `key.key_size()`。
-
-Rank1 NTT scheme switching 仅保存平方 `GLev(s²)`，以 `sum D(a) GLev(s²) + (b,0)` 构造各层 mask 行，并复用已变换的 body 行。更高 rank 和 Fourier 保持完整 `GGSW(-s_i)` 外积。平方式删除 body 分解及对应密钥误差，但输入误差传播和平方秘密残差仍在，不保证逐输入噪声更小。Trace 与 scheme switching 仍为独立运算。
+NTT scheme-switch 建钥使用相互匹配的系数及变换私钥，Fourier 建钥使用目标 encryptor。输出 gadget 缩放继承输入 GLev，密钥的分解基可与输出基不同。Trace 与 scheme switching 各自独立。Rank-one NTT 使用平方 `GLev(s²)`，更高 rank 和 Fourier 使用完整外积。见 [scheme switching](src/scheme_switch) 及其[噪声契约](../../guides/development/bootstrapping-contracts.md#ordinary-cbs-and-consumption)。
 
 ## Trace、投影与展开
 
@@ -153,7 +151,7 @@ Rank1 NTT scheme switching 仅保存平方 `GLev(s²)`，以 `sum D(a) GLev(s²)
 | `expand_coefficients_to` | 全部 N 个系数各自作为常数 |
 | `expand_partial_coefficients_to(input, count, ...)` | 前 `count` 个常数，要求消息尾部为零 |
 
-启用 `split-trace` 后，`SplitFourierGlweTraceKey::generate` 复用已准备的 `FourierGlweEncryptor`，为 native u64、rank-1 且系数在 `{-1,0,1}` 的秘密提供高精度前缀投影；用 `key.new_workspace()` 分配匹配空间。精确系数密钥生成使用辅助 NTT/CRT，在线只保留 low35/high29 Fourier 谱。Trace payload 和逆变换次数翻倍，这是显式的精度/成本取舍，不是噪声余量保证。完整契约见 [split trace](src/trace/split.rs)。
+启用 `split-trace` 后，`SplitFourierGlweTraceKey::generate` 复用已准备的 `FourierGlweEncryptor`，为 native u64、rank-one 且系数在 `{-1,0,1}` 的秘密提供高精度前缀投影。用 `key.new_workspace()` 分配工作区，并将分段恢复误差计入预算。见 [split trace API](src/trace/split.rs) 和 [Fourier 误差预算](../../guides/development/bootstrapping-contracts.md#glwe-fourier-error-budgets)。
 
 部分 trace 接收 `1..=N` 内的二次幂 `r`，在一个 GLWE 中保留等间距位置。`r=N` 复制输入，`r=1` 为完整 trace。Reverse trace 在每次自同构及相加前归一化：NTT 乘 `2^-1 mod q`，Fourier 对无符号系数做 `floor(x/2)`。NTT 域运算不能直接继承环面 RevHomTrace 的噪声界。
 
@@ -176,9 +174,7 @@ Trace packing 使用 [RevHomTrace](https://github.com/Stirling75/RevHomTrace/blo
 
 ## Features
 
-默认 features 为空。`ntt` 启用 NTT 运算；`fourier` 启用普通 Fourier API 及系数建钥使用的内部辅助 NTT/CRT 依赖，不选择 FFT engine，也不启用 NTT GLWE API。使用 `rustfft` 或 `tfhe-fft` 同时启用 Fourier 及具体 engine，两者可共存。另加 `split-trace` 启用 Split35 密钥，例如 `--features rustfft,split-trace`。`simd` 只转发给已启用的算术依赖，不启用变换后端。
-
-测试、示例和基准声明 `required-features`；缺少时 Cargo 会跳过整个 target。按相应运行命令选择 features。
+默认 features 为空。`ntt` 启用 NTT 运算。`rustfft` 或 `tfhe-fft` 启用 Fourier 及具体 engine，`fourier` 单独提供与 engine 无关的 Fourier API。另加 `split-trace` 启用 Split35 密钥，例如 `--features rustfft,split-trace`。`simd` 转发给已启用的算术依赖。
 
 ## 更多资料
 

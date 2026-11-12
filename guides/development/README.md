@@ -5,49 +5,22 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > [Primus FHE](../../README.md) is experimental. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Choose the lowest-level crate that owns your operation. For complete TFHE applications, begin with a backend's examples; lower-level composition is optional. The [workspace map](../../README.md#workspace-map) lists the core crates.
-
-## Choose an entry point
-
-| Need | Start here |
-| --- | --- |
-| Moduli, arithmetic and gadget decomposition | [primus_modulus](../../crates/primus_modulus/README.md), [primus_reduce](../../crates/primus_reduce/README.md), [primus_decompose](../../crates/primus_decompose/README.md) |
-| Storage, polynomials and transforms | [primus_shape](../../crates/primus_shape/README.md), [primus_data](../../crates/primus_data/README.md), [primus_poly](../../crates/primus_poly/README.md), [primus_ntt](../../crates/primus_ntt/README.md), [primus_fft](../../crates/primus_fft/README.md) |
-| Ciphertext layouts and arithmetic | [primus_lattice](../../crates/primus_lattice/README.md) |
-| Messages, encoding and phase diagnostics | [primus_encoding](../../crates/primus_encoding/README.md) |
-| Standalone encryption and key switching | [LWE](../../crates/primus_lwe/README.md), [GLWE](../../crates/primus_glwe/README.md), [NTRU](../../crates/primus_ntru/README.md) |
-| RNS conversion, raw GLWE and gadget evaluation | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
-| BFV coefficient/slot encryption, exact multiplication, relin, rotation and levels | [primus_bfv](../../crates/primus_bfv/README.md) |
-| BGV coefficient/slot encryption, multiplication, relin, rotation and levels | [primus_bgv](../../crates/primus_bgv/README.md) |
-| PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) or [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md) |
-| One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
+Use the [workspace map](../../README.md#workspace-map) to find a crate and its examples. Use the guides below when composing APIs across crates.
 
 ## Read across library boundaries
 
-After the relevant crate's example, read only the topics your composition needs. Exact layouts, checks and scratch contracts remain in rustdoc.
+Exact layouts, checks and scratch requirements are documented in the owning API's rustdoc. The guide language is marked below.
 
-The index is bilingual; the topic language is shown below. External tools maintain their own language entry points.
-
-| Topic | Guide |
+| Task | Guide |
 | --- | --- |
-| Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) (English) |
-| Native BFV/raw GLWE component signs, keys and explicit bridges | [RNS phase conventions](rns-phase-conventions.md) (English) |
-| Local BFV/BGV context/level binding, raw adoption and collective responsibilities | [Scheme binding and interoperability](scheme-context-binding.md) (Chinese) |
-| Versioned public parameters, ciphertext/key storage and checked local rebinding | [Public storage](public-storage.md) (Chinese) |
-| Native BFV integer tensor, exact scaling, unscaled keys and degree lifecycle | [BFV evaluation](bfv-evaluation.md) (English) |
-| Ordinary BFV temporary Q_l and restoration, depth/error admission | [Working basis](bfv-working-basis.md) (Chinese) |
-| Ordinary BFV/BGV prime generation, circuit budgets and separate security references | [Parameter and budget entry points](ordinary-parameter-budgets.md) (Chinese) |
-| Native BGV key roles, p-preserving gadget residuals and exact prime drop | [BGV evaluation](bgv-evaluation.md) (English) |
-| Native BFV/BGV Hybrid QP keys, partitions, exact correction and collective roles | [Native Hybrid keys](native-hybrid-keys.md) (English) |
-| Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
-| Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |
-| Tests, examples, features and benchmark commands | [Testing guide](testing.md) (中文) |
+| Choose an arithmetic domain, borrow polynomial or ciphertext views, and reuse workspaces | [Composing libraries](composition.md) (English) |
+| Choose TFHE parameters, combine operation outputs or bind CBS precision and projection | [Parameter directory](tfhe-parameters.md), [bootstrapping contracts](bootstrapping-contracts.md) (English) |
+| Bind BFV/BGV contexts and levels, or import raw ciphertexts for another scheme | [Scheme binding](scheme-context-binding.md) (Chinese), [RNS phase conventions](rns-phase-conventions.md) (English) |
+| Persist public parameters, ciphertexts and evaluation keys | [Public storage](public-storage.md) (Chinese) |
+| Choose a BFV multiplication path or prepare temporary working bases | [BFV evaluation](bfv-evaluation.md) (English), [working bases](bfv-working-basis.md) (Chinese) |
+| Track BGV correction factors and prime drops | [BGV evaluation](bgv-evaluation.md) (English) |
+| Build native Hybrid keys for BFV/BGV or compose collective key roles | [Native Hybrid keys](native-hybrid-keys.md) (English) |
+| Select BFV/BGV parameters and review circuit budgets or security references | [Parameter and budget entry points](ordinary-parameter-budgets.md) (Chinese) |
+| Run tests, examples, feature checks and benchmarks | [Testing guide](testing.md) (Chinese) |
 
-Performance decisions and measurements are in the [performance guide](../performance/README.md). Contributor rules are in [AGENTS.md](../../AGENTS.md).
-
-## Common pitfalls
-
-- Equal dimensions or buffer lengths do not establish secret, modulus, basis or transform identity.
-- Borrowing a view does not convert its representation or validate coefficients. Use semantic polynomial/ciphertext iterators for batches; check complete lengths and paired counts at their boundary.
-- Successful construction does not prove security or the complete operation's noise margin. Experimental configurations are functional fixtures.
-- Allocate evaluators and outputs before repeated calls. Follow overwrite/accumulate contracts and give concurrent requests independent mutable state.
+Measurement and trade-offs are in the [performance guide](../performance/README.md). Contributor rules are in [AGENTS.md](../../AGENTS.md).

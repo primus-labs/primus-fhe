@@ -15,21 +15,18 @@ English | [简体中文](README.zh_CN.md)
 | `ResidueFactors<S>` | Precomputed multiplication factors for one value under an ordered RNS basis |
 | `RNSBase<T, M>` | A non-empty, pairwise-coprime modulus basis and its CRT precomputations |
 | `BaseConverter<T, M>` | Precomputed fast or corrected conversion between two RNS bases |
-| `CorrectedConversionWorkspace<T>` | Reusable workspace for corrected batched conversion |
-| `CenteredBaseConverter` / `CenteredConversionWorkspace` | Exact u64 centered basis conversion with certified fast correction and integer boundary fallback |
-| `HpsRns` | u64 HPS exact centered expansion, P/Q prescaling and t/P rounding precomputation |
-| `HpsRnsWorkspace` | Reusable HPS batch scratch, including exact boundary fallback |
-| `HybridRNSPartitioning` | Fixed full-`Q` partition rule shared across modulus-chain levels |
-| `HybridRNS<T, M>` | Bases and precomputations for one active hybrid-RNS level |
-| `HybridRNSPartition<T, M>` | One contiguous `Q` partition and its approximate ModUp converter |
+| `CenteredBaseConverter` | Exact centered conversion for supported u64 bases |
+| `HpsRns` | Prepared HPS coefficient operations |
+| `HybridRNS` and `HybridRNSPartitioning` | One active level and its fixed full-chain partition rule |
 
-`T` is an unsigned FHE integer type. `M` is a `primus_reduce::FieldContext<T>`; [`BarrettModulus`](../primus_modulus/README.md) is the usual modulus implementation for repeated polynomial operations.
+[`BarrettModulus`](../primus_modulus/README.md) is the usual context for
+repeated polynomial operations.
 
 ## Example
 
-`Residues<S>` stores one value as canonical residues in basis order, using owned or borrowed storage. It does not retain or validate the basis; batch APIs use slices.
-
-`ResidueFactors<S>` stores one precomputed multiplication factor per modulus in basis order. Each factor must match its corresponding modulus; the wrapper does not validate precomputations. Use `decompose_factors` to prepare factors for scaled-decomposition operations.
+`Residues<S>` borrows or owns one value's canonical residues in basis order.
+Supply the matching basis to the operation. Use `decompose_factors` to prepare
+`ResidueFactors<S>` for scaled decomposition.
 
 ```rust
 use primus_modulus::BarrettModulus;
@@ -61,92 +58,74 @@ Batched big integers use the opposite grouping: each value occupies one contiguo
 
 ## RNS bases
 
-`RNSBase::new` constructs a base from a nonempty slice of pairwise-coprime moduli; `from_owned_moduli` takes ownership of their vector. Construction and extension return `RnsError` for invalid bases.
+`RNSBase::new` checks that the basis is nonempty and its moduli are pairwise
+coprime. Reuse the prepared basis and use `prefix(count)` for a nonempty
+ordered chain prefix. Custom contexts must satisfy the
+[basis contract](src/base/mod.rs), including the modulus range for Shoup
+factors.
 
-Custom `FieldContext<T>` implementations must supply moduli in `1 < q_i < 2^(T::BITS - 1)` for the internal Shoup factors. See the [basis contract](src/base/mod.rs).
-
-Cloning an `RNSBase` shares immutable precomputations without copying buffers. `extend` / `extend_with` create a new base and leave the original unchanged. Reuse a prepared base rather than independently constructing the same basis.
-
-`prefix(count)` derives a nonempty ordered prefix without repeating inherited
-coprimality checks. A shorter prefix prepares its distinct CRT constants; the
-full prefix shares the existing owner. It panics for zero or an excessive count.
-
-Use `compose*` and `decompose*` for CRT conversion. Single-value operations accept borrowed `Residues` / `BigUint` views; obtain these through `view()` or `view_mut()` on owned storage. Single-value decomposition does not impose Q's limb width; the modulus implementation's limb-slice contract still applies. Batched big integers use the fixed width described above. Empty batches perform no writes, with the documented output, factor and scratch lengths still required.
-
-`wrapping_decompose*` performs centered lifting from a smaller modulus `t`: values below `ceil(t / 2)` are nonnegative and the rest are negative representatives. For `t = 2`, both `0` and `1` are preserved, so `1` is not lifted as `-1`.
-
-The two `add_*decompose_small_values_scaled_assign` operations add weighted residues to an existing canonical accumulator without clearing or allocating temporary storage. Factors must belong to the matching moduli. Complete operation contracts are in the [base API](src/base).
+Use `compose*` and `decompose*` for CRT conversion. For centered lifts from a
+small modulus, use [`wrapping_decompose*`](src/base/small.rs). At modulus two,
+this preserves both binary values. Scaled accumulation methods in the same
+API add to a canonical accumulator and use factors for the matching basis.
 
 ## Base conversion
 
-`BaseConverter::new` shares the prepared input and output bases; `from_owned_bases` takes ownership of their handles. Cloning also shares the immutable conversion matrix. A general converter uses a small shared owner for that matrix; a single-input converter stores no matrix.
+Construct a converter from prepared bases and reuse its workspace or scratch
+for the matching batch size. Each concurrent operation needs separate mutable
+storage.
 
-Conversion is intended for runtime or derived Barrett contexts. Multi-modulus conversion requires cross-modulus dot products accepting source residues even when they exceed the destination modulus; Barrett accepts operands below `2^(T::BITS - 2)`. Custom contexts must satisfy the [converter arithmetic contract](src/converter/fast.rs); `FieldContext` alone does not establish these ranges.
+| Operation | Meaning |
+| --- | --- |
+| [`fast_convert*`](src/converter/fast.rs) | Approximate CRT lift of `x + kQ` from a multi-modulus basis. The caller's algorithm must allow the extra multiple of `Q`. A single-modulus input uses exact reduction. |
+| [`corrected_convert_array`](src/converter/corrected.rs) | Centered correction with one output modulus. The floating correction near a half boundary can differ by a multiple of `Q`. |
+| [`CenteredBaseConverter`](src/converter/centered.rs) | Exact centered conversion for odd u64 bases below `2^62`, with one or more output moduli. |
 
-Conversion operations have different mathematical contracts:
+Multi-modulus conversion uses cross-modulus dot products. Operands can exceed
+the destination modulus. Barrett accepts operands below `2^(T::BITS - 2)`.
+Custom contexts must meet the [conversion range contract](src/converter/fast.rs).
 
-- `fast_convert` and `fast_convert_array` compute a SEAL-style approximate CRT lift. With a multi-modulus input basis, the result represents `x + kQ` for some integer `k`; it is not generally the canonical `x mod p_j`. This is suitable only when the surrounding algorithm cancels or accepts the multiple-of-`Q` term. A single-modulus input uses exact direct reduction.
-- `corrected_convert_array` applies a quotient correction for a centered representative in `[-Q/2, Q/2)` and requires one output modulus. For multi-modulus inputs, `f64` correction near a half boundary can differ by one multiple of `Q`. Use `CenteredBaseConverter` for exact conversion with the supported odd u64 bases. See the [corrected-conversion API](src/converter/corrected.rs).
+### HPS coefficient operations
 
-- `CenteredBaseConverter::try_new(&input,&output)` prepares exact centered conversion for odd u64 bases below 2^62, including multiple output moduli. `workspace(value_count)` and `convert_to` reuse all storage. A conservative floating interval certifies the fast CRT quotient; uncertain half boundaries use exact multiword composition. This is shared by HPS and native Hybrid correction, without preparing unrelated HPS scaling resources.
-
-When a converter already exists, `CenteredBaseConverter::try_from_converter(converter)` retains its prepared bases and matrix, adding only the centered-lift constants. It still checks the centered algorithm's modulus requirements; an approximate converter does not establish them.
-
-Create a `CorrectedConversionWorkspace` through `corrected_conversion_workspace` and reuse it with the same converter and length. Fast conversion accepts a scratch slice sized by `fast_convert_scratch_len` or `fast_convert_array_scratch_len`. Empty batches perform no writes; corrected conversion still requires one output modulus and a workspace of the matching shape. Each concurrent operation needs separate mutable workspace.
+[`HpsRns`](src/hps.rs) prepares disjoint, pairwise-coprime odd u64 bases below
+`2^62` and a positive scale `t`. With reusable workspace it supports exact
+centered expansion, P/Q prescaling with a bounded one-sided residual, and exact
+`nearest(t*z/P) mod Q` from coherent Q/P residues. The
+[BFV contract](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+covers the consuming algorithm, auxiliary basis and error conditions.
 
 ## Hybrid RNS
 
-`HybridRNS` combines a ciphertext basis `Q` with an auxiliary basis `P` and stores the complete basis in `Q || P` order. `HybridRNSPartitioning` derives a fixed maximum partition size `alpha` from the full `Q` basis and requested digit count `dnum`:
+`HybridRNS` combines the ciphertext basis `Q` and auxiliary basis `P` in
+`Q || P` order. Use the same `HybridRNSPartitioning` across nonempty ordered
+prefixes of one modulus chain to preserve key-compatible boundaries. The
+[constructor contract](src/hybrid/construction.rs) describes valid digit counts
+and active levels.
 
-```text
-alpha = ceil(full_q_moduli_count / dnum)
-```
-
-The fixed size must produce exactly `dnum` non-empty partitions. For example, five `Q` moduli with `dnum = 3` produce ranges `[0..2, 2..4, 4..5]`; requesting `dnum = 4` is rejected because the same fixed size would produce only three partitions.
-
-Use `HybridRNS::from_partitioning` at shorter, ordered-prefix levels of the same modulus chain so key-compatible partition boundaries remain fixed. The constructor validates the active modulus count; the owner of the modulus chain must preserve the prefix relationship.
-
-`HybridRNS::from_bases` reuses prepared Q/P handles. A partition covering all active Q shares those same bases rather than rebuilding their CRT tables. `mod_down_converter()` borrows the prepared approximate P→Q converter; clone it into `CenteredBaseConverter::try_from_converter` when exact centered correction is needed. The two conversion semantics remain distinct.
-
-Each partition supports approximate ModUp into `Q || P`; streaming ModUp emits only converted complement limbs, leaving the caller to supply unchanged partition limbs. ModDown converts the `P` correction into `Q`, subtracts it, and multiplies by `P^-1 mod q_i`.
-
-For scheme-specific corrections, use `approx_convert_p_to_q_to` followed by `approx_mod_down_from_correction_q_assign`; the caller owns the correction's source, sign and scaling in the same ordered Q basis. This is not automatically a BFV, BGV or CKKS modulus-reduction rule. Zero-length Hybrid operations perform no writes or streaming callbacks. See the [hybrid APIs](src/hybrid). Native BFV/BGV use these partitioned ModUp
-primitives with exact centered P corrections in the separately owned
-[Native Hybrid product](../../guides/development/native-hybrid-keys.md); the approximate ModDown
-entry is not silently changed into that scheme-specific rule.
+Approximate ModUp lifts a partition into `Q || P`. Streaming ModUp emits only
+converted complement limbs, so callers supply the unchanged partition limbs.
+Approximate ModDown subtracts a correction converted from `P` to `Q`, then
+multiplies by `P^-1 mod q_i`. Scheme-specific corrections must have the matching
+source, sign, scale and ordered Q basis. See [Hybrid APIs](src/hybrid) and
+[native BFV/BGV Hybrid keys](../../guides/development/native-hybrid-keys.md) for
+the exact centered correction used by those schemes.
 
 ## Caller contracts and workspace
 
-- Input residues supplied to arithmetic and base-conversion kernels must be canonical for their corresponding moduli unless the method documents a wider range.
-- Moduli combined in one basis, including `Q || P`, must be pairwise coprime.
-- Slice lengths and modulus-major ordering must match the selected base and value count (polynomial length for Hybrid operations).
-- Reuse converter workspaces and scratch buffers outside hot loops. The batched APIs perform no internal allocation once their output and workspace are provided.
-- Not every low-level operation validates these conditions in release builds; uphold its documented contract.
+Pass canonical residues and complete buffers in basis order. Combined bases
+must be pairwise coprime. Match the method's output and scratch shapes to the
+batch size. Use independent mutable workspace for concurrent calls.
 
-## SIMD feature
+## SIMD feature and benchmarks
 
-The optional `simd` feature enables portable-SIMD small-value and modular arithmetic paths. It is disabled by default and requires a nightly Rust toolchain.
+The optional `simd` feature enables nightly portable SIMD for small-value and
+modular arithmetic paths. It is off by default. See the
+[decomposition benchmark](benches/decompose.rs) for its workloads.
 
-## Testing and benchmarks
-
-```text
-cargo test -p primus_rns
+```sh
 cargo bench -p primus_rns --bench decompose
 ```
 
 ## License
 
 Licensed under either the [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) or the [MIT License](../../LICENSE-MIT), at your option.
-
-## HPS coefficient operations
-
-`HpsRns::try_new(&base_q,&base_p,t)` prepares disjoint odd u64 bases below
-`2^62`; its immutable handles share existing CRT precomputation. Prepare one
-`workspace(value_count)` and reuse it for allocation-free modulus-major batches.
-`expand_q_to_p` and `expand_p_to_q` select exact centered representatives, with
-a certified floating point correction and exact multiword boundary fallback.
-`scale_q_to_p` uses HPS's bounded one-sided P/Q residual rule; it is not nearest
-rounding. `scale_and_round` computes exact `nearest(t*z/P) mod Q` from coherent
-Q/P residues. These operations do not certify NTT primes or BFV circuit noise;
-the [BFV contract](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
-records the consuming algorithm and auxiliary-basis/error conditions.

@@ -20,7 +20,7 @@ Run a complete encryption → lookup → decryption example from the repository 
 cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 ```
 
-The example selects an `experimental` operation config, builds a context and paired keys, and applies two successive PBS calls. Client/server roles are separate; keys, LUTs, evaluator and output buffers are reused. Each backend README links complete examples for other operations.
+The example chains two lookup tables using the same keys and evaluator. Each backend README links complete examples for other operations.
 
 ## TFHE backends
 
@@ -42,10 +42,10 @@ cargo run --release -p primus_bfv --example coefficients
 cargo run --release -p primus_bgv --example leveled_coefficients
 ```
 
-- [BFV](crates/primus_bfv/README.md) provides exact rounded prime drop and Exact and HPSPOVERQ multiplication. The [working-basis guide](guides/development/bfv-working-basis.md) describes the finite HPSPOVERQLEVELED parameter factory and its arithmetic and key requirements.
-- [BGV](crates/primus_bgv/README.md) supports ciphertext prime chains with each prime coprime to the plaintext modulus `p`. Dropping a prime `q` updates the correction factor to `f*q^-1 mod p`. Centered recovery applies the inverse factor modulo `p`. See the [parameter and budget guide](guides/development/ordinary-parameter-budgets.md) for the ordinary BGV workflow and its limits.
+- [BFV](crates/primus_bfv/README.md) offers Exact and HPSPOVERQ multiplication and rounded prime drop.
+- [BGV](crates/primus_bgv/README.md) uses exact prime drop and ciphertext primes coprime to the plaintext modulus.
 
-The [native Hybrid key guide](guides/development/native-hybrid-keys.md) describes the QP key basis and role bindings shared by both schemes.
+See the [parameter and budget guide](guides/development/ordinary-parameter-budgets.md) when selecting parameters for a circuit.
 
 ## Workspace map
 
@@ -63,11 +63,10 @@ The [native Hybrid key guide](guides/development/native-hybrid-keys.md) describe
 
 ## Building and further reading
 
-Default features use stable Rust; optional `simd` requires nightly. Run `cargo check --workspace --all-targets` or `cargo doc --workspace --no-deps` from the repository root. The repository sets `target-cpu=native`; adjust the build configuration explicitly when distributing binaries to other CPUs.
+Default features use stable Rust. Optional `simd` requires nightly. The repository sets `target-cpu=native`. Adjust the build configuration when distributing binaries to other CPUs.
 
-- Run ordinary tests, doctests, examples and benchmark smoke tests using the [testing guide](guides/development/testing.md) and [justfile](justfile).
-- Find the BFV/BGV external consumer check and parameter screening adapter under [developer scripts](guides/development/testing.md#开发脚本).
-- See the [performance guide](guides/performance/README.md) for benchmark interpretation and the [TFHE numerical contracts](guides/development/bootstrapping-contracts.md) for algorithmic requirements.
+- Generate the API documentation with `cargo doc --workspace --no-deps` or follow a crate's README for operation-specific features.
+- Find validation commands and scripts in the [testing guide](guides/development/testing.md) and benchmark interpretation in the [performance guide](guides/performance/README.md).
 - Follow the [contribution rules](AGENTS.md) for workspace changes.
 
 ## License

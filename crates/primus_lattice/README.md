@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). It is shared by the GLWE/NTRU × Fourier/NTT TFHE paths by RNS GLWE implementations, and by native BFV/BGV Hybrid products.
+`primus_lattice` provides ciphertext storage, representation conversions, and low-level lattice operations for [Primus FHE](../../README.md). The TFHE backends, RNS GLWE implementations, and native BFV/BGV Hybrid products share these primitives.
 
 Key generation, encryption parameters, encoding policy, noise management, and complete homomorphic evaluation belong to higher layers such as [`primus_glwe`](../primus_glwe), [`primus_ntru`](../primus_ntru), [`primus_glwe_rns`](../primus_glwe_rns), [`primus_bfv`](../primus_bfv), and [`primus_bgv`](../primus_bgv).
 
@@ -84,22 +84,14 @@ Full GLWE extraction flattens all mask polynomials into an LWE mask; compact ext
 
 ## Native Hybrid RNS products
 
-With `rns`, `radix::NativeRadixParameters` shares immutable rank-one signed
-decomposition, checked column geometry and CRT weights across BFV/BGV role
-keys. It binds N and ordered Q, without certifying secret or transform identity.
-Scheme key generators accept it through `EvaluationKeyConfig::PreparedRadix`.
-
-With `rns`, `hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
-provides fixed-u64 rank-one `[c0,c1]` plus-phase arithmetic for BFV/BGV keys.
-Parameters share immutable CRT bases. `NativeHybridAuxiliary` owns the ordered P
-basis and NTT tables for one ring. Several active Q levels can reuse it through
-`NativeHybridParameters::try_with_auxiliary`. The scheme owns the Q NTT tables.
-A prepared product shares the active-level parameters and reuses
-all mutable scratch. `HybridModDown::Centered` and `PlaintextPreserving(p)` keep
-their distinct corrections. This adds no ciphertext family or raw GLWE bridge.
-Scheme owners still generate/sanitize role keys and establish all error/security
-conditions; the shared setup extension recovers one actual supported coefficient
-secret before constructing its P limbs. See the [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
+With `rns`, `NativeRadixParameters` binds shared decomposition resources to
+the ring length and ordered Q for `EvaluationKeyConfig::PreparedRadix`.
+`NativeHybridParameters` and `NativeHybridProduct` support the native BFV/BGV
+`u64`, rank-one `[c0,c1]` plus-phase layout. Bind the active Q and auxiliary
+P in order, share the prepared parameters, and give each worker its own
+mutable product. The scheme owns role-key generation and parameter suitability.
+See the [native Hybrid contract](../../guides/development/native-hybrid-keys.md)
+for auxiliary reuse and the distinct ModDown corrections.
 
 ## Correctness and workspace contracts
 
@@ -117,13 +109,18 @@ These low-level operations deliberately omit some checks. Invalid inputs may sil
 
 Workspaces provide reusable scratch, without validating key, basis, table or modulus identity. Overwriting external products initialize their buffers, so valid calls need no reset; accumulating APIs require valid existing output. GLWE external-product workspace `with_rebound` temporarily changes decomposition depth while preserving the GLWE shape and restores the original layout after the call; `resize` can change buffer sizes.
 
-Batch external products and k-CMux check iterator counts. NLEV sums and NGSW k-CMux validate buffer lengths for each streamed pair. GGSW k-CMux relies on the caller to provide complete buffer layouts, with debug diagnostics for length mismatches. An invalid later pair or panicking iterator can leave partial output or scratch. Discard the result and reuse the workspace in a valid call. The method documentation specifies the exact checks and write boundaries.
+Batch external products and k-CMux check iterator counts. Per-pair layout checks
+and write boundaries are documented on each method. A failing pair or iterator
+can leave partial output or scratch. Discard the result and reuse the workspace
+in a valid call.
 
 CMux selection requires encrypted bit controls; k-CMux requires at most one active control. Ternary `cmux_ternary_monomial_to` uses mutually exclusive bits `s⁺, s⁻`, with ideal rotation `X^(exponent * (s⁺-s⁻))`. The exponent must be in `0..2N`; zero copies the input exactly. Controls must share the key, basis and transform conventions; Fourier controls use native-torus scale and a matching native basis. Noise growth and decryptability belong to higher layers.
 
 ## Example
 
-Borrow storage, add an already encoded polynomial to the body, then extract its second coefficient under an explicit modulus:
+Add `primus_lattice`, `primus_shape`, `primus_modulus` and `primus_poly` as
+direct dependencies. This example uses the default features to add an already
+encoded polynomial to the body and extract its second coefficient.
 
 ```rust
 use primus_lattice::{GlweDimension, GlweSize, glwe::Glwe, lwe::Lwe};
@@ -156,13 +153,9 @@ Default features are empty: coefficient storage, layouts and basic arithmetic do
 - `fourier` enables the corresponding generic Fourier APIs without selecting an FFT engine.
 - `rustfft` / `tfhe-fft` enable `fourier` and the corresponding FFT implementation; they can be combined.
 - `rns` enables CRT/DCRT ciphertexts and multiplication workspaces, including the `ntt` capability required by DCRT.
-- `parallel` forwards bounded DCRT prefix forward/inverse NTT scheduling to an
-  active NTT dependency, including GLev products and Hybrid Q/P transforms. It
-  does not activate `ntt` or `rns`; enable the needed representation separately.
-  Prefixes with N≥4096 and two or more limbs use at most four contiguous tasks;
-  bound total pool threads with `RAYON_NUM_THREADS` or `ThreadPool::install`.
-  It is off by default, with no pool initialization on this serial NTT path;
-  random sampling is not parallelized.
+- `parallel` forwards bounded DCRT prefix scheduling to an active NTT
+  dependency, including for GLev products and Hybrid Q/P transforms. Enable
+  `ntt` or `rns` separately and follow the [NTT pool configuration](../primus_ntt/README.md#simd-backends-and-build-target).
 - `simd` propagates nightly SIMD only to active arithmetic dependencies; it does not activate a backend, FFT engine or `rns`.
 - `RnsGlweSize` and `RnsGadgetSize` remain available without `rns`.
 
@@ -170,6 +163,6 @@ Each target declares the representations and concrete FFT implementations it nee
 
 ## Tests and benchmarks
 
-The `gadget_operations` integration target covers coefficient and transformed external products, fused sums, and multi-way and ternary CMux. Run it with `cargo test -p primus_lattice --test gadget_operations --features ntt,rustfft,tfhe-fft`.
-
-Validation commands are in the workspace [testing guide](../../guides/development/testing.md). The [benchmark guide](benches/README.md) lists independently runnable targets and their endpoints; measure complete PBS and sequential evaluation-key access in the upper layers.
+See the workspace [testing guide](../../guides/development/testing.md) for
+validation commands and the [benchmark guide](benches/README.md) for workloads
+and measurement boundaries.

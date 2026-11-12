@@ -9,22 +9,11 @@ English | [简体中文](README.zh_CN.md)
 
 ## Overview
 
-The traits in this crate put the modulus or reduction context in the receiver position:
-
-```text
-modulus.reduce_add(a, b)
-modulus.reduce_mul_slice_to(a, b, output)
-```
-
-Operations are split into fine-grained traits so a modulus type implements only the scalar, slice, lazy, inverse, or fused operations it actually supports. Concrete modulus types and their ring-arithmetic kernels live in [`primus_modulus`](../primus_modulus). This crate also provides the modulus-independent `ModulusSwitch<T>` executor.
-
-The main API groups are:
-
-- scalar `Reduce*` traits for canonical arithmetic, inversion, division, and exponentiation;
-- `Reduce*Slice` traits for bulk operations and SIMD dispatch;
-- `LazyReduce*` traits whose results lie in `[0, 2 * modulus)`;
-- `Modulus` and `ExplicitModulus` for modulus metadata;
-- `RingContext` and `FieldContext` capability markers.
+Use the operation traits from the [prelude](src/prelude.rs) with concrete
+moduli from [`primus_modulus`](../primus_modulus/README.md). The traits cover
+canonical, lazy, slice, signed, and fused arithmetic. `RingContext` and
+`FieldContext` describe supported operations. Algorithms requiring a prime
+modulus or invertible elements must establish those conditions separately.
 
 ## Example
 
@@ -45,22 +34,18 @@ assert_eq!(values, [13, 13]);
 
 ## Caller contracts
 
-This crate defines interfaces, not validation boundaries. Each public method documents its input range, representation, output state, and length requirements.
-
-- Low-level numerical kernels may diagnose shape mismatches only with `debug_assert*!`; release callers must uphold the documented contracts.
-- Dot products explicitly check equal slice lengths in every build profile. Canonical operands are always supported; wider input ranges are implementation-specific. Runtime and derived Barrett also accept operands below `2^(T::BITS - 2)`, independently of the destination modulus.
-- Lazy results require a final once-reduction before they are treated as canonical residues.
-- Fallible inverse traits report `ReduceError`; infallible inverse and division traits may panic when the required inverse does not exist.
-
-`FieldContext` means that a modulus type implements the listed operation set. It does not prove that the modulus is prime or that every nonzero residue is invertible. Callers remain responsible for validating the algebraic assumptions required by their algorithms.
+Use canonical residues and complete buffers unless the operation documents a
+different range. Apply once-reduction before using lazy outputs as canonical
+residues. See the [scalar](src/ops.rs) and [slice](src/slice_ops.rs) traits for
+input ranges, length checks, and fallible inverse operations.
 
 ## Signed coefficients
 
-`EncodeSigned<T>` converts bounded signed coefficients to canonical residues, without plaintext scaling or general modular reduction. It is exported from the crate root and `prelude`; custom modulus types can implement it without `Reduce` or `ReduceNeg`. Slice conversion requires equal input and output lengths.
-
-`ReduceDotProductSigned<T>` computes the dot product of canonical residues and bounded signed coefficients without an encoded copy. It checks equal slice lengths and returns a canonical residue, or zero for empty inputs. Its signed input bounds match `EncodeSigned`; see the [modulus types](../primus_modulus/README.md#arithmetic-contracts) for support.
-
-`RingContext<T>` includes both signed operation traits; `FieldContext<T>` inherits them through `RingContext<T>`. Both contexts require `T: FheUint`. Code needing only one operation can use its individual trait without the full context.
+[`EncodeSigned<T>`](src/signed.rs) lifts a signed coefficient to a canonical
+residue without plaintext scaling. An explicit modulus `q` requires magnitude
+strictly below `q`. The native modulus represents every signed value.
+`ReduceDotProductSigned<T>` uses the same signed input contract and works
+without an encoded copy.
 
 ```rust
 use primus_modulus::{NativeModulus, UintModulus};
@@ -73,17 +58,15 @@ UintModulus::new(97).encode_signed_slice_to(&[-1, 0, 1], &mut output);
 assert_eq!(output, [96, 0, 1]);
 ```
 
-For an explicit modulus `q`, every coefficient must satisfy `value.unsigned_abs() < q`; this precondition is not checked in release builds. Every signed value, including the signed minimum, is representable under the native modulus. Imported coefficients must fit the destination modulus, even if they were valid under another modulus.
-
 ## Prepared modulus switching
 
-`PrepareModulusSwitch` and `ModulusSwitch<T>` are exported from this crate. `source.prepare_switch_to(target)` returns the concrete executor, whose inherent `switch` and `switch_map` methods require no execution trait. `ModulusSwitch::new(source, target)` also accepts any pair of `Modulus` implementations.
-
-Canonical source residues map to `round(value * target / source) mod target`, with ties upward and endpoint wrapping to zero. Either modulus may be native; explicit moduli must be at least two. This is integer ratio rounding, independent of modular division.
-
-`RingContext` includes preparation, and `FieldContext` inherits it. Callers needing fewer capabilities can use `PrepareModulusSwitch` alone. Concrete implementations and a minimal example are in [`primus_modulus`](../primus_modulus/README.md#prepared-modulus-switching); raw reciprocal construction has additional [correctness preconditions](src/modulus_switch.rs).
-
-`switch_map` carries a payload beside each coefficient for output conversion or accumulation without an intermediate buffer. If the iterator or callback panics, earlier effects remain.
+Use [`PrepareModulusSwitch` or `ModulusSwitch::new`](src/modulus_switch.rs) to
+prepare one source/target pair. Given a canonical source residue, `switch`
+rounds `value * target / source` to nearest with ties upward, then wraps the
+target endpoint to zero. Each modulus is at least two and may be native.
+`switch_map` carries a payload alongside each residue to avoid an intermediate
+buffer. Callback effects already performed remain if a batch panics.
+See the [example in primus_modulus](../primus_modulus/README.md#prepared-modulus-switching).
 
 ## License
 

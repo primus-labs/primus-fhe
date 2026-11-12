@@ -28,13 +28,13 @@ A/B 对照固定算法、输入、参数、编译器、feature、CPU 和实际�
 
 ## Fourier 建钥
 
-Fourier GLWE 求值材料先生成 native 系数行，再进行变换。升级时应重新生成旧未约简路径产生的材料，并更换曾公开受影响材料的秘密。当前 GLWE Fourier 计时以精确系数路径为准。历史修复实验单列准备成本，观察到建钥耗时增加，在线差异较小且方向不一。精确 native 系数行仍有 Fourier 转换误差和后端精度限制。 [Fourier 误差预算](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)
+当前 GLWE Fourier 计时使用精确系数建钥，并与在线求值分开报告。历史修复实验中，建钥耗时增加，在线差异较小且方向不一。复测前按当前契约核对材料迁移和精度要求。 [GLWE 建钥](../../crates/primus_glwe/README.zh_CN.md#加密与解密) · [Fourier 误差预算](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)
 
 <a id="ntru-projection"></a>
 
 ## NTRU 投影
 
-生成密钥和准备 scratch 前选择投影策略。NTT CBS 性能预设使用 `PairedTrace`，默认配置使用 `Separate`。Fourier 融合和配对要求 split trace 和 scheme switching，NLEV-only 或 dual 输出仍分开执行。历史 NTT 配对实验以更多密钥和 scratch 换取更快的 trace 加换钥投影。Fourier 完整 one-hot 的收益因配置而异，局部投影加速并不保证降低请求耗时。选策略时同时比较完整请求与其误差预算。 [投影与精度契约](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
+历史 NTT 配对实验以更多密钥和工作区换取更快的 trace＋scheme switch 投影。即使投影提速，Fourier 完整 one-hot 的收益仍因配置而异。建钥前选择受支持的投影策略，同时比较完整请求与误差预算。 [投影与精度契约](../development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)
 
 ## 历史证据
 

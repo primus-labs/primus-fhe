@@ -36,22 +36,17 @@ assert_eq!(output, [11, 6, 50]);
 
 ## Choosing and constructing a modulus
 
-- Use `NativeModulus::new()` when overflow itself represents reduction modulo the full word range.
-- Use `PowOf2Modulus::new(value)` for a representable power-of-two modulus.
-- Use `BarrettModulus::new(value)` when multiplication and repeated reduction are required for a modulus in the supported Barrett range.
-- Use `CompactModulus::new(value)` or `UintModulus::new(value)` for their smaller basic-operation sets.
-
-For constant parameter descriptions, use `ModulusConfig<M>` with Native, PowOf2 or Barrett and prepare it with `M::try_from(config)`. The conversion checks the selected representation and its range, returning `ModulusConfigError` on failure; it does not establish primality or NTT compatibility.
-
-Use `BarrettModulus::try_new(value)` to report an invalid range without panicking. Use [`BarrettModulus::from_parts`](src/barrett/mod.rs) when the caller already has the validated modulus and its correct little-endian reciprocal. Direct construction or `.0` updates of `CompactModulus` and `UintModulus` must preserve their documented ranges.
+Use the constructors on the types above, or describe Native, PowOf2, and
+Barrett choices with [`ModulusConfig`](src/config.rs) and prepare them with
+`M::try_from(config)`. For Barrett, `try_new` checks the range and
+[`from_parts`](src/barrett/mod.rs) accepts a validated modulus and its matching
+little-endian reciprocal. Preserve the documented ranges when constructing or
+changing the public fields of Compact and Uint contexts.
 
 ## Prime preparation
 
-`is_prime_u64(value)` is a deterministic primality test over the complete u64
-range, intended for public parameter construction. It does not change the
-contracts of the reducer constructors or `FieldContext`: those still do not
-prove primality. Primality alone does not establish NTT compatibility or a
-cryptographic security level.
+Use [`is_prime_u64`](src/prime.rs) to test public u64 parameters for primality.
+Check NTT compatibility and cryptographic parameters separately.
 
 ## Features
 
@@ -64,25 +59,22 @@ Stable builds can also select supported x86_64 kernels; disabling `simd` does no
 
 ## Arithmetic contracts
 
-The operation traits, input ranges, output ranges, and slice-length requirements come from `primus_reduce`.
-
-- Canonical operations generally require canonical residues unless their trait or concrete implementation documents a wider input domain. Barrett dot products accept each operand below `2^(T::BITS - 2)`, including residues from another Barrett modulus larger than the destination; both slice and iterator forms return canonical residues.
-- Lazy operations return representatives in `[0, 2 * modulus)` and require a final once-reduction before canonical use.
-- Low-level slice kernels may use `debug_assert*!` for shape diagnostics; release callers must uphold the documented length contracts.
-- `FieldContext` is a capability marker. It does not prove primality or guarantee that every nonzero value is invertible.
-- `EncodeSigned` converts coefficients with unsigned magnitude less than the explicit modulus; Native accepts every signed value. Slice conversion checks equal input/output lengths. This conversion applies no plaintext scaling.
-- `ReduceDotProductSigned` combines bounded signed coefficients and canonical residues for Native, PowOf2, Barrett and derived Barrett. It checks equal slice lengths and returns zero for empty inputs.
+Use the [operation contracts](../primus_reduce/README.md#caller-contracts).
+[`BarrettModulus`](src/barrett/mod.rs) documents its full-width scalar reduction
+and dot products whose operands can exceed the destination modulus.
+[`ReduceDotProductSigned`](../primus_reduce/src/signed.rs) is supported by Native,
+PowOf2, Barrett, and derived Barrett.
 
 ## Prepared modulus switching
 
-All five modulus types and derived Barrett contexts implement `primus_reduce::PrepareModulusSwitch`. Construct `source.prepare_switch_to(target)` once and reuse its `switch` or `switch_map` methods. `ModulusSwitch::new(source, target)` is also available; both forms follow the same [rounding and batch contracts](../primus_reduce/README.md#prepared-modulus-switching).
+All five modulus types and derived Barrett contexts implement the shared
+[modulus switching contract](../primus_reduce/README.md#prepared-modulus-switching).
 
 ```rust
-use primus_modulus::{BarrettModulus, NativeModulus};
-use primus_reduce::PrepareModulusSwitch;
+use primus_modulus::{BarrettModulus, NativeModulus, reduce::PrepareModulusSwitch};
 
 let conversion = BarrettModulus::new(97u32).prepare_switch_to(NativeModulus::new());
-let residue = conversion.switch(48);
+assert_eq!(conversion.switch(48), 2_125_344_641);
 ```
 
 ## License

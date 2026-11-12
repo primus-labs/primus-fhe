@@ -82,7 +82,7 @@ NLev 和 NGSW 存储的行数相同，角色却不同。`NLev[1]` 可通过外�
 
 将 `encryption_parameters()` 传给 `NttNtruSecretKey::generate_pair` 或 `FourierNtruSecretKey::generate_pair`。返回的有符号系数私钥用于生成求值密钥，变换私钥用于加密和相位提取。`try_from_coeff_secret_key` 转换已有私钥，也可能拒绝它；NTT 导入要求有符号系数幅度小于 q。后续操作须保持构造时的表示，相同 q/N 不能证明 NTT 根、求值顺序或秘密身份相同。
 
-NTT 生成拒绝零点值；Fourier 检查原生环可逆性（系数和为奇数）和复数逆元稳定性。有界拒绝采样可能失败，重试次数及求逆例程不承诺常数时间。Native 固定 binary/ternary 分布的非零总数为偶数时返回 `NonInvertibleSecretKey`，候选搜索失败返回 `KeyGenerationExhausted`。返回秘密服从候选分布**在后端接受条件下的条件分布**，`distr()` 记录候选分布。
+NTT 建钥拒绝零点值。Fourier 要求系数和为奇数且复数逆元稳定。Native 固定重量 binary/ternary 的候选应有奇数个非零系数。有界拒绝采样可能失败，建钥用时可变。返回秘密服从候选分布**在后端接受条件下的条件分布**，`distr()` 记录候选分布。见 [NTT](src/secret_key/ntt/mod.rs) 和 [Fourier](src/secret_key/fourier/mod.rs) 建钥契约。
 
 一般 NTRU 支持非 binary 环秘密。NTRU TFHE 使用独立外部 LWE 秘密作为 binary/ternary 盲旋转控制，不要求环秘密为补零 binary。
 
@@ -107,11 +107,9 @@ cargo run -p primus_ntru --example automorphism --features ntt
 
 NTT 私钥运算不需要工作区。Fourier 加解密复用 FFT engine 及 `FourierNtruEncryptWorkspace<T>` / `FourierNtruDecryptWorkspace`。已编码 NTT 输入须为模 q 的规范系数。密钥、参数、表和输出须匹配；非法明文可能在部分写入或消耗随机数后失败。精确缓冲区及失败契约见[私钥方法](src/secret_key)。
 
-Fourier 加密和建钥先用精确的原生逆元生成完整系数行，模数为 `2^T::BITS`。随后进行的 Fourier 转换有自己的精度预算。消费方需要系数密文时，可用 `encrypt_message_coeff_to`。
+Fourier 加密和建钥先精确生成 native 系数行，再做变换。噪声预算须包含 Fourier 转换误差。消费方需要系数密文时可用 `encrypt_message_coeff_to`。旧版未约简复数路径生成的材料须重新生成。若材料已公开，还须更换受影响的秘密。见 [Fourier 加密](src/secret_key/fourier/encrypt.rs)。
 
-使用旧版未约简复数路径生成的密文和求值材料须重新生成。如果曾对外提供受影响的材料，须更换相关秘密。
-
-做[相位误差诊断](../primus_encoding/README.zh_CN.md#相位误差诊断)时，用实际 codec 和 embedding 编码**预期消息**，再与相位比较。先解码再重新编码不能提供独立参考，Fourier 相位误差还包含变换舍入。
+要比较相位与预期消息，参见[相位误差诊断](../primus_encoding/README.zh_CN.md#相位误差诊断)。
 
 ## Gadget 与求值原语
 
@@ -126,7 +124,7 @@ Fourier 加密和建钥先用精确的原生逆元生成完整系数行，模数
 
 求值密钥持有分解基，匹配的工作区构造一次即可复用。自同构要求 `d` 为 `[1, 2N)` 中的奇数。NLev 可以逐行应用标量自同构，但对 NGSW 逐行应用**不能**保持其消息/密钥关系。
 
-`NttNlev::lift_monomial_to` / `FourierNlev::lift_monomial_to` 融合公开多项式提升与首次 binary/ternary 旋转。传入 NLev[1]、正控制 NLev 位和可选的负控制 NLev 位，指数为零时仍须提升。后续 ternary `cmux_ternary_monomial_to` 使用互斥的正/负 NGSW 控制位。指数应已量化到 `0..2N`。复用 `NttNtruCmuxWorkspace::new(poly_length, levels)` 或 Fourier 对应类型。
+`NttNlev::lift_monomial_to` 和 `FourierNlev::lift_monomial_to` 融合公开多项式提升与首次 binary 或 ternary 旋转。指数为零时仍会提升。后续 ternary CMUX 使用互斥的正、负 NGSW 控制位。传入已量化至 `0..2N` 的指数，并复用匹配的工作区。见[首次提升契约](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
 Fourier 控制使用原生分解基及环面尺度。值、求值密钥和映射须使用生成时的同一 FFT 表实例；直接 Fourier 输出的舍入可能不同于系数往返路径。实际秘密身份、输入规范性以及足够的加密/分解/FFT 误差预算由调用方保证。
 
@@ -146,9 +144,9 @@ Fourier 控制使用原生分解基及环面尺度。值、求值密钥和映射
 
 共享输入返回复用一次 Q→q 转换。`return_many_at_to` 保留任意索引顺序与重复项，`return_prefix_to` 选择 `0..outputs.len()`。空请求不写入，单项请求采用标量路径。
 
-`LweReturnBatchWorkspace` 跟踪当前流的有效前缀。每次追加后不保留输入借用；提交数量须恰好等于追加数量，且不超过 `batch_capacity()`。共享输入返回或换用其他绑定前，须结束或取消当前流。工作区状态不证明密钥身份：追加及提交须使用相同的实际秘密与 Q/q。状态及失败契约见 [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs)。中间 slot 仅供内部使用，调用方不能提交未准备的样本。
+`LweReturnBatchWorkspace` 跟踪流的有效前缀。容量内每追加一项就提交一个对应输出，整个流使用相同的实际秘密和 Q/q。换用其他绑定或共享输入返回前，先结束或取消当前流。见 [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs)。
 
-运算先逐系数计算 `c' = round(q*c/Q) mod q`（最近舍入，半点向上），再在 f 下提取并于 q 下 key switch。提取的相位为 `b-<a,f> = (f*c')[index]`。**舍入先于提取中的取负**，交换次序会改变半点结果。Mask 布局见 [LweReturnEvaluator](src/key_switch/lwe/evaluator.rs)。
+返回先逐系数计算 `c' = round(q*c/Q) mod q`，舍入到最近整数，半点向上。随后在 f 下提取，再于 q 下 key switch。提取的相位为 `b-<a,f> = (f*c')[index]`。半点处须保持此顺序。见[返回数值契约](src/key_switch/lwe/evaluator.rs)。
 
 Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类型（u32→u32 或 u64→u64），缩小 q 不改变字宽。输入须为 Q 下规范剩余类。噪声预算包含 f 加权的舍入、秘密加权的分解误差和 LWE 密钥噪声，以及已有 NTRU/FFT 误差。将 Q 下编码消息缩放到 q，一般不等于直接在 q 下重新编码。
 
@@ -178,13 +176,11 @@ Q 和 q 均可为原生或显式模数，也可以相同。返回保留系数类
 
 求值材料为 `NGSW_f[f]`。输入误差乘 f，分解误差乘 f²，密钥/FFT 误差也参与结果。公开该秘密相关材料需要有依据的 key-dependent-message/circular-security 假设和合适参数；功能正确性不提供安全证明或 CBS 参数推荐。m 为 bit 时输出可控制 CMUX，完整相位契约见 [scheme switching](src/scheme_switch)。
 
-对于只需要 NGSW 输出的打包系数，[`NttNtruProjectionKey`](src/scheme_switch/projection.rs) 显式接收 `NtruProjectionMethod`：`Separate`（枚举默认值）、`FusedLastStage`、`FusedLastThreeStages` 或 `PairedTrace`。最后一种两两合并 reverse trace 阶段，将末两层或三层与 SS 融合。`project_to` 接受一般非零消息尾部；用 `scratch_len()` 分配可复用缓冲（依次为 2N、2N、8N、5N/8N；paired 的大小取决于 log₂N 的偶/奇性）。仅生成所选策略的融合材料。融合改变分解残差与密钥误差，切换策略需要重新评估噪声预算。NLev 或双输出可以借用其中的普通 trace/SS 密钥。
+对于只需要 NGSW 输出的打包系数，在生成 NTT 投影密钥时选择 `NtruProjectionMethod`，默认为 `Separate`。融合策略具有不同的分解与密钥误差，须分别建立预算。`project_to` 接受一般消息尾部。用 `scratch_len()` 分配可复用缓冲，NLev 或双输出可借用其中的普通 trace 和 scheme-switch 密钥。见 [`NttNtruProjectionKey`](src/scheme_switch/projection.rs)。
 
 ## Features
 
-默认 features 为空，NTRU→LWE 返回无需变换后端。`ntt` 启用 NTT 运算；`fourier` 启用 Fourier API，但不选择 FFT engine。使用 `rustfft` 或 `tfhe-fft` 同时启用 Fourier 及具体 engine，两者可共存。`simd` 只转发给已启用的算术依赖，不启用变换后端。
-
-测试、示例和基准声明 `required-features`；缺少时 Cargo 会跳过整个 target。按相应运行命令选择 features。
+默认 features 为空，此时可用 NTRU→LWE 返回。`ntt` 启用 NTT 运算。`rustfft` 或 `tfhe-fft` 启用 Fourier 及具体 engine，`fourier` 单独提供与 engine 无关的 Fourier API。`simd` 转发给已启用的算术依赖。
 
 ## 更多资料
 

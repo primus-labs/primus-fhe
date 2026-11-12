@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`primus_ntt` 为 `Z_q[X] / (X^N + 1)` 中的多项式提供原地负循环数论变换。它包含 通用无符号整数 table、优化的 `u32` 和 `u64` table、直接 monomial 变换，以及 [Primus FHE](../../README.zh_CN.md) 使用的 modulus-major DCRT 变换。
+`primus_ntt` 为 `Z_q[X] / (X^N + 1)` 中的多项式提供原地负循环数论变换。它包含通用无符号整数 table、优化的 `u32` 和 `u64` table、直接 monomial 变换，以及 [Primus FHE](../../README.zh_CN.md) 使用的 modulus-major DCRT 变换。
 
 > [!WARNING]
 > 本 crate 属于实验性的 Primus FHE workspace。其 API、NTT 表示、数值契约和 backend 选择尚不稳定，可能随时发生不兼容修改。
@@ -22,6 +22,8 @@
 变换原地执行，每次调用不分配 scratch；应为各环和模数构造并复用 table。
 
 ## 示例
+
+将 `primus_ntt`、`primus_modulus` 和 `primus_shape` 添加为直接依赖。本示例使用默认 features。
 
 ```rust
 use primus_modulus::BarrettModulus;
@@ -57,7 +59,7 @@ Table 不可变并实现 `Send + Sync`，可在线程间共享，各线程使用
 | `lazy_transform_slice` | `[0, 4q)` | `[0, 4q)` |
 | `lazy_inverse_transform_slice` | `[0, 2q)` | `[0, 2q)` |
 
-Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契约。特别是，lazy forward 的结果不一定能直接作为 lazy inverse 的输入；调用 inverse 前应先将其 规范化到对应方法接受的范围。
+Lazy 值表示模 `q` 的剩余类。调用 lazy inverse 前须把 lazy forward 的结果调整到逆变换接受的范围。
 
 变换操作接收 mutable slice。使用 [`primus_poly`](../primus_poly/README.zh_CN.md) wrapper 时，借用其存储执行变换，再将同一存储包装为结果的表示类型。
 
@@ -98,25 +100,17 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
 
 默认 feature 集为空。专用 x86-64 table 在运行时选择可用的 scalar 或 SIMD 内核，无需启用可选的 `simd` feature；其他架构使用 scalar 实现。`simd` feature 启用依赖中的 portable-SIMD 支持，需要 nightly Rust。
 
-`parallel` 启用 checked DCRT prefix 正逆 NTT 的有界调度。每次 prefix 的 N≥4096
-且至少两条 limb 时，在当前 Rayon pool 中使用至多 4 个连续任务。通过
+`parallel` 将符合条件的 DCRT 前缀变换调度到当前 Rayon 线程池。通过
 `RAYON_NUM_THREADS` 配置默认线程池，或通过 `ThreadPoolBuilder::num_threads`
 设置自建线程池的线程数，再用 `ThreadPool::install` 选择该线程池。
-该 feature 默认关闭，此 NTT 路径保持串行且不初始化 pool；随机采样不并行。
-符合条件的table构造会准备当前pool registry，但不等待所有worker完成启动。
-仅测kernel分配时，应先同步配置好的pool，例如调用`ThreadPool::broadcast`；
-无需预跑变换来预热kernel。
+该 feature 默认关闭。调度条件见[前缀变换契约](src/dcrt/mod.rs)。
 
 仓库[编译配置](../../.cargo/config.toml) 使用 `target-cpu=native`。构建可移植二进制时须覆盖其 rustflags；仅有运行时分派不能使面向本机编译的产物可移植。
 
 ## 测试与 benchmark
 
-```text
-cargo test -p primus_ntt
-cargo bench -p primus_ntt --bench bench_ntt
-```
-
-基准对照两种字宽的专用与通用正逆变换。惰性变换、表构造和单项式操作各按字宽选取一组代表参数。启用 `parallel` 后增加 N=4096、四条有效 limb 的 DCRT prefix 对照，分别使用已准备好的单 worker 和四 worker 线程池。两组计时均包含进入线程池的开销。
+命令和计时边界见 workspace [测试指南](../../guides/development/testing.md)和
+[`bench_ntt` 目标](benches/bench_ntt.rs)。
 
 ## 许可证
 
