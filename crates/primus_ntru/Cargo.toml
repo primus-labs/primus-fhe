@@ -69,10 +69,6 @@ name = "key_switch"
 required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
-name = "lwe_key_switch"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
 name = "phase_contracts"
 required-features = ["ntt", "rustfft", "tfhe-fft"]
 

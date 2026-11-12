@@ -5,7 +5,6 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use primus_decompose::{
     DecompositionBaseLog, DecompositionLevelCount, primitive::ApproxSignedBasis,
 };
-use primus_encoding::PlaintextEmbedding;
 use primus_integer::{AsInto, FheUint};
 use primus_lattice::{LweDimension, lwe::LweIter};
 use primus_lwe::{LweCiphertext, LweKeySwitchingParameters, LweParameters, LweSecretKey};
@@ -15,6 +14,7 @@ use primus_ntru::{
     NtruSecretKey, SecretKeyDistr,
 };
 use primus_reduce::{Modulus, RingContext};
+#[cfg(any(feature = "ntt", feature = "rustfft", feature = "tfhe-fft"))]
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -713,6 +713,7 @@ fn validation_precedes_output_writes_and_key_sampling() {
 }
 
 // Return actual encrypted coefficients to an independent, noninvertible LWE secret.
+#[cfg(any(feature = "ntt", feature = "rustfft", feature = "tfhe-fft"))]
 fn check_encrypted_return<T: FheUint, Q: Modulus<ValueT = T>>(
     input: &NtruCiphertext<Vec<T>>,
     secret: &NtruSecretKey<T>,
@@ -747,7 +748,9 @@ fn check_encrypted_return<T: FheUint, Q: Modulus<ValueT = T>>(
 }
 
 // Recover an NTT ciphertext to coefficients before exercising the common return API.
+#[cfg(feature = "ntt")]
 fn check_ntt_encryption<T: FheUint, Table: primus_ntt::MonomialNttTable<ValueT = T>>(q: T) {
+    use primus_encoding::PlaintextEmbedding;
     use primus_ntru::{NtruParameters, NttNtruSecretKey};
     use primus_poly::Polynomial;
     let modulus = BarrettModulus::new(q);
@@ -780,7 +783,9 @@ fn check_ntt_encryption<T: FheUint, Table: primus_ntt::MonomialNttTable<ValueT =
 }
 
 // Include each FFT backend's torus recovery error in the encrypted return check.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 fn check_fourier_encryption<T: primus_fft::TorusFftValue, Table: primus_fft::FftTable>() {
+    use primus_encoding::PlaintextEmbedding;
     use primus_fft::FftEngine;
     use primus_ntru::{FourierNtruEncryptWorkspace, FourierNtruSecretKey, NtruParameters};
     use primus_poly::Polynomial;
@@ -818,13 +823,23 @@ fn check_fourier_encryption<T: primus_fft::TorusFftValue, Table: primus_fft::Fft
 }
 
 // Cover backend conversion and key independence beyond synthetic coefficient fixtures.
+#[cfg(feature = "ntt")]
 #[test]
-fn encrypted_ntt_and_fourier_return_to_independent_noninvertible_lwe_secret() {
-    use primus_fft::{RustFftTable, TfheFftTable};
+fn ntt_encrypted_return_to_independent_noninvertible_lwe_secret() {
     check_ntt_encryption::<u32, primus_ntt::U32NttTable>(132_120_577);
     check_ntt_encryption::<u64, primus_ntt::U64NttTable>(1_125_899_906_826_241);
-    check_fourier_encryption::<u32, RustFftTable>();
-    check_fourier_encryption::<u32, TfheFftTable>();
-    check_fourier_encryption::<u64, RustFftTable>();
-    check_fourier_encryption::<u64, TfheFftTable>();
+}
+
+#[cfg(feature = "rustfft")]
+#[test]
+fn rustfft_encrypted_return_to_independent_noninvertible_lwe_secret() {
+    check_fourier_encryption::<u32, primus_fft::RustFftTable>();
+    check_fourier_encryption::<u64, primus_fft::RustFftTable>();
+}
+
+#[cfg(feature = "tfhe-fft")]
+#[test]
+fn tfhe_fft_encrypted_return_to_independent_noninvertible_lwe_secret() {
+    check_fourier_encryption::<u32, primus_fft::TfheFftTable>();
+    check_fourier_encryption::<u64, primus_fft::TfheFftTable>();
 }

@@ -2,17 +2,20 @@
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_integer::FheUint;
-use primus_lattice::GlweDimension;
-use primus_lattice::{
-    GadgetSize, GlweSize, ggsw::Ggsw, glwe::Glwe, workspace::NttGlweTernaryCmuxWorkspace,
-};
+use primus_lattice::{GadgetSize, GlweDimension, GlweSize, glwe::Glwe};
+#[cfg(feature = "ntt")]
 use primus_modulus::BarrettModulus;
+#[cfg(feature = "ntt")]
 use primus_ntt::{NttTable, UintNttTable};
 
-use super::{N, POLY_LENGTH, unit_ggsw, unit_ngsw};
+#[cfg(feature = "ntt")]
+use super::unit_ngsw;
+use super::{N, POLY_LENGTH, unit_ggsw};
 
+#[cfg(feature = "ntt")]
 const Q: u32 = 132_120_577;
 // Zero is last so it must copy over the preceding nontrivial result. Both
 // half-ring signs, split boundaries and an interior rotation are represented.
@@ -35,6 +38,7 @@ fn rotate<T: FheUint>(input: &[T], exponent: isize, negate: impl Fn(T) -> T) -> 
     output
 }
 
+#[cfg(feature = "ntt")]
 fn rotate_mod_q(input: &[u32], exponent: isize) -> Vec<u32> {
     rotate(
         input,
@@ -45,6 +49,7 @@ fn rotate_mod_q(input: &[u32], exponent: isize) -> Vec<u32> {
 
 // Diagonal controls avoid key noise, isolating decomposition and FFT rounding.
 // Keep both word widths and FFT backends: they have distinct torus conversions.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 pub(super) fn check_fourier<T: TorusFftValue, Table: FftTable>(table: &Table) {
     use primus_lattice::{ggsw::FourierGgswOwned, workspace::FourierGlweTernaryCmuxWorkspace};
     let mut fft = FftEngine::new(table);
@@ -110,8 +115,11 @@ pub(super) fn check_fourier<T: TorusFftValue, Table: FftTable>(table: &Table) {
     }
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ternary_rotation_matches_negacyclic_oracle_with_bounded_decomposition_error() {
+    use primus_lattice::{ggsw::Ggsw, workspace::NttGlweTernaryCmuxWorkspace};
+
     let modulus = BarrettModulus::new(Q);
     let ntt = UintNttTable::new(POLY_LENGTH, modulus).unwrap();
     let glwe_size = GlweSize::new(GlweDimension::new(2), POLY_LENGTH);
@@ -167,6 +175,7 @@ fn ternary_rotation_matches_negacyclic_oracle_with_bounded_decomposition_error()
     }
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ngsw_ternary_rotation_matches_negacyclic_oracle() {
     use primus_lattice::{ngsw::Ngsw, ntru::Ntru, workspace::NttNtruCmuxWorkspace};

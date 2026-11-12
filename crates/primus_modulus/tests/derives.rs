@@ -2,7 +2,7 @@
 
 #![cfg(feature = "derive")]
 
-use primus_modulus::Barrett;
+use primus_modulus::{Barrett, BarrettModulus};
 
 #[derive(Barrett)]
 #[modulus(ty = u32, value = 536813569)]
@@ -18,6 +18,13 @@ fn derived_multiply_add_matches_wide_remainders() {
             #[derive(Barrett)]
             #[modulus(ty = $ty, value = $q)]
             struct FixedModulus;
+
+            assert_eq!(
+                FixedModulus::ratio(),
+                BarrettModulus::<$ty>::new($q).ratio(),
+                "reciprocal: q={}",
+                $q as u64
+            );
 
             for len in [0, 1, 7, 17, 31, 32, 33, 65] {
                 let mut state = 42u64;

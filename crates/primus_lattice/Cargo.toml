@@ -65,10 +65,6 @@ required-features = ["rns"]
 
 # Targets declare the representations and concrete FFT engines they exercise.
 [[test]]
-name = "gadget_operations"
-required-features = ["ntt", "rustfft", "tfhe-fft"]
-
-[[test]]
 name = "fourier"
 required-features = ["rustfft", "tfhe-fft"]
 

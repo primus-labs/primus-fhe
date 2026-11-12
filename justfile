@@ -25,6 +25,7 @@ ci-stable-lint: (lint "*" stable_ci_features) (parallel-lint ("--lib " + ci_para
 
 ci-stable-test: (test "*" stable_ci_features) (parallel-test ci_parallel_tests)
   cargo nextest run -p primus_bfv -p primus_bgv --test allocation --no-default-features
+  cargo nextest run -p primus_ntru --test lwe_key_switch --no-default-features
   cargo test --workspace --doc --features '{{stable_ci_features}}'
 
 ci-nightly: ci-nightly-check simd ci-nightly-doc

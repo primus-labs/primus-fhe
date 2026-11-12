@@ -3,17 +3,25 @@
 
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_integer::FheUint;
+use primus_lattice::{nlev::Nlev, ntru::Ntru};
+#[cfg(feature = "ntt")]
+use primus_lattice::{nlev::NttNlev, workspace::NttNtruExternalProductWorkspace};
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_lattice::{
-    nlev::{FourierNlev, FourierNlevOwned, Nlev, NttNlev},
-    ntru::Ntru,
-    workspace::{FourierNtruExternalProductWorkspace, NttNtruExternalProductWorkspace},
+    nlev::{FourierNlev, FourierNlevOwned},
+    workspace::FourierNtruExternalProductWorkspace,
 };
-use primus_modulus::{BarrettModulus, NativeModulus};
+#[cfg(feature = "ntt")]
+use primus_modulus::BarrettModulus;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+use primus_modulus::NativeModulus;
+#[cfg(feature = "ntt")]
 use primus_ntt::{NttTable, U32NttTable, U64NttTable};
 use primus_poly::{Polynomial, PolynomialIter};
-use primus_reduce::{Reduce, RingContext};
+use primus_reduce::RingContext;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::{N, POLY_LENGTH, noiseless_nlev};
@@ -121,7 +129,10 @@ fn check_sum_shapes<T: FheUint, G: Clone>(
 
 // Full decomposition gives an exact convolution oracle. Boundary failures run
 // first, so the following nonempty/empty sums also verify workspace recovery.
+#[cfg(feature = "ntt")]
 fn ntt<T: FheUint, Table: NttTable<ValueT = T>>(q: T, table: Table) {
+    use primus_reduce::Reduce;
+
     let modulus = BarrettModulus::new(q);
     // Both primes have bit widths divisible by three: no bits are dropped,
     // so the independent polynomial oracle is exact.
@@ -192,6 +203,7 @@ fn ntt<T: FheUint, Table: NttTable<ValueT = T>>(q: T, table: Table) {
     }
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ntt_sum_matches_separate_products_and_polynomial_oracle() {
     ntt(
@@ -207,6 +219,7 @@ fn ntt_sum_matches_separate_products_and_polynomial_oracle() {
 // The independent integer convolution is the phase oracle for f=1. u64 includes
 // low bits that FFT cannot represent exactly; allow an absolute torus error of
 // 2^-42 (one unit for u32), not bitwise equality with separately rounded products.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 pub(super) fn check_fourier<T: TorusFftValue, Table: FftTable>(table: &Table) {
     let modulus = NativeModulus::<T>::new();
     let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(8), None);

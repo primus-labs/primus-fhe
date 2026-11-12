@@ -120,7 +120,7 @@ The `stats` module provides:
 - `gaussian_stats`, which centers canonical modular samples and computes their mean, population standard deviation, and cumulative magnitude counts;
 - `theoretical_cumulative_probs`, which evaluates the matching truncated discrete Gaussian cumulative probabilities.
 
-These functions are intended for tests and validation tools rather than sampling hot paths. Their rustdoc records the exact floating-point and modulus limits.
+Compare empirical counts using the same Gaussian parameter `sigma` and tail cut as the sampler. The reference calculation enumerates the truncated support. See the [statistics API](src/stats.rs) for numeric limits.
 
 ## High-precision feature
 

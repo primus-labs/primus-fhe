@@ -26,10 +26,6 @@ name = "scalar_moduli"
 harness = false
 
 [[bench]]
-name = "barrett_scalar"
-harness = false
-
-[[bench]]
 name = "slice_moduli"
 harness = false
 

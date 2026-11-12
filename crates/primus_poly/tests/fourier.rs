@@ -59,6 +59,31 @@ fn pointwise_arithmetic_matches_complex_oracle() {
 
 #[test]
 fn fused_multiply_add_preserves_rounding_and_slice_boundaries() {
+    #[repr(C, align(64))]
+    struct FmaBuffer {
+        aligned: [Complex64; 16],
+        padding: f64,
+        shifted: [Complex64; 16],
+    }
+
+    impl FmaBuffer {
+        fn new(guard: Complex64) -> Self {
+            Self {
+                aligned: [guard; 16],
+                padding: 0.0,
+                shifted: [guard; 16],
+            }
+        }
+
+        fn values(&mut self, skew: usize) -> &mut [Complex64] {
+            if skew == 0 {
+                &mut self.aligned
+            } else {
+                &mut self.shifted
+            }
+        }
+    }
+
     let c = Complex64::new;
     let eps = f64::EPSILON;
     let tiny = f64::from_bits(1);
@@ -97,25 +122,37 @@ fn fused_multiply_add_preserves_rounding_and_slice_boundaries() {
     ];
     let guard = c(99.0, -99.0);
     // Rotate the fixtures so each value appears in SIMD lanes and scalar tails.
-    // Independent input/output offsets cover all complex alignments modulo 64.
-    for offset in 0..4 {
+    // Each aligned array occupies a multiple of 64 bytes. The f64 field shifts the
+    // second array by 8 bytes; stepping by one complex reaches every 8-byte
+    // address class modulo 64 for each operand.
+    for address in (0..64).step_by(8) {
+        let offset = address / 16;
+        let skew = address % 16;
         for shift in 0..cases.len() {
             for len in [0, 1, 3, 4, 5, 8, 9] {
                 let lhs_offset = (offset + 1) & 3;
                 let rhs_offset = (offset + 2) & 3;
-                let mut lhs = vec![guard; len + 4];
-                let mut rhs = vec![guard; len + 4];
-                let mut output = vec![guard; len + 8];
+                let mut lhs_buffer = FmaBuffer::new(guard);
+                let mut rhs_buffer = FmaBuffer::new(guard);
+                let mut output_buffer = FmaBuffer::new(guard);
+                let lhs = lhs_buffer.values(skew);
+                let rhs = rhs_buffer.values(skew);
+                let output = output_buffer.values(skew);
                 for i in 0..len {
                     let (a, b, acc, _) = cases[(shift + i) % cases.len()];
                     lhs[lhs_offset + i] = a;
                     rhs[rhs_offset + i] = b;
                     output[offset + i] = acc;
                 }
-                FourierPolynomial(&mut output[offset..offset + len]).add_mul_assign(
-                    &FourierPolynomial(&lhs[lhs_offset..lhs_offset + len]),
-                    &FourierPolynomial(&rhs[rhs_offset..rhs_offset + len]),
+                let lhs = &lhs[lhs_offset..lhs_offset + len];
+                let rhs = &rhs[rhs_offset..rhs_offset + len];
+                let acc = &mut output[offset..offset + len];
+                assert_eq!(
+                    [lhs.as_ptr(), rhs.as_ptr(), acc.as_ptr()].map(|ptr| ptr.addr() % 64),
+                    [16 * lhs_offset + skew, 16 * rhs_offset + skew, address]
                 );
+                FourierPolynomial(acc)
+                    .add_mul_assign(&FourierPolynomial(lhs), &FourierPolynomial(rhs));
                 for i in 0..len {
                     let actual = output[offset + i];
                     let expected = cases[(shift + i) % cases.len()].3;
@@ -126,7 +163,7 @@ fn fused_multiply_add_preserves_rounding_and_slice_boundaries() {
                             assert_eq!(
                                 actual.to_bits(),
                                 expected.to_bits(),
-                                "case={}, len={len}, offset={offset}",
+                                "case={}, len={len}, output address modulo 64={address}",
                                 (shift + i) % cases.len()
                             );
                         }

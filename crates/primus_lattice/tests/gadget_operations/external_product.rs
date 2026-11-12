@@ -4,31 +4,39 @@
 
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_fft::{Complex64, FftEngine, FftTable};
-use primus_lattice::GlweDimension;
-use primus_lattice::nlev::NttNlev;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_lattice::{
-    GadgetSize, GlweSize,
+    GadgetSize, GlweDimension, GlweSize,
     ggsw::FourierGgswOwned,
     glwe::{FourierGlwe, Glwe},
-    ngsw::{FourierNgswOwned, Ngsw},
+    ngsw::FourierNgswOwned,
     nlev::FourierNlevOwned,
-    ntru::{FourierNtru, Ntru, NttNtru},
-    workspace::{
-        FourierGlweExternalProductWorkspace, FourierNtruExternalProductWorkspace,
-        NttNtruExternalProductWorkspace,
-    },
+    ntru::FourierNtru,
+    workspace::{FourierGlweExternalProductWorkspace, FourierNtruExternalProductWorkspace},
 };
-use primus_modulus::{BarrettModulus, NativeModulus};
+use primus_lattice::{ngsw::Ngsw, ntru::Ntru};
+#[cfg(feature = "ntt")]
+use primus_lattice::{nlev::NttNlev, ntru::NttNtru, workspace::NttNtruExternalProductWorkspace};
+#[cfg(feature = "ntt")]
+use primus_modulus::BarrettModulus;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+use primus_modulus::NativeModulus;
+#[cfg(feature = "ntt")]
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
+#[cfg(feature = "ntt")]
 use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use super::{N, POLY_LENGTH, noiseless_nlev, unit_ggsw};
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+use super::unit_ggsw;
+use super::{N, POLY_LENGTH, noiseless_nlev};
 
 // A diagonal gadget for one is an identity external product. Applying a zero
 // gadget afterwards must clear both a nonzero output and the reused accumulator.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 pub(super) fn check_fourier_ggsw<Table: FftTable>(fft: &Table) {
     let mut engine = FftEngine::new(fft);
     let components = 3;
@@ -76,6 +84,7 @@ pub(super) fn check_fourier_ggsw<Table: FftTable>(fft: &Table) {
     }
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ntt_ntru_gadget_products_match_negacyclic_product() {
     const Q: u32 = 257;
@@ -182,6 +191,7 @@ fn ntt_ntru_gadget_products_match_negacyclic_product() {
 }
 
 // Both FFT backends must preserve torus scale at coefficient and Fourier endpoints.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 pub(super) fn check_fourier_ntru<Table: FftTable>(fft: &Table) {
     let modulus = NativeModulus::<u32>::new();
     let basis = ApproxSignedBasis::<u32>::new(None, DecompositionBaseLog::new(8), None);
@@ -310,6 +320,7 @@ pub(super) fn check_fourier_ntru<Table: FftTable>(fft: &Table) {
 
 // Scalar digits and coefficient convolution independently check the eight
 // branches, including automorphism signs. No NTT multiplication is used by the oracle.
+#[cfg(feature = "ntt")]
 fn prepermuted_sum_oracle<
     T: primus_integer::FheUint,
     Table: NttTable<ValueT = T>,
@@ -446,6 +457,7 @@ fn prepermuted_sum_oracle<
     assert_eq!([scratch[0], scratch[(K + 1) * n + 1]], [T::MAX; 2]);
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ntt_prepermuted_sum_matches_coefficient_oracle() {
     for n in [32, 64] {

@@ -3,14 +3,9 @@
 
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::primitive::ApproxSignedBasis;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_fft::{Complex64, FftEngine, FftTable};
-use primus_lattice::{
-    ngsw::{FourierNgsw, FourierNgswOwned, NttNgsw},
-    ntru::Ntru,
-    workspace::{FourierNtruExternalProductWorkspace, NttNtruExternalProductWorkspace},
-};
-use primus_modulus::BarrettModulus;
-use primus_ntt::{NttTable, U32NttTable};
+use primus_lattice::ntru::Ntru;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::{N, POLY_LENGTH, unit_ngsw};
@@ -107,8 +102,13 @@ fn check_shapes(
     assert_eq!(output.as_ref(), default.as_ref());
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ntt_cmux_checks_shapes_before_each_pair_and_recovers() {
+    use primus_lattice::{ngsw::NttNgsw, workspace::NttNtruExternalProductWorkspace};
+    use primus_modulus::BarrettModulus;
+    use primus_ntt::{NttTable, U32NttTable};
+
     let modulus = BarrettModulus::new(257u32);
     let basis = ApproxSignedBasis::new(Some(257u32), DecompositionBaseLog::new(3), None);
     let table = U32NttTable::new(POLY_LENGTH, modulus).unwrap();
@@ -132,7 +132,13 @@ fn ntt_cmux_checks_shapes_before_each_pair_and_recovers() {
 }
 
 // Bind one FFT instance to the native-torus control and all recovery calls.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 pub(super) fn check_fourier<Table: FftTable>(table: &Table) {
+    use primus_lattice::{
+        ngsw::{FourierNgsw, FourierNgswOwned},
+        workspace::FourierNtruExternalProductWorkspace,
+    };
+
     let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(8), None);
     let mut fft = FftEngine::new(table);
     let mut control = FourierNgswOwned::zero(basis.level_count().get() * N / 2);

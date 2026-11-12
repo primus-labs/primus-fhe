@@ -1,7 +1,9 @@
 //! External-product and CMux contracts for coefficient, NTT and Fourier outputs.
+#![cfg(any(feature = "ntt", feature = "rustfft", feature = "tfhe-fft"))]
 
 use primus_decompose::primitive::ApproxSignedBasis;
-use primus_fft::{FftTable, RustFftTable, TfheFftTable};
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+use primus_fft::FftTable;
 use primus_integer::FheUint;
 use primus_lattice::{GadgetSize, ggsw::Ggsw, ngsw::Ngsw, nlev::Nlev};
 use primus_poly::Polynomial;
@@ -52,6 +54,7 @@ fn noiseless_nlev<T: FheUint, M: RingContext<T>>(
 }
 
 /// Share one plan per FFT engine. Each operation retains its own workspace and oracle.
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 fn check_fourier<Table: FftTable>(table: &Table) {
     external_product::check_fourier_ggsw(table);
     external_product::check_fourier_ntru(table);
@@ -62,12 +65,14 @@ fn check_fourier<Table: FftTable>(table: &Table) {
     ternary_cmux::check_fourier::<u64, _>(table);
 }
 
+#[cfg(feature = "rustfft")]
 #[test]
 fn rustfft_gadget_operations() {
-    check_fourier(&RustFftTable::new(POLY_LENGTH));
+    check_fourier(&primus_fft::RustFftTable::new(POLY_LENGTH));
 }
 
+#[cfg(feature = "tfhe-fft")]
 #[test]
 fn tfhe_fft_gadget_operations() {
-    check_fourier(&TfheFftTable::new(POLY_LENGTH));
+    check_fourier(&primus_fft::TfheFftTable::new(POLY_LENGTH));
 }

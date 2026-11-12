@@ -1,16 +1,10 @@
+#![cfg(any(feature = "ntt", feature = "rustfft", feature = "tfhe-fft"))]
+
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
-use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable};
-use primus_glwe::FourierGlweEncryptor;
-use primus_glwe::{
-    FourierGlweKeySwitchingWorkspace, FourierLwePackingKeySwitchingKey, GlevParameters,
-    GlweParameters, GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace,
-    NttGlweKeySwitchingWorkspace, NttGlweSecretKey, NttLwePackingKeySwitchingKey, SecretKeyDistr,
-};
+use primus_glwe::{GlevParameters, GlweParameters, GlweSecretKey, GlweSize, SecretKeyDistr};
 use primus_lattice::GlweDimension;
 use primus_lattice::{glwe::Glwe, lwe::Lwe};
 use primus_lwe::LweSecretKeyRef;
-use primus_modulus::{BarrettModulus, NativeModulus};
-use primus_ntt::{NttTable, U64NttTable};
 use primus_shape::PolyLength;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
@@ -19,6 +13,7 @@ mod common;
 use common::{K, N, assert_phase, message, secret};
 
 const INPUT_SECRET: [i64; 7] = [-1, 0, 1, 2, -2, 1, 0];
+#[cfg(feature = "ntt")]
 const Q: u64 = 1_125_899_906_826_241;
 
 // Independent noiseless LWE oracle with mixed-sign, nonbinary secret values.
@@ -84,8 +79,16 @@ fn check_packing_layout(mut pack: impl FnMut(&[u64], &mut Glwe<Vec<u64>>)) {
     }
 }
 
+#[cfg(feature = "ntt")]
 #[test]
 fn ntt_packing_switches_an_independent_signed_lwe_secret() {
+    use primus_glwe::{
+        NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingWorkspace, NttGlweSecretKey,
+        NttLwePackingKeySwitchingKey,
+    };
+    use primus_modulus::BarrettModulus;
+    use primus_ntt::{NttTable, U64NttTable};
+
     let modulus = BarrettModulus::new(Q);
     let ntt = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
     let params = GlweParameters::new(
@@ -167,7 +170,14 @@ fn ntt_packing_switches_an_independent_signed_lwe_secret() {
     }
 }
 
-fn fourier_packing<Table: FftTable>() {
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+fn fourier_packing<Table: primus_fft::FftTable>() {
+    use primus_fft::FftEngine;
+    use primus_glwe::{
+        FourierGlweEncryptor, FourierGlweKeySwitchingWorkspace, FourierLwePackingKeySwitchingKey,
+    };
+    use primus_modulus::NativeModulus;
+
     let table = Table::new(PolyLength::new(N));
     let wrong_table = Table::new(PolyLength::new(2 * N));
     let mut fft = FftEngine::new(&table);
@@ -238,8 +248,14 @@ fn fourier_packing<Table: FftTable>() {
     }
 }
 
+#[cfg(feature = "rustfft")]
 #[test]
-fn fourier_packing_switches_an_independent_encoded_lwe_secret() {
-    fourier_packing::<RustFftTable>();
-    fourier_packing::<TfheFftTable>();
+fn rustfft_packing_switches_an_independent_encoded_lwe_secret() {
+    fourier_packing::<primus_fft::RustFftTable>();
+}
+
+#[cfg(feature = "tfhe-fft")]
+#[test]
+fn tfhe_fft_packing_switches_an_independent_encoded_lwe_secret() {
+    fourier_packing::<primus_fft::TfheFftTable>();
 }

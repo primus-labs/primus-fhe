@@ -18,7 +18,7 @@
 | `just parallel` | stable 的可选 limb 并行：NTT、lattice、BFV/BGV 的 all-targets lint 和普通测试，选择 `rns,batching,parallel`，测试命令设置 `RAYON_NUM_THREADS=4` |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者启用两种 FFT 引擎，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | 格式、最小特性和独立消费者编译、Stable Clippy、普通测试和 doctest。主套件启用 batching、Barrett derive 和高精度采样，另跑定向并行和无 batching 分配测试 |
+| `just ci` | 格式、最小特性和独立消费者编译、Stable Clippy、普通测试和 doctest。主套件启用 batching、Barrett derive 和高精度采样，另跑定向并行、无 batching 分配测试和无变换后端的 NTRU→LWE 返回 |
 | `just ci-nightly` | 最小 SIMD 编译、workspace 全 features 的 Clippy 和普通测试、严格 private rustdoc |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -72,6 +72,14 @@ cargo nextest run -p primus_glwe -p primus_tfhe_glwe_fourier --lib --tests --no-
 ```
 
 Cargo 会跳过缺少 `required-features` 的 target，测试内部也可能按 feature 条件编译。`--all-targets` 不等于启用全部 features；空运行不能记为数值验证。需要查看当前选择的普通测试时使用 `cargo nextest list -p <package> --lib --tests --features <features>`，该命令可能先编译测试。
+
+`gadget_operations`、GLWE 的 `packing_key_switch` 和 NTRU 的 `lwe_key_switch` 按用例选择后端。核对某一引擎时，单独选择对应包和 feature。例如：
+
+```sh
+cargo nextest run -p primus_lattice --test gadget_operations --no-default-features --features ntt
+cargo nextest run -p primus_glwe --test packing_key_switch --no-default-features --features rustfft
+cargo nextest run -p primus_ntru --test lwe_key_switch --no-default-features
+```
 
 依赖或 feature 边界变化时，可在 workspace 外的临时 Cargo 包复用一个相关 example，只声明它直接使用的普通依赖与选定后端。用独立 `[workspace]` 隔离，并通过 `cargo tree -e normal,features` 核对依赖、执行示例验证结果；不要带入 dev-dependencies。`--lib --no-default-features` 编译与独立消费者验证分别检查库自身和实际组合。
 

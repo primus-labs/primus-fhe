@@ -501,10 +501,36 @@ fn monomial_transform_matches_full_ntt() {
         &UintNttTable::<u64>::new(poly_length, modulus64).unwrap(),
         q64 / 3,
     );
+}
 
-    // A general degree at this size can overflow the unreduced exponent
-    // product on 32-bit targets. Compare the low-bit reduction to full NTT.
-    let large_length = PolyLength::new(1 << 16);
-    let table = U32NttTable::new(large_length, BarrettModulus::new(998_244_353)).unwrap();
-    assert_monomial(&table, 13, 2 * large_length.get() - 3);
+#[test]
+fn large_ring_monomial_matches_fixed_width_evaluation() {
+    const LENGTH: u32 = 1 << 16;
+    const DEGREE: u32 = 2 * LENGTH - 3;
+    const MODULUS: u32 = 998_244_353;
+    // Smallest root of order 2N, among the odd powers of 3^((q - 1)/(2N)).
+    const ROOT: u64 = 8996;
+    const COEFFICIENT: u32 = 13;
+
+    // The odd-degree path visits evaluation exponents up to N - 1 before
+    // using negation for the second half of the evaluations.
+    const { assert!((LENGTH - 1) as u64 * DEGREE as u64 > u32::MAX as u64) };
+
+    let poly_length = PolyLength::new(LENGTH as usize);
+    let table = U32NttTable::new(poly_length, BarrettModulus::new(MODULUS)).unwrap();
+    let mut actual = vec![0; poly_length.get()];
+    table.transform_monomial(COEFFICIENT, DEGREE as usize, &mut actual);
+
+    // Walk c*w^d, c*w^(3d), ... using fixed-width modular multiplication.
+    // This evaluates the monomial without the direct kernel's root indices
+    // or unreduced exponent products, on any host pointer width.
+    let q = u64::from(MODULUS);
+    let first_power = (0..DEGREE).fold(1, |power, _| power * ROOT % q);
+    let step = first_power * first_power % q;
+    let mut expected = u64::from(COEFFICIENT) * first_power % q;
+    for i in 0..LENGTH {
+        let slot = (i.reverse_bits() >> (u32::BITS - poly_length.log_n())) as usize;
+        assert_eq!(u64::from(actual[slot]), expected, "evaluation index {i}");
+        expected = expected * step % q;
+    }
 }

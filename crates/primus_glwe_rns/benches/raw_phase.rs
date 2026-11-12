@@ -1,5 +1,6 @@
 //! Run with `cargo bench -p primus_glwe_rns --bench raw_phase`.
 //! One prepared rank-two GLWE at N=1024 feeds all operators in both domains.
+//! Case IDs include rank and limb count to distinguish earlier per-operator fixtures.
 //! Key/table preparation, encryption and buffer allocation are outside timing.
 
 use std::hint::black_box;
@@ -81,7 +82,7 @@ impl RawPhaseFixture {
     }
 }
 
-fn bench_automorphism(c: &mut Criterion, fixture: &RawPhaseFixture) {
+fn bench_automorphism(c: &mut Criterion, fixture: &RawPhaseFixture, label: &str) {
     let size = fixture.sampling.size();
     let n = size.poly_length().get();
     let mut rng = StdRng::seed_from_u64(43);
@@ -111,7 +112,7 @@ fn bench_automorphism(c: &mut Criterion, fixture: &RawPhaseFixture) {
         );
         let mut crt = CrtGlweAutoEvaluator::new(&crt_key, &fixture.gadget, &fixture.table);
         let mut dcrt = DcrtGlweAutoEvaluator::new(&dcrt_key, &fixture.gadget, &fixture.table);
-        let label = format!("N={n}/degree={degree}");
+        let label = format!("{label}/degree={degree}");
         group.bench_function(BenchmarkId::new("CRT", &label), |b| {
             b.iter(|| {
                 crt.automorphism_to(black_box(&fixture.coeff_input), black_box(&mut crt_output));
@@ -126,7 +127,7 @@ fn bench_automorphism(c: &mut Criterion, fixture: &RawPhaseFixture) {
     group.finish();
 }
 
-fn bench_trace(c: &mut Criterion, fixture: &RawPhaseFixture) {
+fn bench_trace(c: &mut Criterion, fixture: &RawPhaseFixture, label: &str) {
     let size = fixture.sampling.size();
     let mut rng = StdRng::seed_from_u64(44);
     let crt_key = CrtGlweTraceKey::new(
@@ -156,22 +157,21 @@ fn bench_trace(c: &mut Criterion, fixture: &RawPhaseFixture) {
     let mut reverse = DcrtGlweRevTraceEvaluator::new(&reverse_key, &fixture.gadget, &fixture.table);
     let mut crt_output = CrtGlwe::<Vec<u64>>::zero(size.rns_glwe_len());
     let mut dcrt_output = DcrtGlwe::<Vec<u64>>::zero(size.rns_glwe_len());
-    let label = format!("N={}", size.poly_length().get());
     let mut group = c.benchmark_group("trace/raw_phase");
 
-    group.bench_function(BenchmarkId::new("CRT", &label), |b| {
+    group.bench_function(BenchmarkId::new("CRT", label), |b| {
         b.iter(|| crt.trace_to(black_box(&fixture.coeff_input), black_box(&mut crt_output)));
     });
-    group.bench_function(BenchmarkId::new("DCRT", &label), |b| {
+    group.bench_function(BenchmarkId::new("DCRT", label), |b| {
         b.iter(|| dcrt.trace_to(black_box(&fixture.dcrt_input), black_box(&mut dcrt_output)));
     });
-    group.bench_function(BenchmarkId::new("RevHomTrace", &label), |b| {
+    group.bench_function(BenchmarkId::new("RevHomTrace", label), |b| {
         b.iter(|| reverse.trace_to(black_box(&fixture.dcrt_input), black_box(&mut dcrt_output)));
     });
     group.finish();
 }
 
-fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
+fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture, label: &str) {
     let size = fixture.sampling.size();
     let n = size.poly_length().get();
     let mut rng = StdRng::seed_from_u64(45);
@@ -179,7 +179,6 @@ fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
         .num_threads(2)
         .build()
         .unwrap();
-    let label = format!("N={n}");
     let mut group = c.benchmark_group("expand_coeff/raw_phase");
     group.sample_size(10);
 
@@ -198,7 +197,7 @@ fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
         let mut parallel =
             CrtGlweExpandCoeffParallelEvaluator::new(&key, &fixture.gadget, &fixture.table, 2);
         let mut output = vec![CrtGlwe::<Vec<u64>>::zero(size.rns_glwe_len()); n];
-        group.bench_function(BenchmarkId::new("CRT/single", &label), |b| {
+        group.bench_function(BenchmarkId::new("CRT/single", label), |b| {
             b.iter(|| {
                 serial.expand_coefficients_to(
                     black_box(&fixture.coeff_input),
@@ -206,7 +205,7 @@ fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
                 );
             });
         });
-        group.bench_function(BenchmarkId::new("CRT/parallel2", &label), |b| {
+        group.bench_function(BenchmarkId::new("CRT/parallel2", label), |b| {
             b.iter(|| {
                 workers.install(|| {
                     parallel.expand_coefficients_to(
@@ -228,12 +227,12 @@ fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
     let mut parallel =
         DcrtGlweExpandCoeffParallelEvaluator::new(&key, &fixture.gadget, &fixture.table, 2);
     let mut output = vec![DcrtGlwe::<Vec<u64>>::zero(size.rns_glwe_len()); n];
-    group.bench_function(BenchmarkId::new("DCRT/single", &label), |b| {
+    group.bench_function(BenchmarkId::new("DCRT/single", label), |b| {
         b.iter(|| {
             serial.expand_coefficients_to(black_box(&fixture.dcrt_input), black_box(&mut output));
         });
     });
-    group.bench_function(BenchmarkId::new("DCRT/parallel2", &label), |b| {
+    group.bench_function(BenchmarkId::new("DCRT/parallel2", label), |b| {
         b.iter(|| {
             workers.install(|| {
                 parallel
@@ -246,9 +245,16 @@ fn bench_expansion(c: &mut Criterion, fixture: &RawPhaseFixture) {
 
 fn benchmarks(c: &mut Criterion) {
     let fixture = RawPhaseFixture::new();
-    bench_automorphism(c, &fixture);
-    bench_trace(c, &fixture);
-    bench_expansion(c, &fixture);
+    let size = fixture.sampling.size();
+    let label = format!(
+        "rank{}/limbs{}/N={}",
+        size.dimension().get(),
+        size.moduli_count(),
+        size.poly_length().get()
+    );
+    bench_automorphism(c, &fixture, &label);
+    bench_trace(c, &fixture, &label);
+    bench_expansion(c, &fixture, &label);
 }
 
 criterion_group!(benches, benchmarks);
