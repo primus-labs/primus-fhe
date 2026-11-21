@@ -120,6 +120,26 @@ fn check_dot_product<T: FheUint + Into<u128>>(
     assert_eq!(iterator_result, expected, "iterator: q={q}, len={len}");
 }
 
+fn check_dot_product_boundaries<T: FheUint + Into<u128>>(
+    modulus: impl ReduceDotProduct<T> + Copy,
+    q: T,
+) {
+    // Source residues can exceed the destination modulus and stress both limbs.
+    let maximum = T::MAX >> 2u32;
+    let lengths = [0usize, 1, 15, 16, 17].into_iter();
+    // A full block is required to actually dispatch to SIMD.
+    #[cfg(feature = "simd")]
+    let lengths = {
+        let block = 16 * T::LANE_COUNT;
+        lengths.chain([block - 1, block, block + 1, 2 * block + 1])
+    };
+    for len in lengths {
+        let lhs: Vec<T> = (0..len).map(|i| maximum - T::as_from(i % 3)).collect();
+        let rhs: Vec<T> = (0..len).map(|i| maximum - T::as_from(i % 5)).collect();
+        check_dot_product(modulus, q, &lhs, &rhs);
+    }
+}
+
 /// Verify canonical and near-boundary operands across scalar and SIMD accumulation blocks.
 #[test]
 fn dot_products_match_wide_remainders() {
@@ -142,40 +162,27 @@ fn dot_products_match_wide_remainders() {
         check_dot_product(m, MODULUS, &a, &b);
     }
 
-    // Source residues can exceed the destination modulus and stress both limbs.
-    macro_rules! check_width {
-        ($ty:ty) => {{
-            fn check(modulus: impl ReduceDotProduct<$ty> + Copy, q: $ty) {
-                let maximum = (1 as $ty << (<$ty>::BITS - 2)) - 1;
-                let lengths = [0usize, 1, 15, 16, 17].into_iter();
-                // A full block is required to actually dispatch to SIMD.
-                #[cfg(feature = "simd")]
-                let lengths = {
-                    let block = 16 * <$ty as primus_modulus::integer::SimdInteger>::LANE_COUNT;
-                    lengths.chain([block - 1, block, block + 1, 2 * block + 1])
-                };
-                for len in lengths {
-                    let lhs: Vec<$ty> = (0..len).map(|i| maximum - (i % 3) as $ty).collect();
-                    let rhs: Vec<$ty> = (0..len).map(|i| maximum - (i % 5) as $ty).collect();
-                    check_dot_product(modulus, q, &lhs, &rhs);
-                }
-            }
-            // A small destination and the largest valid modulus exercise very
-            // different reciprocals while sharing the same operand bound.
-            for q in [17, (1 as $ty << (<$ty>::BITS - 2)) - 1] {
-                check(BarrettModulus::new(q), q);
-            }
-            #[cfg(feature = "derive")]
-            {
-                #[derive(primus_modulus::Barrett)]
-                #[modulus(ty = $ty, value = 17)]
-                struct FixedModulus;
-                check(FixedModulus, 17);
-            }
-        }};
+    // A small destination and the largest valid modulus exercise very
+    // different reciprocals while sharing the same operand bound.
+    for q in [17u32, u32::MAX >> 2] {
+        check_dot_product_boundaries(BarrettModulus::new(q), q);
     }
-    check_width!(u32);
-    check_width!(u64);
+    for q in [17u64, u64::MAX >> 2] {
+        check_dot_product_boundaries(BarrettModulus::new(q), q);
+    }
+
+    #[cfg(feature = "derive")]
+    {
+        #[derive(primus_modulus::Barrett)]
+        #[modulus(ty = u32, value = 17)]
+        struct FixedModulus32;
+        #[derive(primus_modulus::Barrett)]
+        #[modulus(ty = u64, value = 17)]
+        struct FixedModulus64;
+
+        check_dot_product_boundaries(FixedModulus32, 17u32);
+        check_dot_product_boundaries(FixedModulus64, 17u64);
+    }
 }
 
 /// Compare multiply, scalar-multiply, and fused slice variants with independent wide products.
