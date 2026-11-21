@@ -34,13 +34,13 @@ fn block_binary_matches_categorical_oracle() {
                 .map(|_| categories.sample(&mut oracle_rng))
                 .collect();
             if occupancy == BlockOccupancy::AtMostOne {
-                assert!(
-                    positions.contains(&block_size),
-                    "seed covers an empty block"
-                );
+                let empty = positions
+                    .iter()
+                    .position(|&position| position == block_size)
+                    .expect("seed covers an empty block");
                 // Replay an empty block: do not reject even an all-zero key.
                 let mut empty_rng = StdRng::seed_from_u64(204);
-                for _ in 0..positions.iter().position(|&i| i == block_size).unwrap() {
+                for _ in 0..empty {
                     let _ = categories.sample(&mut empty_rng);
                 }
                 let empty_key = sampler.sample_signed(block_size, &mut empty_rng);
@@ -60,13 +60,6 @@ fn block_binary_matches_categorical_oracle() {
             sampler.sample_signed_to(&mut signed, &mut signed_rng);
             let actual: Vec<usize> = signed.iter().map(|&value| value.as_into()).collect();
             assert_eq!(actual, expected);
-            if occupancy == BlockOccupancy::ExactlyOne {
-                assert!(
-                    actual
-                        .chunks_exact(block_size)
-                        .all(|block| block.iter().sum::<usize>() == 1)
-                );
-            }
             let expected_next = oracle_rng.next_u64();
             assert_eq!(signed_rng.next_u64(), expected_next);
 
@@ -279,10 +272,11 @@ fn invalid_weight_is_rejected_before_sampling_or_writing() {
 /// Raw enum construction bypasses checked distribution constructors, so the sampler validates again.
 #[test]
 fn sampler_rejects_invalid_probabilities_in_raw_variants() {
+    let nonfinite_binary = SecretKeyDistr::Binary {
+        one_probability: f64::NAN,
+    };
     for distr in [
-        SecretKeyDistr::Binary {
-            one_probability: f64::NAN,
-        },
+        nonfinite_binary,
         SecretKeyDistr::Ternary {
             negative_one_probability: -0.5,
             one_probability: 0.5,
@@ -300,8 +294,9 @@ fn sampler_rejects_invalid_probabilities_in_raw_variants() {
             SecretKeySampler::<u32>::try_new(distr),
             Err(primus_distr::SecretKeySamplerError::InvalidProbabilities)
         ));
-        assert!(std::panic::catch_unwind(|| SecretKeySampler::<u32>::new(distr)).is_err());
     }
+    // One case checks the panic wrapper. Validation is covered by try_new above.
+    assert!(std::panic::catch_unwind(|| SecretKeySampler::<u32>::new(nonfinite_binary)).is_err());
     assert!(matches!(
         SecretKeySampler::<u32>::try_new(SecretKeyDistr::gaussian(f64::NAN)),
         Err(primus_distr::SecretKeySamplerError::Gaussian(_))

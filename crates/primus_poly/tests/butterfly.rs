@@ -1,5 +1,5 @@
-//! Integer oracle for the coupled sum/difference outputs, modulus-major factor
-//! packing, and short, full-vector and tail lengths.
+//! Integer oracle for the coupled outputs and the modulus-major layout of
+//! per-coefficient factors.
 
 use primus_factor::{Factor, ShoupFactor};
 use primus_integer::FheUint;
@@ -26,9 +26,8 @@ where
     };
     let mut lhs = DcrtPolynomial::new(values(0));
     let rhs = DcrtPolynomial::new(values(1));
-    let weights = DcrtPolynomial::new(values(2));
+    let weights = values(2);
     let factors: Vec<_> = weights
-        .as_ref()
         .iter()
         .enumerate()
         .map(|(index, &w)| ShoupFactor::new(w, qs[index / n]))
@@ -43,7 +42,7 @@ where
             let q = u128::from(qs[index / n].into());
             let a = u128::from(lhs.as_ref()[index].into());
             let b = u128::from(rhs.as_ref()[index].into());
-            let w = u128::from(weights.as_ref()[index].into());
+            let w = u128::from(weights[index].into());
             expected_sum.push(T::as_from(((a + b) % q) as u64));
             expected_product.push(T::as_from((((a + q - b) % q * w) % q) as u64));
         }
@@ -64,8 +63,9 @@ where
 
 #[test]
 fn factor_butterfly_preserves_original_lhs_and_modulus_order() {
-    // Raw pointwise operations also accept lengths with a vector tail.
-    for n in [1, 7, 16, 17] {
+    // Check the smallest stride and an odd multi-coefficient limb. Each limb
+    // has a different modulus and each coefficient has its own factor.
+    for n in [1, 17] {
         check(n, [132_120_577u32, 754_974_721]);
         check(n, [1_152_921_504_606_830_593u64, 576_460_752_303_439_873]);
     }

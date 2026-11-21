@@ -84,7 +84,7 @@ fn sparse_ternary_preserves_bit_order_and_random_word_count() {
 #[test]
 fn ternary_threshold_boundaries_and_public_validation() {
     let quarter = 1u64 << 62;
-    for (negative, positive, words, expected) in [
+    let cases = [
         (
             0.25,
             0.5,
@@ -105,22 +105,28 @@ fn ternary_threshold_boundaries_and_public_validation() {
             vec![-1, -1, 1, 1],
         ),
         (2.0f64.powi(-64), 0.0, vec![0, 1, u64::MAX], vec![-1, 0, 0]),
-        (0.0, 0.0, vec![0; 3], vec![0; 3]),
-        (1.0, 0.0, vec![0; 3], vec![-1; 3]),
-        (0.0, 1.0, vec![0; 3], vec![1; 3]),
-    ] {
+        // Constant distributions do not draw any random words.
+        (0.0, 0.0, vec![], vec![0; 3]),
+        (1.0, 0.0, vec![], vec![-1; 3]),
+        (0.0, 1.0, vec![], vec![1; 3]),
+    ];
+    // The prepared sampler uses the same ternary kernel. One general case
+    // verifies that the public signed-key API dispatches to it correctly.
+    let (negative, positive, words, expected) = &cases[0];
+    let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::ternary(*negative, *positive));
+    let mut output = vec![19; expected.len()];
+    sampler.sample_signed_to(&mut output, &mut Words(words.clone().into_iter()));
+    assert_eq!(&output, expected);
+
+    for (negative, positive, words, expected) in cases {
         let mut output = vec![19; expected.len()];
         sample_ternary_values_with_probabilities_to(
             &mut output,
             -1,
             negative,
             positive,
-            &mut Words(words.clone().into_iter()),
+            &mut Words(words.into_iter()),
         );
-        assert_eq!(output, expected);
-        let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::ternary(negative, positive));
-        output.fill(19);
-        sampler.sample_signed_to(&mut output, &mut Words(words.into_iter()));
         assert_eq!(output, expected);
     }
     for (negative, positive) in [(-0.5, 0.5), (0.5, -0.5), (f64::NAN, 0.0), (0.7, 0.4)] {

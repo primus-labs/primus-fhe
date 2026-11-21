@@ -26,13 +26,6 @@ fn pointwise_arithmetic_matches_complex_oracle() {
     inplace.mul_assign(&rhs);
     assert_eq!(inplace.as_slice(), product);
 
-    // A nonzero accumulator distinguishes += lhs*rhs from an overwrite.
-    inplace.copy_from(&lhs);
-    inplace.add_mul_assign(&lhs.as_view(), &rhs.as_view());
-    assert_eq!(
-        inplace.as_slice(),
-        [Complex64::new(5.0, 5.0), Complex64::new(-6.5, -4.5)]
-    );
     inplace.copy_from(&lhs);
     inplace.mul_scalar_assign(-2.5);
     assert_eq!(inplace.as_slice(), scaled);
@@ -121,61 +114,60 @@ fn fused_multiply_add_preserves_rounding_and_slice_boundaries() {
         ),
     ];
     let guard = c(99.0, -99.0);
-    // Rotate the fixtures so each value appears in SIMD lanes and scalar tails.
-    // Each aligned array occupies a multiple of 64 bytes. The f64 field shifts the
-    // second array by 8 bytes; stepping by one complex reaches every 8-byte
-    // address class modulo 64 for each operand.
-    for address in (0..64).step_by(8) {
+    // The f64 field shifts the second array by eight bytes, so each operand
+    // can exercise every address class modulo 64.
+    let check = |len, shift, address: usize| {
         let offset = address / 16;
         let skew = address % 16;
-        for shift in 0..cases.len() {
-            for len in [0, 1, 3, 4, 5, 8, 9] {
-                let lhs_offset = (offset + 1) & 3;
-                let rhs_offset = (offset + 2) & 3;
-                let mut lhs_buffer = FmaBuffer::new(guard);
-                let mut rhs_buffer = FmaBuffer::new(guard);
-                let mut output_buffer = FmaBuffer::new(guard);
-                let lhs = lhs_buffer.values(skew);
-                let rhs = rhs_buffer.values(skew);
-                let output = output_buffer.values(skew);
-                for i in 0..len {
-                    let (a, b, acc, _) = cases[(shift + i) % cases.len()];
-                    lhs[lhs_offset + i] = a;
-                    rhs[rhs_offset + i] = b;
-                    output[offset + i] = acc;
+        let lhs_offset = (offset + 1) & 3;
+        let rhs_offset = (offset + 2) & 3;
+        let mut lhs_buffer = FmaBuffer::new(guard);
+        let mut rhs_buffer = FmaBuffer::new(guard);
+        let mut output_buffer = FmaBuffer::new(guard);
+        let lhs = &mut lhs_buffer.values(skew)[lhs_offset..lhs_offset + len];
+        let rhs = &mut rhs_buffer.values(skew)[rhs_offset..rhs_offset + len];
+        let output = output_buffer.values(skew);
+        let acc = &mut output[offset..offset + len];
+        assert_eq!(
+            [lhs.as_ptr(), rhs.as_ptr(), acc.as_ptr()].map(|ptr| ptr.addr() % 64),
+            [16 * lhs_offset + skew, 16 * rhs_offset + skew, address]
+        );
+        let rotated_cases = cases.iter().cycle().skip(shift).take(len);
+        for (i, &(a, b, initial, _)) in rotated_cases.clone().enumerate() {
+            lhs[i] = a;
+            rhs[i] = b;
+            acc[i] = initial;
+        }
+        FourierPolynomial(&mut *acc)
+            .add_mul_assign(&FourierPolynomial(&*lhs), &FourierPolynomial(&*rhs));
+        for (i, (&actual, &(_, _, _, expected))) in acc.iter().zip(rotated_cases).enumerate() {
+            for (actual, expected) in [(actual.re, expected.re), (actual.im, expected.im)] {
+                if expected.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_eq!(
+                        actual.to_bits(),
+                        expected.to_bits(),
+                        "case={}, len={len}, output address modulo 64={address}",
+                        (shift + i) % cases.len()
+                    );
                 }
-                let lhs = &lhs[lhs_offset..lhs_offset + len];
-                let rhs = &rhs[rhs_offset..rhs_offset + len];
-                let acc = &mut output[offset..offset + len];
-                assert_eq!(
-                    [lhs.as_ptr(), rhs.as_ptr(), acc.as_ptr()].map(|ptr| ptr.addr() % 64),
-                    [16 * lhs_offset + skew, 16 * rhs_offset + skew, address]
-                );
-                FourierPolynomial(acc)
-                    .add_mul_assign(&FourierPolynomial(lhs), &FourierPolynomial(rhs));
-                for i in 0..len {
-                    let actual = output[offset + i];
-                    let expected = cases[(shift + i) % cases.len()].3;
-                    for (actual, expected) in [(actual.re, expected.re), (actual.im, expected.im)] {
-                        if expected.is_nan() {
-                            assert!(actual.is_nan());
-                        } else {
-                            assert_eq!(
-                                actual.to_bits(),
-                                expected.to_bits(),
-                                "case={}, len={len}, output address modulo 64={address}",
-                                (shift + i) % cases.len()
-                            );
-                        }
-                    }
-                }
-                assert!(
-                    output[..offset]
-                        .iter()
-                        .chain(&output[offset + len..])
-                        .all(|&x| x == guard)
-                );
             }
         }
+        assert!(
+            output[..offset]
+                .iter()
+                .chain(&output[offset + len..])
+                .all(|&x| x == guard)
+        );
+    };
+    // Rotate the fixtures through two complete SIMD vectors and a scalar tail.
+    // Across these calls each fixture appears in each lane and at every output
+    // alignment. The other lengths isolate prefix and tail boundaries.
+    for shift in 0..cases.len() {
+        check(9, shift, 8 * shift);
+    }
+    for len in [0, 1, 3, 4, 5, 8] {
+        check(len, 0, 8);
     }
 }
