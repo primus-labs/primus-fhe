@@ -1,4 +1,4 @@
-name: CI timings
+name: Clippy timings
 
 on:
   pull_request:
@@ -15,71 +15,42 @@ env:
 
 jobs:
   measure:
-    name: ${{ matrix.toolchain }} / ${{ matrix.scope }}
+    name: ${{ matrix.toolchain }} paired Clippy
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         toolchain: [stable, nightly]
-        scope: [all-targets, lib-tests]
-    env:
-      CLIPPY_TARGETS: ${{ matrix.scope == 'lib-tests' && '--lib --tests' || '--all-targets' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: ${{ matrix.toolchain == 'stable' && 'clippy,rustfmt' || 'clippy' }}
+          components: clippy
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-nextest
-      - name: Record runner and tool versions
+          tool: just
+      - name: Prepare the regular pre-Clippy build
+        env:
+          TOOLCHAIN: ${{ matrix.toolchain }}
         run: |
           git rev-parse HEAD
-          printf 'Runner image %s %s\n' "$ImageOS" "$ImageVersion"
-          lscpu | awk '/^Architecture:|^CPU\(s\):|^Model name:/'
           rustc -vV
-          cargo nextest --version
-      # The second attempt of this workflow restores the caches from the first.
-      - name: Restore Rust cache
-        id: rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ci-timings-${{ github.run_id }}
-          key: ${{ matrix.toolchain }}-${{ matrix.scope }}
-      - name: Record cache result
+          lscpu | awk '/^Architecture:|^CPU\(s\):|^Model name:/'
+          just "ci-$TOOLCHAIN-check"
+          mv target "$RUNNER_TEMP/pre-clippy-target"
+      - name: Time both Clippy scopes twice on the same runner
         env:
-          CACHE_HIT: ${{ steps.rust-cache.outputs.cache-hit }}
-        run: printf 'Exact cache hit = %s\n' "$CACHE_HIT"
-      - name: Check formatting
-        if: matrix.toolchain == 'stable'
-        run: just fmt-check
-      - name: Check isolated Stable feature sets and consumers
-        if: matrix.toolchain == 'stable'
-        run: just ci-stable-check
-      - name: Lint Stable targets
-        if: matrix.toolchain == 'stable'
-        run: time just ci-stable-lint "$CLIPPY_TARGETS"
-      - name: Run Stable tests and doctests
-        if: matrix.toolchain == 'stable'
-        run: time just ci-stable-test --timings
-      - name: Check minimal SIMD builds
-        if: matrix.toolchain == 'nightly'
-        run: just ci-nightly-check
-      - name: Lint Nightly targets
-        if: matrix.toolchain == 'nightly'
-        run: time just simd-lint '*' "$CLIPPY_TARGETS"
-      - name: Run Nightly tests
-        if: matrix.toolchain == 'nightly'
-        run: time just simd-test '*' --timings
-      - name: Build strict all-feature Rustdoc
-        if: matrix.toolchain == 'nightly'
-        run: just ci-nightly-doc
-      - name: Record dependency resolution
-        run: sha256sum Cargo.lock
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cargo-timings-${{ matrix.toolchain }}-${{ matrix.scope }}-${{ github.run_attempt }}
-          path: target/cargo-timings/cargo-timing.html
-          if-no-files-found: error
-          retention-days: 7
+          TOOLCHAIN: ${{ matrix.toolchain }}
+        run: |
+          for scope in '--all-targets' '--lib --tests' '--lib --tests' '--all-targets'; do
+            # Reuse the same starting point at the same path for every measurement.
+            cp -a --reflink=auto "$RUNNER_TEMP/pre-clippy-target" target
+            printf '\nClippy scope %s\n' "$scope"
+            if [[ "$TOOLCHAIN" == stable ]]; then
+              time just ci-stable-lint "$scope"
+            else
+              time just simd-lint '*' "$scope"
+            fi
+            rm -rf -- target
+          done
