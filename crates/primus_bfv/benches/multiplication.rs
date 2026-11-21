@@ -1,4 +1,8 @@
-//! One complete fresh leveled slot request; keys/setup/allocations stay outside timing.
+//! Run: cargo bench -p primus_bfv --bench multiplication --features batching
+//!
+//! Each iteration measures one fresh leveled slot request with prepared keys and buffers.
+
+use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_bfv::evaluation::{
@@ -14,7 +18,6 @@ use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 fn leveled(c: &mut Criterion) {
     for backend in [
@@ -59,28 +62,25 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
         log_basis: DecompositionBaseLog::new(8),
         level_count: None,
     };
-    let key_config: BfvEvaluationKeyConfig = if hybrid_keys {
-        context
-            .hybrid_key_parameters(0, moduli.len(), &[1_152_921_504_606_584_833])
-            .unwrap()
-            .into()
-    } else {
-        config.into()
-    };
-    let lower_key_config: BfvEvaluationKeyConfig = if hybrid_keys {
-        context
-            .hybrid_key_parameters(1, moduli.len(), &[1_152_921_504_606_584_833])
-            .unwrap()
-            .into()
-    } else {
-        config.into()
+    let key_config = |level| -> BfvEvaluationKeyConfig {
+        if hybrid_keys {
+            context
+                .hybrid_key_parameters(level, moduli.len(), &[1_152_921_504_606_584_833])
+                .unwrap()
+                .into()
+        } else {
+            config.into()
+        }
     };
     let mut rng = StdRng::seed_from_u64(0x10b6_be0c);
     let alice = BfvClient::generate(&context, &mut rng);
     let mut bob = BfvClient::generate(&context, &mut rng);
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
-    let relin_key = alice.relinearization_key(0, key_config, &mut rng).unwrap();
+    let relin_key = alice
+        .relinearization_key(0, key_config(0), &mut rng)
+        .unwrap();
+    let lower_key_config = key_config(1);
     let rotate_key = alice
         .row_rotation_key(1, &batching, 1, lower_key_config.clone(), &mut rng)
         .unwrap();
@@ -110,8 +110,8 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
     let values: Vec<_> = (0..ACTIVE).map(|i| (7 * i as u64 + 1) % P).collect();
     let factors: Vec<_> = (0..SLOTS).map(|i| 1 + i as u64 % 3).collect();
     let mut small = vec![0; SLOTS];
-    let mut a = Polynomial::<Vec<u64>>::zero(N);
-    let mut b = Polynomial::<Vec<u64>>::zero(N);
+    let mut a = context.new_plaintext();
+    let mut b = context.new_plaintext();
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
@@ -119,53 +119,43 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
     let mut rotated = context.new_ciphertext(1);
     let mut switched = context.new_ciphertext(1);
     let mut lowest = context.new_ciphertext(2);
-    let mut recovered = Polynomial::<Vec<u64>>::zero(N);
+    let mut recovered = context.new_plaintext();
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];
 
-    let mut group = c.benchmark_group(format!(
-        "bfv_leveled_slots/{backend:?}/{}",
-        if hybrid_keys { "Hybrid" } else { "Radix" }
-    ));
-    group.throughput(Throughput::Elements(1));
-    {
-        let mut request = || {
+    let mut request =
+        |rng: &mut StdRng, recovered: &mut Polynomial<Vec<u64>>, slots: &mut [u64]| {
             batching.encode_to(black_box(&values), &mut small);
             batching.embed_to(&small, a.as_mut());
             batching.encode_to(black_box(&factors), &mut small);
             batching.embed_to(&small, b.as_mut());
-            encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
-            encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
+            encryptor.encrypt_centered_to(&a, &mut encrypted_a, rng);
+            encryptor.encrypt_centered_to(&b, &mut encrypted_b, rng);
             multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
             multiplication.square_assign(&mut linear);
             drop_first.switch_to(&linear, &mut lower);
             rotate.apply_to(&lower, &mut rotated);
             switch.switch_to(&rotated, &mut switched);
             drop_second.switch_to(&switched, &mut lowest);
-            bob.decrypt_at_level_to(&lowest, 2, &mut recovered);
+            bob.decrypt_at_level_to(&lowest, 2, recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
-            batching.decode_to(&small, &mut slots, &mut scratch);
-            black_box(&slots);
+            batching.decode_to(&small, slots, &mut scratch);
+            black_box(slots);
         };
-        group.bench_function(
-            "encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
-            |b| b.iter(&mut request),
-        );
-    }
-    group.finish();
-    let original: Vec<_> = (0..SLOTS)
+    // Validate even filtered-out cases, without advancing the timed RNG.
+    let mut validation_rng = StdRng::seed_from_u64(0x10b6_be0d);
+    request(&mut validation_rng, &mut recovered, &mut slots);
+    let half = SLOTS / 2;
+    let expected: Vec<_> = (0..SLOTS)
         .map(|i| {
-            if i < ACTIVE {
-                let product = values[i] * factors[i] % P;
+            let source = (i / half) * half + (i % half + 1) % half;
+            if source < ACTIVE {
+                let product = values[source] * factors[source] % P;
                 product * product % P
             } else {
                 0
             }
         })
-        .collect();
-    let half = SLOTS / 2;
-    let expected: Vec<_> = (0..SLOTS)
-        .map(|i| original[(i / half) * half + (i % half + 1) % half])
         .collect();
     assert_eq!(slots, expected);
     assert!(
@@ -175,6 +165,17 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
             .enumerate()
             .all(|(i, &value)| i % (N / SLOTS) == 0 || value == 0)
     );
+
+    let mut group = c.benchmark_group(format!(
+        "bfv_leveled_slots/{backend:?}/{}",
+        if hybrid_keys { "Hybrid" } else { "Radix" }
+    ));
+    group.throughput(Throughput::Elements(1));
+    group.bench_function(
+        "encode_two_public_mul_square_relin_rotate_switch_drop_recover_n1024_n256_q150",
+        |b| b.iter(|| request(&mut rng, &mut recovered, &mut slots)),
+    );
+    group.finish();
 }
 
 criterion_group!(benches, leveled);

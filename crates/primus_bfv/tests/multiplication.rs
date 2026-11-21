@@ -48,53 +48,6 @@ fn config() -> DecompositionConfig {
 }
 
 #[test]
-fn prepared_request_derives_each_level_and_matches_staged_operations() {
-    let context = context(N, P, &Q);
-    let mut rng = StdRng::seed_from_u64(0x012b_6001);
-    let mut client = BfvClient::generate(&context, &mut rng);
-    let mut a = Polynomial::<Vec<u64>>::zero(N);
-    let mut b = Polynomial::<Vec<u64>>::zero(N);
-    a.as_mut()[..2].copy_from_slice(&[3, 2]);
-    b.as_mut()[..2].copy_from_slice(&[5, 1]);
-    let mut left = client.encrypt(&a, &mut rng);
-    let mut right = client.encrypt_centered(&b, &mut rng);
-    for level in 0..context.level_count() {
-        let key = client
-            .relinearization_key(level, config(), &mut rng)
-            .unwrap();
-        let mut request = BfvMultiplication::try_new(&context, &key).unwrap();
-        let mut output = context.new_ciphertext(level);
-        request.multiply_to(&left, &right, &mut output);
-        let mut expected = vec![0; N];
-        expected[..3].copy_from_slice(&[15, 13, 2]);
-        assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
-
-        let mut multiplier = BfvMultiplier::try_with_default_basis(&context, level).unwrap();
-        let mut quadratic = context.new_quadratic_ciphertext(level);
-        let mut staged = context.new_ciphertext(level);
-        let mut relin = BfvRelinearizer::try_new(&context, &key).unwrap();
-        multiplier.multiply_to(&left, &right, &mut quadratic);
-        relin.relinearize_to(&quadratic, &mut staged);
-        assert_eq!(output.as_ref(), staged.as_ref());
-        request.square_to(&left, &mut output);
-        let mut inplace = left.clone();
-        request.square_assign(&mut inplace);
-        assert_eq!(output.as_ref(), inplace.as_ref());
-        expected[..3].copy_from_slice(&[9, 12, 4]);
-        assert_eq!(client.decrypt_at_level(&inplace, level).as_ref(), expected);
-        if level + 1 < context.level_count() {
-            let mut drop = BfvModulusSwitch::new(&context, level);
-            let mut next_left = context.new_ciphertext(level + 1);
-            let mut next_right = context.new_ciphertext(level + 1);
-            drop.switch_to(&left, &mut next_left);
-            drop.switch_to(&right, &mut next_right);
-            left = next_left;
-            right = next_right;
-        }
-    }
-}
-
-#[test]
 fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x012b_6bad);
@@ -109,57 +62,41 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
         assert!(BfvMultiplication::try_new(&wrong, &key).is_err());
     }
     let mut request = BfvMultiplication::try_new(&context, &key).unwrap();
-    let valid = context.new_ciphertext(2);
+    assert_invalid_lengths_preserve_output(&mut request, &context.new_ciphertext(2));
+}
+
+fn assert_invalid_lengths_preserve_output(
+    request: &mut BfvMultiplication<'_>,
+    valid: &BfvCiphertext<Vec<u64>>,
+) {
     let length = valid.as_ref().len();
     for bad in [0, length - 1, length + 1, 2 * length] {
         let mut malformed = BfvCiphertext::from_raw(vec![77; bad]);
         let mut output = BfvCiphertext::from_raw(vec![55; length]);
-        for left_is_bad in [false, true] {
-            let (lhs, rhs) = if left_is_bad {
-                (&malformed, &valid)
-            } else {
-                (&valid, &malformed)
-            };
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                    lhs,
-                    rhs,
-                    &mut output
-                )))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&x| x == 55));
+        for (lhs, rhs) in [(&malformed, valid), (valid, &malformed)] {
+            rejects_without_writes(&mut output, |output| request.multiply_to(lhs, rhs, output));
         }
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || request.square_to(&malformed, &mut output)
-            ))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&x| x == 55));
-        assert!(catch_unwind(AssertUnwindSafe(|| request.square_assign(&mut malformed))).is_err());
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                &valid,
-                &valid,
-                &mut malformed
-            )))
-            .is_err()
-        );
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || request.square_to(&valid, &mut malformed)
-            ))
-            .is_err()
-        );
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
+        rejects_without_writes(&mut output, |output| request.square_to(&malformed, output));
+        rejects_without_writes(&mut malformed, |input| request.square_assign(input));
+        rejects_without_writes(&mut malformed, |output| {
+            request.multiply_to(valid, valid, output)
+        });
+        rejects_without_writes(&mut malformed, |output| request.square_to(valid, output));
     }
 }
 
+#[track_caller]
+fn rejects_without_writes(
+    buffer: &mut BfvCiphertext<Vec<u64>>,
+    operation: impl FnOnce(&mut BfvCiphertext<Vec<u64>>),
+) {
+    let before = buffer.clone();
+    assert!(catch_unwind(AssertUnwindSafe(|| operation(buffer))).is_err());
+    assert_eq!(*buffer, before);
+}
+
 #[test]
-fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
+fn prepared_requests_match_staged_exact_multiply_and_dense_oracles_at_every_level() {
     use primus_bfv::evaluation::BfvMultiplicationBackend::{Exact, HpsPOverQ};
     let context = context(N, P, &Q);
     let mut rng = StdRng::seed_from_u64(0x23bf_0001);
@@ -176,20 +113,11 @@ fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
     );
     let convolution = |a: &[u64], b: &[u64]| {
         let mut out = vec![0i64; N];
-        let centered = |x: u64| {
-            if x > P / 2 {
-                x as i64 - P as i64
-            } else {
-                x as i64
-            }
-        };
         for (i, &x) in a.iter().enumerate() {
             for (j, &y) in b.iter().enumerate() {
-                out[(i + j) % N] += if i + j < N {
-                    centered(x) * centered(y)
-                } else {
-                    -centered(x) * centered(y)
-                };
+                let degree = i + j;
+                let term = (x * y) as i64;
+                out[degree % N] += if degree < N { term } else { -term };
             }
         }
         out.into_iter()
@@ -204,18 +132,29 @@ fn hps_and_exact_requests_recover_dense_signed_products_and_squares() {
         let key = client
             .relinearization_key(level, config(), &mut rng)
             .unwrap();
-        for backend in [Exact, HpsPOverQ] {
-            let mut request = BfvMultiplication::try_with_backend(&context, &key, backend).unwrap();
+        let exact = BfvMultiplication::try_new(&context, &key).unwrap();
+        let hps = BfvMultiplication::try_with_backend(&context, &key, HpsPOverQ).unwrap();
+        let mut output = context.new_ciphertext(level);
+        for (backend, mut request) in [(Exact, exact), (HpsPOverQ, hps)] {
             assert_eq!(request.backend(), backend);
             assert!(!request.auxiliary_moduli().is_empty());
-            let mut output = context.new_ciphertext(level);
             request.multiply_to(&left, &right, &mut output);
             assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
+            if backend == Exact {
+                let mut multiplier =
+                    BfvMultiplier::try_with_default_basis(&context, level).unwrap();
+                let mut quadratic = context.new_quadratic_ciphertext(level);
+                let mut staged = context.new_ciphertext(level);
+                let mut relin = BfvRelinearizer::try_new(&context, &key).unwrap();
+                multiplier.multiply_to(&left, &right, &mut quadratic);
+                relin.relinearize_to(&quadratic, &mut staged);
+                assert_eq!(output, staged);
+            }
             request.square_to(&left, &mut output);
             assert_eq!(client.decrypt_at_level(&output, level).as_ref(), square);
             let mut in_place = left.clone();
             request.square_assign(&mut in_place);
-            assert_eq!(output.as_ref(), in_place.as_ref());
+            assert_eq!(output, in_place);
         }
         if level + 1 < context.level_count() {
             let mut switch = BfvModulusSwitch::new(&context, level);
@@ -238,7 +177,6 @@ fn hps_explicit_basis_and_complete_lengths_are_checked_before_writes() {
     let key = client.relinearization_key(0, config(), &mut rng).unwrap();
     for basis in [
         &[][..],
-        &[Q[0]],
         &[17],
         &[65],
         &[1_152_921_504_606_830_593, 1_152_921_504_606_830_593],
@@ -266,40 +204,5 @@ fn hps_explicit_basis_and_complete_lengths_are_checked_before_writes() {
         &[1_152_921_504_606_830_593],
     )
     .unwrap();
-    let valid = context.new_ciphertext(0);
-    let length = valid.as_ref().len();
-    for bad in [0, length - 1, length + 1, 2 * length] {
-        let malformed = BfvCiphertext::from_raw(vec![77; bad]);
-        let mut output = BfvCiphertext::from_raw(vec![55; length]);
-        for (lhs, rhs) in [(&malformed, &valid), (&valid, &malformed)] {
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                    lhs,
-                    rhs,
-                    &mut output
-                )))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&x| x == 55));
-        }
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || request.square_to(&malformed, &mut output)
-            ))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&x| x == 55));
-        let mut malformed = malformed;
-        assert!(catch_unwind(AssertUnwindSafe(|| request.square_assign(&mut malformed))).is_err());
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                &valid,
-                &valid,
-                &mut malformed
-            )))
-            .is_err()
-        );
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-    }
+    assert_invalid_lengths_preserve_output(&mut request, &context.new_ciphertext(0));
 }

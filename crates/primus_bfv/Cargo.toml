@@ -58,9 +58,5 @@ name = "working_basis"
 harness = false
 
 [[example]]
-name = "leveled_slots"
-required-features = ["batching"]
-
-[[example]]
 name = "subring_slots"
 required-features = ["batching"]

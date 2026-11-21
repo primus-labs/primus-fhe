@@ -1,8 +1,11 @@
+mod centered_residue;
 mod compose;
 mod decompose;
 mod extension;
 mod small;
 mod small_kernels;
+
+pub use centered_residue::lift_centered_residues_to;
 
 use itertools::Itertools;
 use primus_factor::ShoupFactor;

@@ -1,6 +1,6 @@
 //! Ordinary prepared multiplication, in-place square and complete-length boundaries.
 use primus_bgv::advanced::tensor_to;
-use primus_bgv::evaluation::{BgvMultiplication, BgvRelinearizer};
+use primus_bgv::evaluation::{BgvModulusSwitch, BgvMultiplication, BgvRelinearizer};
 use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters, ErrorDistribution};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
@@ -55,41 +55,45 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
     let mut b = Polynomial::<Vec<u64>>::zero(N);
     a.as_mut()[..2].copy_from_slice(&[3, 2]);
     b.as_mut()[..2].copy_from_slice(&[5, 1]);
-    let encrypted_a = client.encrypt(&a, &mut rng);
-    let encrypted_b = client.encrypt_centered(&b, &mut rng);
-    let full_len = context.rns_poly_len(0);
+    let mut left = client.encrypt(&a, &mut rng);
+    let mut right = client.encrypt_centered(&b, &mut rng);
+    let mut expected_product = vec![0; N];
+    expected_product[..3].copy_from_slice(&[15, 13, 2]);
+    let mut expected_square = vec![0; N];
+    expected_square[..3].copy_from_slice(&[9, 12, 4]);
     for level in 0..context.level_count() {
-        let length = context.rns_poly_len(level);
-        // This fresh phase fits every prefix; this fixture is not an evaluated
-        // prime-drop algorithm. Actual drops are tested via BgvModulusSwitch.
-        let prefix = |input: &BgvCiphertext<Vec<u64>>| {
-            let (c0, c1) = input.c0_c1(full_len);
-            BgvCiphertext::from_raw([&c0.as_ref()[..length], &c1.as_ref()[..length]].concat())
-        };
-        let left = prefix(&encrypted_a);
-        let right = prefix(&encrypted_b);
         let key = client
             .relinearization_key(level, config(), &mut rng)
             .unwrap();
         let mut request = BgvMultiplication::try_new(&context, &key).unwrap();
         let mut output = context.new_ciphertext(level);
-        request.multiply_to(&left, &right, &mut output);
-        let mut expected = vec![0; N];
-        expected[..3].copy_from_slice(&[15, 13, 2]);
-        assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
+        // Q uses primes congruent to 1 modulo P, so these raw views retain the
+        // factor-one message convention through each prime drop.
+        let raw_left = BgvCiphertext::from_raw(left.as_ref());
+        let raw_right = BgvCiphertext::from_raw(right.as_ref());
+        request.multiply_to(&raw_left, &raw_right, &mut output);
+        assert_eq!(client.decrypt(&output).as_ref(), expected_product);
 
         let mut quadratic = context.new_quadratic_ciphertext(level);
         let mut staged = context.new_ciphertext(level);
         let mut relin = BgvRelinearizer::try_new(&context, &key).unwrap();
         tensor_to(&context, level, &left, &right, &mut quadratic);
         relin.relinearize_to(&quadratic, &mut staged);
-        assert_eq!(output.as_ref(), staged.as_ref());
-        request.square_to(&left, &mut output);
-        let mut inplace = left;
+        assert_eq!(output, staged);
+        request.square_to(&raw_left, &mut output);
+        let mut inplace = left.clone();
         request.square_assign(&mut inplace);
-        assert_eq!(output.as_ref(), inplace.as_ref());
-        expected[..3].copy_from_slice(&[9, 12, 4]);
-        assert_eq!(client.decrypt_at_level(&inplace, level).as_ref(), expected);
+        assert_eq!(output, inplace);
+        assert_eq!(client.decrypt(&inplace).as_ref(), expected_square);
+        if level + 1 < context.level_count() {
+            let mut drop = BgvModulusSwitch::new(&context, level);
+            let mut next_left = context.new_ciphertext(level + 1);
+            let mut next_right = context.new_ciphertext(level + 1);
+            drop.switch_to(&left, &mut next_left);
+            drop.switch_to(&right, &mut next_right);
+            left = next_left;
+            right = next_right;
+        }
     }
 }
 
@@ -113,46 +117,24 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
     for bad in [0, length - 1, length + 1, 2 * length] {
         let mut malformed = BgvCiphertext::from_raw(vec![77; bad]);
         let mut output = BgvCiphertext::from_raw(vec![55; length]);
-        for left_is_bad in [false, true] {
-            let (lhs, rhs) = if left_is_bad {
-                (&malformed, &valid)
-            } else {
-                (&valid, &malformed)
-            };
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                    lhs,
-                    rhs,
-                    &mut output
-                )))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&x| x == 55));
+        for (lhs, rhs) in [(&malformed, &valid), (&valid, &malformed)] {
+            rejects_without_writes(&mut output, |output| request.multiply_to(lhs, rhs, output));
         }
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || request.square_to(&malformed, &mut output)
-            ))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&x| x == 55));
-        assert!(catch_unwind(AssertUnwindSafe(|| request.square_assign(&mut malformed))).is_err());
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| request.multiply_to(
-                &valid,
-                &valid,
-                &mut malformed
-            )))
-            .is_err()
-        );
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || request.square_to(&valid, &mut malformed)
-            ))
-            .is_err()
-        );
-        assert!(malformed.as_ref().iter().all(|&x| x == 77));
+        rejects_without_writes(&mut output, |output| request.square_to(&malformed, output));
+        rejects_without_writes(&mut malformed, |input| request.square_assign(input));
+        rejects_without_writes(&mut malformed, |output| {
+            request.multiply_to(&valid, &valid, output)
+        });
+        rejects_without_writes(&mut malformed, |output| request.square_to(&valid, output));
     }
+}
+
+#[track_caller]
+fn rejects_without_writes(
+    buffer: &mut BgvCiphertext<Vec<u64>>,
+    operation: impl FnOnce(&mut BgvCiphertext<Vec<u64>>),
+) {
+    let before = buffer.clone();
+    assert!(catch_unwind(AssertUnwindSafe(|| operation(buffer))).is_err());
+    assert_eq!(*buffer, before);
 }

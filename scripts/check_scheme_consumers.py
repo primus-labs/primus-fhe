@@ -63,18 +63,9 @@ def check_consumers(output_dir: Path, *, check_only: bool) -> None:
             directory = output_dir / name
             (directory / "src").mkdir(parents=True, exist_ok=True)
             batching = example == "slots"
-            dependencies = [dependency(f"primus_{scheme}", batching)]
-            if example in ("working_basis", "leveled_coefficients"):
-                dependencies.append(dependency("primus_poly"))
-                dependencies.append(dependency("primus_distr"))
-            if example != "working_basis":
-                dependencies.extend(dependency(crate) for crate in (
-                    "primus_glwe_rns", "primus_modulus", "primus_shape",
-                ))
-            else:
-                dependencies.extend(dependency(crate) for crate in (
-                    "primus_glwe_rns", "primus_shape",
-                ))
+            dependencies = [dependency(f"primus_{scheme}", batching), dependency("primus_shape")]
+            if example in ("coefficients", "slots", "ciphertext_multiplication"):
+                dependencies.append(dependency("primus_modulus"))
             if example in ("ciphertext_multiplication", "leveled_coefficients"):
                 dependencies.append(dependency("primus_decompose"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")

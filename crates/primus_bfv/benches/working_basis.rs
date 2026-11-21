@@ -1,4 +1,12 @@
-//! One fresh prepared request; immutable setup and buffer allocation are outside timing.
+//! Run: cargo bench -p primus_bfv --bench working_basis
+//!
+//! Each iteration encrypts prepared plaintexts, evaluates and decrypts the result.
+//! The recovered coefficients and zero tail are checked before sampling.
+//! The former `fresh_prepared_encrypt2_mul_square_decode` cases at `0a4fd3f7`
+//! also timed plaintext setup and validation.
+
+use std::hint::black_box;
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use primus_bfv::evaluation::{
     BfvLeveledMultiplication, BfvMultiplication, BfvMultiplicationBackend,
@@ -13,7 +21,6 @@ use primus_modulus::BarrettModulus;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 enum Multiplications<'a> {
     Full(Box<BfvMultiplication<'a>>),
@@ -102,32 +109,35 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap(),
                 ))
             };
-            let mut a = Polynomial::<Vec<u64>>::zero(16384);
-            let mut b = Polynomial::<Vec<u64>>::zero(16384);
-            let mut recovered = Polynomial::<Vec<u64>>::zero(16384);
+            let mut a = context.new_plaintext();
+            let mut b = context.new_plaintext();
+            a.as_mut()[..2].copy_from_slice(&[2, 1]);
+            b.as_mut()[..2].copy_from_slice(&[3, 65536]);
+            let mut recovered = context.new_plaintext();
             let mut ca = context.new_ciphertext(0);
             let mut cb = context.new_ciphertext(0);
             let mut out = context.new_ciphertext(0);
             let name = format!(
-                "bfv_q240/{backend:?}/{}/fresh_prepared_encrypt2_mul_square_decode",
+                "bfv_q240/{backend:?}/{}/encrypt2_mul_square_decrypt",
                 if planned {
                     "leveled_plan"
                 } else {
                     "full_hps_default"
                 }
             );
+            let mut request = |rng: &mut StdRng, recovered: &mut Polynomial<Vec<u64>>| {
+                encryptor.encrypt_centered_to(black_box(&a), &mut ca, rng);
+                encryptor.encrypt_centered_to(black_box(&b), &mut cb, rng);
+                operations.apply(&ca, &cb, &mut out);
+                client.decrypt_at_level_to(&out, 0, recovered);
+                black_box(recovered);
+            };
+            let mut validation_rng = StdRng::seed_from_u64(0x26_2027);
+            request(&mut validation_rng, &mut recovered);
+            assert_eq!(&recovered.as_ref()[..5], &[36, 12, 65526, 65535, 1]);
+            assert!(recovered.as_ref()[5..].iter().all(|&x| x == 0));
             c.bench_function(&name, |bencher| {
-                bencher.iter(|| {
-                    a.as_mut()[..2].copy_from_slice(black_box(&[2, 1]));
-                    b.as_mut()[..2].copy_from_slice(black_box(&[3, 65536]));
-                    encryptor.encrypt_centered_to(&a, &mut ca, &mut rng);
-                    encryptor.encrypt_centered_to(&b, &mut cb, &mut rng);
-                    operations.apply(&ca, &cb, &mut out);
-                    client.decrypt_at_level_to(&out, 0, &mut recovered);
-                    assert_eq!(&recovered.as_ref()[..5], &[36, 12, 65526, 65535, 1]);
-                    assert!(recovered.as_ref()[5..].iter().all(|&x| x == 0));
-                    black_box(&out);
-                })
+                bencher.iter(|| request(&mut rng, &mut recovered))
             });
         }
     }

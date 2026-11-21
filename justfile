@@ -77,7 +77,6 @@ scheme-smoke:
   cargo run -p primus_bfv --example explicit_coefficients
   cargo run -p primus_bfv --example subring_slots --features batching
   cargo run -p primus_bfv --example leveled_coefficients
-  cargo run -p primus_bfv --example leveled_slots --features batching
   cargo run -p primus_glwe_rns --example raw_encryption
   cargo run -p primus_glwe_rns --example public_encryption
   cargo run -p primus_glwe_rns --example gadget_encryption
