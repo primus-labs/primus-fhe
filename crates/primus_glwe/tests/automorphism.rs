@@ -2,15 +2,15 @@
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
-use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, GlevParameters, GlweParameters,
-    GlweSize, NttGlweAutomorphismKey, NttGlweAutomorphismWorkspace, NttGlweGadgetEncryptWorkspace,
-    NttGlweSecretKey, SecretKeyDistr,
+    GlweSecretKey, GlweSize, NttGlweAutomorphismKey, NttGlweAutomorphismWorkspace,
+    NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
-use primus_lattice::glwe::{Glwe, NttGlwe};
+use primus_lattice::glwe::{FourierGlwe, Glwe, NttGlwe};
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
@@ -143,8 +143,6 @@ fn ntt_and_coefficient_inputs_reuse_the_automorphism_key() {
 }
 
 fn fourier_automorphism_input<Table: FftTable>() {
-    use primus_fft::Complex64;
-    use primus_lattice::glwe::FourierGlwe;
     let table = Table::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
     let (params, coeff) =
@@ -190,29 +188,6 @@ fn fourier_automorphism_input<Table: FftTable>() {
         );
         fourier_output.write_torus_form(&mut output, &mut fft);
         assert_phase(output.as_ref(), &expected, s, q);
-        // A different N with the same total storage must fail before output writes.
-        let mut wrong_workspace = FourierGlweAutomorphismWorkspace::new(GlweSize::new(
-            GlweDimension::new(5),
-            PolyLength::new(N * 2),
-        ));
-        fourier_output.as_mut().fill(Complex64::new(7.0, 0.0));
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                key.apply_fourier_to(
-                    &fourier_input,
-                    &mut fourier_output,
-                    &mut fft,
-                    &mut wrong_workspace,
-                );
-            }))
-            .is_err()
-        );
-        assert!(
-            fourier_output
-                .as_ref()
-                .iter()
-                .all(|&v| v == Complex64::new(7.0, 0.0))
-        );
     }
 }
 
@@ -220,4 +195,55 @@ fn fourier_automorphism_input<Table: FftTable>() {
 fn fourier_and_coefficient_inputs_reuse_the_automorphism_key() {
     fourier_automorphism_input::<RustFftTable>();
     fourier_automorphism_input::<primus_fft::TfheFftTable>();
+}
+
+fn check_fourier_workspace_layout<Table: FftTable>() {
+    // Both lengths are supported. The layouts each store 192 coefficients
+    // or 96 complex values for a complete GLWE ciphertext.
+    let params = GlweParameters::new(
+        GlweDimension::new(DIMENSION),
+        PolyLength::new(POLY_LENGTH),
+        PLAINTEXT_MODULUS,
+        NativeModulus::new(),
+        SecretKeyDistr::UniformTernary,
+        0.7,
+    );
+    let size = params.size();
+    let wrong_size = GlweSize::new(GlweDimension::new(5), PolyLength::new(POLY_LENGTH / 2));
+    assert_ne!(wrong_size, size);
+    assert_eq!(wrong_size.glwe_len(), size.glwe_len());
+    assert_eq!(wrong_size.fourier_glwe_len(), size.fourier_glwe_len());
+
+    let table = Table::new(params.poly_length());
+    let mut fft = FftEngine::new(&table);
+    let mut rng = StdRng::seed_from_u64(0x4646_545f_4c41_594f);
+    let sampling = params.encryption_parameters();
+    let secret = GlweSecretKey::generate(size, sampling.secret_key_sampler(), &mut rng);
+    let mut encryptor = FourierGlweEncryptor::try_new(&secret, sampling).unwrap();
+    let glev = GlevParameters::with_glwe_params(
+        &params,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: Some(DecompositionLevelCount::new(2)),
+        },
+    );
+    let key = FourierGlweAutomorphismKey::generate(3, &mut encryptor, &glev, &mut fft, &mut rng);
+
+    let mut workspace = FourierGlweAutomorphismWorkspace::new(wrong_size);
+    let input = FourierGlwe::<Vec<Complex64>>::zero(size.fourier_glwe_len());
+    let sentinel = Complex64::new(7.0, 0.0);
+    let mut output = FourierGlwe::new(vec![sentinel; size.fourier_glwe_len()]);
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            key.apply_fourier_to(&input, &mut output, &mut fft, &mut workspace);
+        }))
+        .is_err()
+    );
+    assert!(output.as_ref().iter().all(|&value| value == sentinel));
+}
+
+#[test]
+fn fourier_automorphism_rejects_equal_length_workspace_with_different_layout() {
+    check_fourier_workspace_layout::<RustFftTable>();
+    check_fourier_workspace_layout::<primus_fft::TfheFftTable>();
 }

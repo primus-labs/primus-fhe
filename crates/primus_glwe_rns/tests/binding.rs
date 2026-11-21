@@ -9,8 +9,9 @@ use primus_glwe_rns::{
     CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGlweAutoEvaluator, DcrtGlweAutoKey,
     DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey, DcrtGlweExpandCoeffParallelEvaluator,
     DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, DcrtGlweRevTraceEvaluator,
-    DcrtGlweRevTraceKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey,
-    HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, RnsDomainError, SecretKeyDistr,
+    DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey,
+    GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, RnsDomainError,
+    SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
@@ -41,98 +42,112 @@ fn encryption_bindings_check_layout_and_ordered_moduli() {
     let params = parameters(1, n.get(), &q);
     let table = params.ntt_table();
     let mut rng = StdRng::seed_from_u64(0x4249_4e44);
-    let (_, key) = params.generate_key_pair(&table, &mut rng);
+    let (coefficients, key) = params.generate_key_pair(&table, &mut rng);
+    let sampling = params.encryption_parameters();
+    let base = params.base_q();
     let public_key = key
-        .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
+        .try_bind_raw(sampling, base, &table)
         .unwrap()
         .public_key(&mut rng);
-    assert!(
-        public_key
-            .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
-            .is_ok()
+    assert!(public_key.try_bind_raw(sampling, base, &table).is_ok());
+
+    let short_base = RNSBase::new(&q[..1]).unwrap();
+    assert_eq!(
+        key.try_bind_raw(sampling, &short_base, &table).err(),
+        Some(RnsDomainError::ModuliCountMismatch {
+            expected: 2,
+            actual: 1
+        })
+    );
+    let longer_table = UintDcrtTable::new(PolyLength::new(64), &q).unwrap();
+    assert_eq!(
+        key.try_bind_raw(sampling, base, &longer_table).err(),
+        Some(RnsDomainError::PolynomialLengthMismatch {
+            expected: 32,
+            actual: 64
+        })
     );
 
-    // A valid table with a different N fails before the key's geometry is considered.
-    let longer_table = UintDcrtTable::new(PolyLength::new(64), &q).unwrap();
-    assert!(matches!(
-        key.try_bind_raw(
-            params.encryption_parameters(),
-            params.base_q(),
-            &longer_table
-        ),
-        Err(RnsDomainError::PolynomialLengthMismatch { .. })
-    ));
-    let larger_dimension = parameters(2, n.get(), &q);
-    assert!(matches!(
-        key.try_bind_raw(
-            larger_dimension.encryption_parameters(),
-            larger_dimension.base_q(),
-            &table
-        ),
-        Err(RnsDomainError::DimensionMismatch { .. })
-    ));
-    assert!(matches!(
-        public_key.try_bind_raw(
-            larger_dimension.encryption_parameters(),
-            larger_dimension.base_q(),
-            &table
-        ),
-        Err(RnsDomainError::DimensionMismatch { .. })
-    ));
+    // The sampling state detects the foreign base even when the table agrees with it.
+    let reversed_q = [q[1], q[0]];
+    let reversed_base = RNSBase::new(&reversed_q).unwrap();
+    let reversed_table = UintDcrtTable::new(n, &reversed_q).unwrap();
+    let mut rejected_rng = StdRng::seed_from_u64(19);
+    let mut untouched_rng = StdRng::seed_from_u64(19);
+    assert_eq!(
+        key.try_bind_raw(sampling, &reversed_base, &reversed_table)
+            .map(|binding| binding.public_key(&mut rejected_rng))
+            .err(),
+        Some(RnsDomainError::ModulusOrderMismatch {
+            index: 0,
+            expected: 257,
+            actual: 769
+        })
+    );
+    assert_eq!(
+        rand::Rng::next_u64(&mut rejected_rng),
+        rand::Rng::next_u64(&mut untouched_rng)
+    );
 
-    // Each alternative parameter/table pair is itself valid and has the same shape.
-    for values in [[769, 257], [257, 1153]] {
-        let other_q = values.map(BarrettModulus::new);
-        let other_params = parameters(1, n.get(), &other_q);
-        let other_table = UintDcrtTable::new(n, &other_q).unwrap();
-        // Independently supplied public-key sampling/base parts must be rejected
-        // before sampling, even when the foreign base and table agree with each other.
-        let mut rejected_rng = StdRng::seed_from_u64(19);
-        let mut expected_rng = StdRng::seed_from_u64(19);
-        assert!(matches!(
-            key.try_bind_raw(
-                params.encryption_parameters(),
-                other_params.base_q(),
-                &other_table,
-            )
-            .map(|binding| binding.public_key(&mut rejected_rng)),
-            Err(RnsDomainError::ModulusOrderMismatch { .. })
-        ));
-        assert_eq!(
-            rand::Rng::next_u64(&mut rejected_rng),
-            rand::Rng::next_u64(&mut expected_rng)
-        );
-        let sampling = other_params.encryption_parameters();
-        let base = other_params.base_q();
-        let gadget = other_params.gadget(DecompositionBaseLog::new(4), None);
-        for (operation, result) in [
-            (
-                "secret raw",
-                key.try_bind_raw(sampling, base, &other_table).map(|_| ()),
-            ),
-            (
-                "public raw",
-                public_key
-                    .try_bind_raw(sampling, base, &other_table)
-                    .map(|_| ()),
-            ),
-            (
-                "secret gadget",
-                key.try_bind_gadget(&gadget, sampling, &other_table)
-                    .map(|_| ()),
-            ),
-            (
-                "public gadget",
-                public_key
-                    .try_bind_gadget(&gadget, sampling, &other_table)
-                    .map(|_| ()),
-            ),
-        ] {
-            assert!(
-                matches!(result, Err(RnsDomainError::ModulusOrderMismatch { .. })),
-                "{operation}: {result:?} for {values:?}",
-            );
-        }
+    // With consistent sampling, base and table, binding still validates the owned key.
+    let larger_dimension = parameters(2, n.get(), &q);
+    let wider_sampling = larger_dimension.encryption_parameters();
+    let wrong_dimension = RnsDomainError::DimensionMismatch {
+        expected: 2,
+        actual: 1,
+    };
+    assert_eq!(
+        key.try_bind_raw(wider_sampling, base, &table).err(),
+        Some(wrong_dimension.clone())
+    );
+    assert_eq!(
+        public_key.try_bind_raw(wider_sampling, base, &table).err(),
+        Some(wrong_dimension)
+    );
+
+    let reversed_key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficients, &reversed_table);
+    assert_eq!(
+        reversed_key.try_bind_raw(sampling, base, &table).err(),
+        Some(RnsDomainError::ModulusOrderMismatch {
+            index: 0,
+            expected: 769,
+            actual: 257
+        })
+    );
+
+    // Agree on the first limb so every entry must check beyond it.
+    let other_q = [257, 1153].map(BarrettModulus::new);
+    let other_params = parameters(1, n.get(), &other_q);
+    let other_table = other_params.ntt_table();
+    let sampling = other_params.encryption_parameters();
+    let base = other_params.base_q();
+    let gadget = other_params.gadget(DecompositionBaseLog::new(4), None);
+    let wrong_second_limb = RnsDomainError::ModulusOrderMismatch {
+        index: 1,
+        expected: 769,
+        actual: 1153,
+    };
+    for (operation, error) in [
+        (
+            "secret raw",
+            key.try_bind_raw(sampling, base, &other_table).err(),
+        ),
+        (
+            "public raw",
+            public_key.try_bind_raw(sampling, base, &other_table).err(),
+        ),
+        (
+            "secret gadget",
+            key.try_bind_gadget(&gadget, sampling, &other_table).err(),
+        ),
+        (
+            "public gadget",
+            public_key
+                .try_bind_gadget(&gadget, sampling, &other_table)
+                .err(),
+        ),
+    ] {
+        assert_eq!(error.as_ref(), Some(&wrong_second_limb), "{operation}");
     }
 }
 
