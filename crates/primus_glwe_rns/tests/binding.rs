@@ -4,13 +4,13 @@ mod support;
 
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
-    CrtGlweAutoEvaluator, CrtGlweAutoKey, CrtGlweEncryptionParameters, CrtGlweExpandCoeffEvaluator,
-    CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator, CrtGlweTraceEvaluator,
-    CrtGlweTraceKey, DcrtGlweAutoEvaluator, DcrtGlweAutoKey, DcrtGlweExpandCoeffEvaluator,
-    DcrtGlweExpandCoeffKey, DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweKeySwitchEvaluator,
-    DcrtGlweKeySwitchingKey, DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey,
-    DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
-    HybridRnsGlweKeySwitchingKey, RnsDomainError, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweAutoEvaluator, CrtGlweAutoKey, CrtGlweEncryptionParameters,
+    CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator,
+    CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGlweAutoEvaluator, DcrtGlweAutoKey,
+    DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey, DcrtGlweExpandCoeffParallelEvaluator,
+    DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, DcrtGlweRevTraceEvaluator,
+    DcrtGlweRevTraceKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey,
+    HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, RnsDomainError, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
@@ -302,9 +302,42 @@ fn hybrid_binding_checks_qp_order_split_and_partition_width() {
     );
 }
 
-/// Key sets retain a single numerical metadata record. Every public binding must
-/// consult it, including the parallel expansion constructors, before scratch
-/// can be created from a foreign parameters. Storage shape alone is insufficient.
+fn crt_automorphism_key(
+    params: &support::RawParameters<u32>,
+    gadget: &CrtGlevParameters<u32, BarrettModulus<u32>>,
+    table: &UintDcrtTable<u32>,
+) -> CrtGlweAutoKey<u32> {
+    let mut rng = StdRng::seed_from_u64(0x4155_544f);
+    let (secret, dcrt_secret) = params.generate_key_pair(table, &mut rng);
+    CrtGlweAutoKey::new(
+        gadget,
+        params.encryption_parameters(),
+        table,
+        3,
+        &secret,
+        &dcrt_secret,
+        &mut rng,
+    )
+}
+
+#[test]
+fn automorphism_binding_accepts_independently_prepared_matching_resources() {
+    let q = [257u32, 769].map(BarrettModulus::new);
+    let params = parameters(1, 32, &q);
+    let radix = DecompositionBaseLog::new(4);
+    let levels = Some(DecompositionLevelCount::new(1));
+    let key = crt_automorphism_key(&params, &params.gadget(radix, levels), &params.ntt_table());
+    let equivalent = parameters(1, 32, &q);
+    assert!(
+        CrtGlweAutoEvaluator::try_new(
+            &key,
+            &equivalent.gadget(radix, levels),
+            &equivalent.ntt_table(),
+        )
+        .is_ok()
+    );
+}
+
 #[test]
 fn automorphism_bindings_check_layout_order_and_decomposition() {
     use RnsDomainError::*;
@@ -317,88 +350,39 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
         DecompositionBaseLog::new(4),
         Some(DecompositionLevelCount::new(1)),
     );
-    let mut rng = StdRng::seed_from_u64(0x4155_544f);
-    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
-    let crt_auto = CrtGlweAutoKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        3,
-        &secret,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let dcrt_auto = DcrtGlweAutoKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        3,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let crt_trace = CrtGlweTraceKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        &secret,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let dcrt_trace = DcrtGlweTraceKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let reverse_trace = DcrtGlweRevTraceKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let crt_expand = CrtGlweExpandCoeffKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        &secret,
-        &dcrt_secret,
-        &mut rng,
-    );
-    let dcrt_expand = DcrtGlweExpandCoeffKey::new(
-        &gadget,
-        params.encryption_parameters(),
-        &table,
-        &dcrt_secret,
-        &mut rng,
-    );
+    let crt_auto = crt_automorphism_key(&params, &gadget, &table);
 
+    // A table can disagree with the gadget even when its key metadata is valid.
     let longer_table = UintDcrtTable::new(PolyLength::new(64), &q).unwrap();
-    assert!(matches!(
-        CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &longer_table),
-        Err(PolynomialLengthMismatch { .. })
-    ));
+    assert_eq!(
+        CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &longer_table).err(),
+        Some(PolynomialLengthMismatch {
+            expected: 32,
+            actual: 64,
+        })
+    );
     let reversed_table = UintDcrtTable::new(n, &[q[1], q[0]]).unwrap();
-    assert!(matches!(
-        CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &reversed_table),
-        Err(ModulusOrderMismatch { .. })
-    ));
+    assert_eq!(
+        CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &reversed_table).err(),
+        Some(ModulusOrderMismatch {
+            index: 0,
+            expected: 257,
+            actual: 769,
+        })
+    );
 
-    // Each alternative parameter/table pair is internally valid. The first one has independent
-    // parameters and tables but identical values, and must be accepted.
+    // Each gadget/table pair agrees internally, isolating the key's shared metadata check.
     for (n, dimension, q, radix, levels, expected) in [
-        (32, 1, &[257, 769][..], 4, 1, None),
         (
             64,
             1,
             &[257, 769][..],
             4,
             1,
-            Some(PolynomialLengthMismatch {
+            PolynomialLengthMismatch {
                 expected: 32,
                 actual: 64,
-            }),
+            },
         ),
         (
             32,
@@ -406,10 +390,10 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[257, 769][..],
             4,
             1,
-            Some(DimensionMismatch {
+            DimensionMismatch {
                 expected: 1,
                 actual: 2,
-            }),
+            },
         ),
         (
             32,
@@ -417,10 +401,10 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[257][..],
             4,
             1,
-            Some(ModuliCountMismatch {
+            ModuliCountMismatch {
                 expected: 2,
                 actual: 1,
-            }),
+            },
         ),
         (
             32,
@@ -428,11 +412,11 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[769, 257][..],
             4,
             1,
-            Some(ModulusOrderMismatch {
+            ModulusOrderMismatch {
                 index: 0,
                 expected: 257,
                 actual: 769,
-            }),
+            },
         ),
         (
             32,
@@ -440,11 +424,11 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[257, 1153][..],
             4,
             1,
-            Some(ModulusOrderMismatch {
+            ModulusOrderMismatch {
                 index: 1,
                 expected: 769,
                 actual: 1153,
-            }),
+            },
         ),
         (
             32,
@@ -452,10 +436,10 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[257, 769][..],
             5,
             1,
-            Some(DecompositionBaseLogMismatch {
+            DecompositionBaseLogMismatch {
                 expected: 4,
                 actual: 5,
-            }),
+            },
         ),
         (
             32,
@@ -463,64 +447,93 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
             &[257, 769][..],
             4,
             2,
-            Some(DecompositionLevelCountMismatch {
+            DecompositionLevelCountMismatch {
                 expected: 1,
                 actual: 2,
-            }),
+            },
         ),
     ] {
         let moduli: Vec<_> = q.iter().copied().map(BarrettModulus::new).collect();
         let params = parameters(dimension, n, &moduli);
-        let table = UintDcrtTable::new(PolyLength::new(n), &moduli).unwrap();
+        let table = params.ntt_table();
         let gadget = params.gadget(
             DecompositionBaseLog::new(radix),
             Some(DecompositionLevelCount::new(levels)),
         );
-        let bindings = [
-            (
-                "CRT auto",
-                CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &table).err(),
-            ),
-            (
-                "DCRT auto",
-                DcrtGlweAutoEvaluator::try_new(&dcrt_auto, &gadget, &table).err(),
-            ),
-            (
-                "CRT trace",
-                CrtGlweTraceEvaluator::try_new(&crt_trace, &gadget, &table).err(),
-            ),
-            (
-                "DCRT trace",
-                DcrtGlweTraceEvaluator::try_new(&dcrt_trace, &gadget, &table).err(),
-            ),
-            (
-                "reverse trace",
-                DcrtGlweRevTraceEvaluator::try_new(&reverse_trace, &gadget, &table).err(),
-            ),
-            (
-                "CRT expand",
-                CrtGlweExpandCoeffEvaluator::try_new(&crt_expand, &gadget, &table).err(),
-            ),
-            (
-                "DCRT expand",
-                DcrtGlweExpandCoeffEvaluator::try_new(&dcrt_expand, &gadget, &table).err(),
-            ),
-            (
-                "CRT parallel",
-                CrtGlweExpandCoeffParallelEvaluator::try_new(&crt_expand, &gadget, &table, 2).err(),
-            ),
-            (
-                "DCRT parallel",
-                DcrtGlweExpandCoeffParallelEvaluator::try_new(&dcrt_expand, &gadget, &table, 2)
-                    .err(),
-            ),
-        ];
-        for (name, actual) in bindings {
-            assert_eq!(
-                actual, expected,
-                "{name}, N={n}, k={dimension}, Q={q:?}, radix={radix}, levels={levels}"
-            );
-        }
+        assert_eq!(
+            CrtGlweAutoEvaluator::try_new(&crt_auto, &gadget, &table).err(),
+            Some(expected),
+            "N={n}, k={dimension}, Q={q:?}, radix={radix}, levels={levels}"
+        );
+    }
+}
+
+#[test]
+fn trace_expansion_and_dcrt_automorphism_bindings_reject_wrong_radix() {
+    let q = [257u32, 769].map(BarrettModulus::new);
+    let params = parameters(1, 32, &q);
+    let table = params.ntt_table();
+    let levels = Some(DecompositionLevelCount::new(1));
+    let gadget = params.gadget(DecompositionBaseLog::new(4), levels);
+    let sampling = params.encryption_parameters();
+    let mut rng = StdRng::seed_from_u64(0x4155_544f);
+    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
+    // The other evaluators share the same validator. A wrong radix with the
+    // same level count witnesses that each constructor checks the key metadata.
+    let dcrt_auto = DcrtGlweAutoKey::new(&gadget, sampling, &table, 3, &dcrt_secret, &mut rng);
+    let crt_trace =
+        CrtGlweTraceKey::new(&gadget, sampling, &table, &secret, &dcrt_secret, &mut rng);
+    let dcrt_trace = DcrtGlweTraceKey::new(&gadget, sampling, &table, &dcrt_secret, &mut rng);
+    let reverse_trace = DcrtGlweRevTraceKey::new(&gadget, sampling, &table, &dcrt_secret, &mut rng);
+    let crt_expand =
+        CrtGlweExpandCoeffKey::new(&gadget, sampling, &table, &secret, &dcrt_secret, &mut rng);
+    let dcrt_expand =
+        DcrtGlweExpandCoeffKey::new(&gadget, sampling, &table, &dcrt_secret, &mut rng);
+    let wrong_radix = params.gadget(DecompositionBaseLog::new(5), levels);
+    for (name, result) in [
+        (
+            "DCRT auto",
+            DcrtGlweAutoEvaluator::try_new(&dcrt_auto, &wrong_radix, &table).err(),
+        ),
+        (
+            "CRT trace",
+            CrtGlweTraceEvaluator::try_new(&crt_trace, &wrong_radix, &table).err(),
+        ),
+        (
+            "DCRT trace",
+            DcrtGlweTraceEvaluator::try_new(&dcrt_trace, &wrong_radix, &table).err(),
+        ),
+        (
+            "reverse trace",
+            DcrtGlweRevTraceEvaluator::try_new(&reverse_trace, &wrong_radix, &table).err(),
+        ),
+        (
+            "CRT expand",
+            CrtGlweExpandCoeffEvaluator::try_new(&crt_expand, &wrong_radix, &table).err(),
+        ),
+        (
+            "DCRT expand",
+            DcrtGlweExpandCoeffEvaluator::try_new(&dcrt_expand, &wrong_radix, &table).err(),
+        ),
+        (
+            "CRT parallel",
+            CrtGlweExpandCoeffParallelEvaluator::try_new(&crt_expand, &wrong_radix, &table, 2)
+                .err(),
+        ),
+        (
+            "DCRT parallel",
+            DcrtGlweExpandCoeffParallelEvaluator::try_new(&dcrt_expand, &wrong_radix, &table, 2)
+                .err(),
+        ),
+    ] {
+        assert_eq!(
+            result,
+            Some(RnsDomainError::DecompositionBaseLogMismatch {
+                expected: 4,
+                actual: 5,
+            }),
+            "{name} must validate the key's radix"
+        );
     }
 }
 
@@ -528,13 +541,33 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
 /// These are generation checks; evaluator radix/level rejection is covered above.
 #[test]
 fn automorphism_key_sets_reject_foreign_secrets_before_sampling() {
+    use std::{
+        fmt::Debug,
+        panic::{AssertUnwindSafe, catch_unwind},
+    };
+
+    fn rejects_before_sampling(case: impl Debug, generate: impl FnOnce(&mut StdRng)) {
+        let mut rejected = StdRng::seed_from_u64(4242);
+        let mut untouched = StdRng::seed_from_u64(4242);
+        let result = catch_unwind(AssertUnwindSafe(|| generate(&mut rejected)));
+        assert!(result.is_err(), "{case:?}: foreign secret accepted");
+        assert_eq!(
+            rand::Rng::next_u64(&mut rejected),
+            rand::Rng::next_u64(&mut untouched),
+            "{case:?}: sampled before rejection"
+        );
+    }
+
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let params = parameters(1, n.get(), &q);
     let table = params.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
     let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
+    let radix = DecompositionBaseLog::new(4);
 
+    // Trace exercises both shared key-set generators. Only their foreign-key
+    // check should fail because the supplied gadget, sampler and table agree.
     for (length, dimension, values) in [
         (64, 1, &[257, 769][..]),
         (32, 2, &[257, 769][..]),
@@ -544,111 +577,64 @@ fn automorphism_key_sets_reject_foreign_secrets_before_sampling() {
     ] {
         let moduli: Vec<_> = values.iter().copied().map(BarrettModulus::new).collect();
         let foreign = parameters(dimension, length, &moduli);
-        let foreign_table = UintDcrtTable::new(foreign.poly_length(), &moduli).unwrap();
-        let gadget = foreign.gadget(DecompositionBaseLog::new(4), None);
-
-        type KeySetGenerator<'a> = (&'a str, &'a dyn Fn(&mut StdRng));
-        let generators: [KeySetGenerator<'_>; 5] = [
-            ("CRT trace", &|rng| {
-                let _ = CrtGlweTraceKey::new(
-                    &gadget,
-                    foreign.encryption_parameters(),
-                    &foreign_table,
-                    &secret,
-                    &dcrt_secret,
-                    rng,
-                );
-            }),
-            ("DCRT trace", &|rng| {
-                let _ = DcrtGlweTraceKey::new(
-                    &gadget,
-                    foreign.encryption_parameters(),
-                    &foreign_table,
-                    &dcrt_secret,
-                    rng,
-                );
-            }),
-            ("reverse trace", &|rng| {
-                let _ = DcrtGlweRevTraceKey::new(
-                    &gadget,
-                    foreign.encryption_parameters(),
-                    &foreign_table,
-                    &dcrt_secret,
-                    rng,
-                );
-            }),
-            ("CRT expand", &|rng| {
-                let _ = CrtGlweExpandCoeffKey::new(
-                    &gadget,
-                    foreign.encryption_parameters(),
-                    &foreign_table,
-                    &secret,
-                    &dcrt_secret,
-                    rng,
-                );
-            }),
-            ("DCRT expand", &|rng| {
-                let _ = DcrtGlweExpandCoeffKey::new(
-                    &gadget,
-                    foreign.encryption_parameters(),
-                    &foreign_table,
-                    &dcrt_secret,
-                    rng,
-                );
-            }),
-        ];
-        for (operation, generate) in generators {
-            let mut rejected_rng = StdRng::seed_from_u64(4242);
-            let mut expected_rng = StdRng::seed_from_u64(4242);
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                generate(&mut rejected_rng)
-            }));
-            assert!(result.is_err(), "{operation}: foreign secret accepted");
-            assert_eq!(
-                rand::Rng::next_u64(&mut rejected_rng),
-                rand::Rng::next_u64(&mut expected_rng),
-                "{operation}: sampled before rejection"
+        let foreign_table = foreign.ntt_table();
+        let gadget = foreign.gadget(radix, None);
+        let sampling = foreign.encryption_parameters();
+        rejects_before_sampling(("CRT trace", length, dimension, values), |rng| {
+            let _ = CrtGlweTraceKey::new(
+                &gadget,
+                sampling,
+                &foreign_table,
+                &secret,
+                &dcrt_secret,
+                rng,
             );
-        }
+        });
+        rejects_before_sampling(("DCRT trace", length, dimension, values), |rng| {
+            let _ = DcrtGlweTraceKey::new(&gadget, sampling, &foreign_table, &dcrt_secret, rng);
+        });
     }
 
-    // CRT generation also checks the coefficient secret when the DCRT binding is valid.
+    // Reversed limbs keep the layout identical while testing the remaining
+    // DCRT entry points against an incompatible secret basis.
+    let reversed = parameters(1, n.get(), &[q[1], q[0]]);
+    let reversed_table = reversed.ntt_table();
+    let reversed_gadget = reversed.gadget(radix, None);
+    let reversed_sampling = reversed.encryption_parameters();
+    rejects_before_sampling("reverse trace", |rng| {
+        let _ = DcrtGlweRevTraceKey::new(
+            &reversed_gadget,
+            reversed_sampling,
+            &reversed_table,
+            &dcrt_secret,
+            rng,
+        );
+    });
+    rejects_before_sampling("DCRT expand", |rng| {
+        let _ = DcrtGlweExpandCoeffKey::new(
+            &reversed_gadget,
+            reversed_sampling,
+            &reversed_table,
+            &dcrt_secret,
+            rng,
+        );
+    });
+
+    // CRT expansion reaches the coefficient-key guard with a valid DCRT key.
     let foreign = parameters(2, n.get(), &q);
     let foreign_secret =
         GlweSecretKey::generate(foreign.glwe_size(), foreign.secret_key_sampler(), &mut rng);
-    let gadget = params.gadget(DecompositionBaseLog::new(4), None);
-    for expand in [false, true] {
-        let mut rejected_rng = StdRng::seed_from_u64(4242);
-        let mut expected_rng = StdRng::seed_from_u64(4242);
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                if expand {
-                    let _ = CrtGlweExpandCoeffKey::new(
-                        &gadget,
-                        params.encryption_parameters(),
-                        &table,
-                        &foreign_secret,
-                        &dcrt_secret,
-                        &mut rejected_rng,
-                    );
-                } else {
-                    let _ = CrtGlweTraceKey::new(
-                        &gadget,
-                        params.encryption_parameters(),
-                        &table,
-                        &foreign_secret,
-                        &dcrt_secret,
-                        &mut rejected_rng,
-                    );
-                }
-            }))
-            .is_err()
+    let gadget = params.gadget(radix, None);
+    rejects_before_sampling("CRT expand: foreign coefficient key", |rng| {
+        let _ = CrtGlweExpandCoeffKey::new(
+            &gadget,
+            params.encryption_parameters(),
+            &table,
+            &foreign_secret,
+            &dcrt_secret,
+            rng,
         );
-        assert_eq!(
-            rand::Rng::next_u64(&mut rejected_rng),
-            rand::Rng::next_u64(&mut expected_rng)
-        );
-    }
+    });
 }
 
 #[test]

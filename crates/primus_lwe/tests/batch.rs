@@ -6,10 +6,11 @@ use primus_encoding::PlaintextEmbedding;
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_lattice::lwe::LweIter;
-use primus_lwe::{LweParameters, LweSecretKey, SecretKeyDistr};
+use primus_lwe::{LweParameters, LwePublicKey, LweSecretKey, SecretKeyDistr};
 use primus_modulus::{BarrettModulus, NativeModulus, PowOf2Modulus};
 use primus_reduce::RingContext;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[test]
 fn public_batch_matches_independent_matrix_arithmetic() {
@@ -114,54 +115,40 @@ fn check_batches<T: FheUint, M: RingContext<T>>(
     let public = support::public_key(&secret, params.encryption_parameters(), &mut rng);
     for &(count, embedding) in cases {
         let messages: Vec<T> = (0..count).map(|i| T::as_from(i % 4)).collect();
-        for use_public in [false, true] {
-            let mut rng = StdRng::seed_from_u64(0x1_ee22);
-            let mut raw_rng = StdRng::seed_from_u64(0x1_ee22);
-            let mut storage = vec![T::MAX; count * lwe_len + 2];
-            let batch = &mut storage[1..count * lwe_len + 1];
-            if use_public {
-                public.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
-            } else {
-                secret.encrypt_message_batch_to(&messages, batch, &params, embedding, &mut rng);
-            }
-            let encoded: Vec<T> = messages
-                .iter()
-                .map(|&m| params.plaintext_codec().encode_value(m, embedding))
-                .collect();
-            let raw = if use_public {
-                public.encrypt_encoded_batch(
-                    &encoded,
-                    modulus,
-                    params.noise_distribution(),
-                    &mut raw_rng,
-                )
-            } else {
-                secret.encrypt_encoded_batch(&encoded, params.encryption_parameters(), &mut raw_rng)
-            };
-            assert_eq!(raw.as_slice(), &*batch);
-            assert_eq!(secret.decrypt_message_batch(batch, &params), messages);
+        let end = count * lwe_len + 1;
+        let mut storage = vec![T::MAX; end + 1];
+        let check = |storage: &[T]| {
+            let batch = &storage[1..end];
             let mut decrypted = vec![T::MAX; count];
             secret.decrypt_message_batch_to(batch, &mut decrypted, &params);
             assert_eq!(decrypted, messages);
-            let phases = secret.decrypt_phase_batch(batch, modulus);
+            // Decoding can hide a phase error smaller than a message step.
             secret.decrypt_phase_batch_to(batch, &mut decrypted, modulus);
-            assert_eq!(decrypted, phases);
-            for (ciphertext, &phase) in LweIter::new(batch, lwe_len).zip(&phases) {
-                assert_eq!(secret.as_view().decrypt_phase(&ciphertext, modulus), phase);
-                assert!(
-                    ciphertext
-                        .as_ref()
-                        .iter()
-                        .all(|&c| c <= modulus.minus_one())
-                );
+            for (ciphertext, phase) in LweIter::new(batch, lwe_len).zip(decrypted) {
+                assert_eq!(phase, secret.as_view().decrypt_phase(&ciphertext, modulus));
             }
             assert_eq!(storage[0], T::MAX);
-            assert_eq!(storage[count * lwe_len + 1], T::MAX);
-            if count == 0 {
-                let mut untouched = StdRng::seed_from_u64(0x1_ee22);
-                assert_eq!(rng.next_u64(), untouched.next_u64());
-            }
-        }
+            assert_eq!(storage[end], T::MAX);
+            assert!(batch.iter().all(|&c| c <= modulus.minus_one()));
+        };
+        let coins = || StdRng::seed_from_u64(0x1_ee22);
+        secret.encrypt_message_batch_to(
+            &messages,
+            &mut storage[1..end],
+            &params,
+            embedding,
+            &mut coins(),
+        );
+        check(&storage);
+        storage[1..end].fill(T::MAX);
+        public.encrypt_message_batch_to(
+            &messages,
+            &mut storage[1..end],
+            &params,
+            embedding,
+            &mut coins(),
+        );
+        check(&storage);
     }
 }
 
@@ -171,13 +158,7 @@ fn batches_decrypt_across_moduli_embeddings_and_tail_sizes() {
 
     // Cover the batch boundaries on both reduction paths. Dimension 65 also
     // leaves a coefficient tail after the full SIMD blocks.
-    let batch_boundaries = [
-        (0, Unsigned),
-        (1, Unsigned),
-        (7, Centered),
-        (8, Unsigned),
-        (17, Centered),
-    ];
+    let batch_boundaries = [(1, Unsigned), (7, Centered), (8, Unsigned), (17, Centered)];
     check_batches(NativeModulus::<u32>::new(), 65, &batch_boundaries);
     check_batches(BarrettModulus::new(132_120_577u32), 65, &batch_boundaries);
     check_batches(NativeModulus::<u64>::new(), 65, &[(17, Centered)]);
@@ -190,8 +171,53 @@ fn batches_decrypt_across_moduli_embeddings_and_tail_sizes() {
 }
 
 #[test]
-fn batch_boundaries_validate_layout_and_reject_invalid_messages() {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
+fn encoded_and_message_batches_agree_with_the_same_coins() {
+    let modulus = BarrettModulus::new(132_120_577u32);
+    let params = LweParameters::new(
+        LweDimension::new(17),
+        4,
+        modulus,
+        SecretKeyDistr::UniformTernary,
+        3.2,
+    );
+    let mut rng = StdRng::seed_from_u64(0x1_ee21);
+    let secret = LweSecretKey::generate(params.encryption_parameters(), &mut rng);
+    let public = support::public_key(&secret, params.encryption_parameters(), &mut rng);
+    // Nine messages exercise a full public-key tile and its tail.
+    let messages = [0, 1, 2, 3, 0, 1, 2, 3, 3];
+    let embedding = PlaintextEmbedding::Centered;
+    let residues = messages.map(|m| params.plaintext_codec().encode_value(m, embedding));
+    let coins = || StdRng::seed_from_u64(0x1_ee22);
+    let private_batch = secret.encrypt_message_batch(&messages, &params, embedding, &mut coins());
+    let public_batch = public.encrypt_message_batch(&messages, &params, embedding, &mut coins());
+    assert_eq!(
+        private_batch,
+        secret.encrypt_encoded_batch(&residues, params.encryption_parameters(), &mut coins())
+    );
+    assert_eq!(
+        public_batch,
+        public.encrypt_encoded_batch(
+            &residues,
+            modulus,
+            params.noise_distribution(),
+            &mut coins()
+        )
+    );
+
+    for batch in [&private_batch, &public_batch] {
+        assert_eq!(secret.decrypt_message_batch(batch, &params), messages);
+        let expected: Vec<_> = LweIter::new(batch, params.dimension().ciphertext_len())
+            .map(|sample| secret.as_view().decrypt_phase(&sample, modulus))
+            .collect();
+        assert_eq!(secret.decrypt_phase_batch(batch, modulus), expected);
+    }
+}
+
+fn small_batch_keys() -> (
+    LweParameters<u32, NativeModulus<u32>>,
+    LweSecretKey<u32>,
+    LwePublicKey<u32>,
+) {
     let params = LweParameters::new(
         LweDimension::new(3),
         4u32,
@@ -202,90 +228,100 @@ fn batch_boundaries_validate_layout_and_reject_invalid_messages() {
     let mut rng = StdRng::seed_from_u64(0x1_ee24);
     let secret = LweSecretKey::generate(params.encryption_parameters(), &mut rng);
     let public = support::public_key(&secret, params.encryption_parameters(), &mut rng);
-    for use_public in [false, true] {
-        for length in [0, 7, 12] {
-            let mut storage = vec![11; length];
-            let mut rng = StdRng::seed_from_u64(31);
-            let mut expected = StdRng::seed_from_u64(31);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if use_public {
-                        public.encrypt_message_batch_to(
-                            &[0u32, 1],
-                            &mut storage,
-                            &params,
-                            PlaintextEmbedding::Unsigned,
-                            &mut rng,
-                        );
-                    } else {
-                        secret.encrypt_message_batch_to(
-                            &[0u32, 1],
-                            &mut storage,
-                            &params,
-                            PlaintextEmbedding::Unsigned,
-                            &mut rng,
-                        );
-                    }
-                }))
-                .is_err()
-            );
-            if !use_public {
-                assert!(
-                    catch_unwind(AssertUnwindSafe(|| {
-                        secret.encrypt_encoded_batch_to(
-                            &[0u32, 1],
-                            &mut storage,
-                            params.encryption_parameters(),
-                            &mut rng,
-                        );
-                    }))
-                    .is_err()
-                );
-            }
-            assert!(storage.iter().all(|&c| c == 11));
-            assert_eq!(rng.next_u64(), expected.next_u64());
-        }
-        // First-message failures occur before sampling; later failures may
-        // leave completed ciphertexts or a partially initialized public-key tile.
-        for index in [0, 9] {
-            let mut messages = [1u32; 10];
-            messages[index] = params.plain_modulus_value();
-            let mut output = vec![17u32; 40];
-            let mut rng = StdRng::seed_from_u64(32);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if use_public {
-                        public.encrypt_message_batch_to(
-                            &messages,
-                            &mut output,
-                            &params,
-                            PlaintextEmbedding::Unsigned,
-                            &mut rng,
-                        );
-                    } else {
-                        secret.encrypt_message_batch_to(
-                            &messages,
-                            &mut output,
-                            &params,
-                            PlaintextEmbedding::Unsigned,
-                            &mut rng,
-                        );
-                    }
-                }))
-                .is_err()
-            );
-            if index == 0 {
-                assert!(output.iter().all(|&c| c == 17));
-                assert_eq!(rng.next_u64(), StdRng::seed_from_u64(32).next_u64());
-            }
-        }
+    (params, secret, public)
+}
+
+#[test]
+fn empty_batches_do_not_consume_randomness() {
+    let (params, secret, public) = small_batch_keys();
+    let coins = || StdRng::seed_from_u64(0x1_ee22);
+    let expected = coins().next_u64();
+    let embedding = PlaintextEmbedding::Unsigned;
+    let mut rng = coins();
+    secret.encrypt_message_batch_to(&[], &mut [], &params, embedding, &mut rng);
+    assert_eq!(rng.next_u64(), expected);
+    let mut rng = coins();
+    public.encrypt_message_batch_to(&[], &mut [], &params, embedding, &mut rng);
+    assert_eq!(rng.next_u64(), expected);
+    assert!(secret.decrypt_message_batch(&[], &params).is_empty());
+    assert!(
+        secret
+            .decrypt_phase_batch(&[], params.cipher_modulus())
+            .is_empty()
+    );
+}
+
+#[track_caller]
+fn assert_rejected_before_encryption(length: usize, encrypt: impl FnOnce(&mut [u32], &mut StdRng)) {
+    let mut output = vec![17; length];
+    let mut rng = StdRng::seed_from_u64(31);
+    let expected = StdRng::seed_from_u64(31).next_u64();
+    assert!(catch_unwind(AssertUnwindSafe(|| encrypt(&mut output, &mut rng))).is_err());
+    assert!(output.iter().all(|&value| value == 17));
+    assert_eq!(rng.next_u64(), expected);
+}
+
+#[test]
+fn batch_encryption_rejects_bad_output_lengths_before_writing_or_sampling() {
+    let (params, secret, public) = small_batch_keys();
+    let embedding = PlaintextEmbedding::Unsigned;
+    // Two ciphertexts of four words each require exactly eight words.
+    for length in [7, 12] {
+        assert_rejected_before_encryption(length, |output, rng| {
+            secret.encrypt_message_batch_to(&[0, 1], output, &params, embedding, rng);
+        });
+        assert_rejected_before_encryption(length, |output, rng| {
+            public.encrypt_message_batch_to(&[0, 1], output, &params, embedding, rng);
+        });
+        assert_rejected_before_encryption(length, |output, rng| {
+            secret.encrypt_encoded_batch_to(&[0, 1], output, params.encryption_parameters(), rng);
+        });
     }
-    let batch =
-        public.encrypt_message_batch(&[1u32, 2], &params, PlaintextEmbedding::Unsigned, &mut rng);
+}
+
+#[test]
+fn batch_encryption_rejects_invalid_messages_at_the_start_and_in_the_tail() {
+    let (params, secret, public) = small_batch_keys();
+    let embedding = PlaintextEmbedding::Unsigned;
+    let invalid = params.plain_modulus_value();
+    let mut messages = [1; 10];
+    messages[0] = invalid;
+    assert_rejected_before_encryption(40, |output, rng| {
+        secret.encrypt_message_batch_to(&messages, output, &params, embedding, rng);
+    });
+    assert_rejected_before_encryption(40, |output, rng| {
+        public.encrypt_message_batch_to(&messages, output, &params, embedding, rng);
+    });
+
+    // The final message is in the second public-key tile. A late error may
+    // leave partial output and consume randomness for earlier messages.
+    messages[0] = 1;
+    messages[9] = invalid;
+    let mut output = [17; 40];
+    let mut rng = StdRng::seed_from_u64(32);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            secret.encrypt_message_batch_to(&messages, &mut output, &params, embedding, &mut rng);
+        }))
+        .is_err()
+    );
+    output.fill(17);
+    let mut rng = StdRng::seed_from_u64(32);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            public.encrypt_message_batch_to(&messages, &mut output, &params, embedding, &mut rng);
+        }))
+        .is_err()
+    );
+}
+
+#[test]
+fn batch_decryption_rejects_incomplete_input_and_mismatched_output() {
+    let (params, secret, _) = small_batch_keys();
     let mut messages = [17u32; 1];
     assert!(
         catch_unwind(AssertUnwindSafe(|| secret.decrypt_message_batch_to(
-            &batch,
+            &[0; 8],
             &mut messages,
             &params
         )))
