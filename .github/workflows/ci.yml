@@ -51,6 +51,6 @@ jobs:
       - name: Check minimal SIMD builds
         run: just ci-nightly-check
       - name: Lint and test all Nightly features
-        run: just simd
+        run: just simd '*' '--lib --tests'
       - name: Build strict all-feature Rustdoc
         run: just ci-nightly-doc

@@ -21,14 +21,14 @@ ci-stable-check:
   cargo check -p primus_encoding --lib --no-default-features --features batching
   python3 scripts/check_scheme_consumers.py --check-only
 
-ci-stable-lint targets="--all-targets": (lint "*" stable_ci_features targets) (parallel-lint ("--lib " + ci_parallel_tests))
+ci-stable-lint: (lint "*" stable_ci_features "--lib --tests") (parallel-lint ("--lib " + ci_parallel_tests))
 
-ci-stable-test timings="": (test "*" stable_ci_features timings) (parallel-test ci_parallel_tests)
+ci-stable-test: (test "*" stable_ci_features) (parallel-test ci_parallel_tests)
   cargo nextest run -p primus_bfv -p primus_bgv --test allocation --no-default-features
   cargo nextest run -p primus_ntru --test lwe_key_switch --no-default-features
   cargo test --workspace --doc --features '{{stable_ci_features}}'
 
-ci-nightly: ci-nightly-check simd ci-nightly-doc
+ci-nightly: ci-nightly-check (simd "*" "--lib --tests") ci-nightly-doc
 
 ci-nightly-check:
   cargo +nightly check -p primus_modulus -p primus_encoding -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features --features simd
@@ -49,20 +49,16 @@ lint package="*" features="" targets="--all-targets":
   cargo clippy -p '{{package}}' --features '{{features}}' {{targets}} -- -D warnings
 
 # Nextest runs the library and integration tests.
-test package="*" features="" timings="":
-  cargo nextest run -p '{{package}}' --features '{{features}}' --lib --tests {{timings}}
+test package="*" features="":
+  cargo nextest run -p '{{package}}' --features '{{features}}' --lib --tests
 
 # Nextest does not execute doctests.
 test-doc package="*":
   cargo test -p '{{package}}' --doc
 
-simd package="*": (simd-lint package) (simd-test package)
-
-simd-lint package="*" targets="--all-targets":
+simd package="*" targets="--all-targets":
   cargo +nightly clippy -p '{{package}}' {{targets}} --all-features -- -D warnings
-
-simd-test package="*" timings="":
-  cargo +nightly nextest run -p '{{package}}' --lib --tests --all-features {{timings}}
+  cargo +nightly nextest run -p '{{package}}' --lib --tests --all-features
 
 # TFHE examples, libraries and small numerical regressions, including both FFT engines.
 tfhe: (lint "primus_tfhe*" "rustfft,tfhe-fft") (test "primus_tfhe*" "rustfft,tfhe-fft")
