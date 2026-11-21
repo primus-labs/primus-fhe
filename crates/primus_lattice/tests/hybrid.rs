@@ -86,16 +86,170 @@ fn input_coefficients(q: &IBig) -> Vec<IBig> {
     x
 }
 
+// Keep the full CRT lift. Reducing by the partition product would change its P limbs.
+fn partition_digit(input: &[IBig], moduli: &[u64]) -> (Vec<IBig>, IBig) {
+    let partition_product = product(moduli);
+    let weights: Vec<_> = moduli
+        .iter()
+        .map(|&qi| {
+            let modulus = IBig::from(qi);
+            let hat = &partition_product / qi;
+            let hat_inverse = inverse(&hat % &modulus, &modulus);
+            (modulus, hat, hat_inverse)
+        })
+        .collect();
+    let support = weights
+        .iter()
+        .fold(IBig::ZERO, |sum, (qi, hat, _)| sum + hat * (qi - 1u64));
+    let digit: Vec<_> = input
+        .iter()
+        .map(|x| {
+            weights
+                .iter()
+                .fold(IBig::ZERO, |sum, (qi, hat, hat_inverse)| {
+                    sum + modulo(&(x * hat_inverse), qi) * hat
+                })
+        })
+        .collect();
+    assert!(digit.iter().all(|x| x >= &IBig::ZERO && x <= &support));
+    (digit, support)
+}
+
+fn projection_weight(moduli: &[u64], q: &IBig) -> IBig {
+    let weight = moduli.iter().fold(IBig::ZERO, |sum, &qi| {
+        let qi = IBig::from(qi);
+        let hat = q / &qi;
+        let inv = inverse(&hat % &qi, &qi);
+        sum + hat * inv
+    });
+    // This idempotent is one in the current partition and zero in every other Q limb.
+    modulo(&weight, q)
+}
+
+fn key_column(
+    index: usize,
+    qp: &IBig,
+    weight: &IBig,
+    secret: &[IBig],
+    message: &[IBig],
+    t: u64,
+) -> [Vec<IBig>; 2] {
+    let half = qp / 2u64;
+    let mask: Vec<_> = (0..N)
+        .map(|i| {
+            if i % 2 == 0 {
+                &half - IBig::from(i * 13 + index)
+            } else {
+                -&half + IBig::from(i * 7 + index)
+            }
+        })
+        .collect();
+    // Phase = weight * message + t * error. Alternate mask signs near QP/2.
+    let body = message
+        .iter()
+        .zip(convolution(&mask, secret))
+        .enumerate()
+        .map(|(i, (m, masked))| {
+            let error = IBig::from((i + index) as i32 % 5 - 2) * t;
+            weight * m - masked + error
+        })
+        .collect();
+    [body, mask]
+}
+
+fn add_convolution(accumulator: &mut [IBig], lhs: &[IBig], rhs: &[IBig]) {
+    for (out, term) in accumulator.iter_mut().zip(convolution(lhs, rhs)) {
+        *out += term;
+    }
+}
+
+fn mod_down(tensor: [Vec<IBig>; 2], p: &IBig, t: u64) -> [Vec<IBig>; 2] {
+    let t_inverse = inverse(IBig::from(t), p);
+    tensor.map(|component| {
+        component
+            .iter()
+            .map(|x| {
+                // Subtract the centered multiple of t that makes x divisible by P.
+                let correction = center(&(x * &t_inverse), p) * t;
+                let numerator = x - correction;
+                assert_eq!(&numerator % p, IBig::ZERO);
+                numerator / p
+            })
+            .collect()
+    })
+}
+
+fn assert_phase_bound(
+    reduced: &[Vec<IBig>; 2],
+    signal: &[IBig],
+    secret: &[IBig],
+    digit_support: &IBig,
+    p: &IBig,
+    t: u64,
+) {
+    let [body, mask] = reduced;
+    let mut phase = body.clone();
+    add_convolution(&mut phase, mask, secret);
+
+    // In units of t, row errors contribute at most 2 N digit_support / P.
+    // The body and both nonzero secret coefficients each contribute at most 1/2 from centering.
+    let numerator = 4u64 * IBig::from(N) * digit_support + p * 3u64;
+    let denominator = 2u64 * p;
+    let bound = (&numerator + &denominator - 1u64) / &denominator;
+    for (phase, signal) in phase.iter().zip(signal) {
+        let error = phase - signal;
+        assert_eq!(&error % t, 0u64);
+        let noise = error / t;
+        assert!(noise >= -&bound && noise <= bound);
+    }
+}
+
+struct IntegerHybridProduct {
+    columns: Vec<[Vec<IBig>; 2]>,
+    reduced: [Vec<IBig>; 2],
+}
+
+fn integer_product<'a>(
+    input: &[IBig],
+    partitions: impl Iterator<Item = &'a [u64]>,
+    q: &IBig,
+    p: &IBig,
+    secret: &[IBig],
+    message: &[IBig],
+    t: u64,
+) -> IntegerHybridProduct {
+    let qp = q * p;
+    let mut columns = Vec::new();
+    let mut tensor = [vec![IBig::ZERO; N], vec![IBig::ZERO; N]];
+    let mut signal = vec![IBig::ZERO; N];
+    let mut digit_support = IBig::ZERO;
+    for (index, moduli) in partitions.enumerate() {
+        let (digit, support) = partition_digit(input, moduli);
+        digit_support += support;
+        let idempotent = projection_weight(moduli, q);
+        let column = key_column(index, &qp, &(p * &idempotent), secret, message, t);
+        for (accumulator, component) in tensor.iter_mut().zip(&column) {
+            add_convolution(accumulator, &digit, component);
+        }
+        let weighted_message: Vec<_> = message.iter().map(|m| m * &idempotent).collect();
+        add_convolution(&mut signal, &digit, &weighted_message);
+        columns.push(column);
+    }
+    let reduced = mod_down(tensor, p, t);
+    assert_phase_bound(&reduced, &signal, secret, &digit_support, p, t);
+    IntegerHybridProduct { columns, reduced }
+}
+
 #[test]
 fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
     let poly_length = PolyLength::new(N);
     let mut secret = vec![IBig::ZERO; N];
     secret[0] = IBig::ONE;
     secret[2] = -IBig::ONE;
-    let mut h = vec![IBig::ZERO; N];
-    h[0] = IBig::from(2);
-    h[1] = -IBig::ONE;
-    h[3] = IBig::ONE;
+    let mut message = vec![IBig::ZERO; N];
+    message[0] = IBig::from(2);
+    message[1] = -IBig::ONE;
+    message[3] = IBig::ONE;
     for (q_values, p_values, dnum) in [
         (vec![193, 257, 449], vec![577], 3),
         (
@@ -135,7 +289,6 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
         for count in 1..=q_values.len() {
             let q_moduli = &q_values[..count];
             let q = product(q_moduli);
-            let qp = &q * &p;
             let parameters = Arc::new(
                 NativeHybridParameters::try_with_auxiliary(
                     &make_base(q_moduli),
@@ -147,9 +300,12 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             );
             assert!(Arc::ptr_eq(parameters.auxiliary(), &auxiliary));
             let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_values).copied().collect();
-            let a = input_coefficients(&q);
-            let mut a_ntt = residues(&a, q_moduli);
-            for (table, limb) in table.iter().zip(a_ntt.as_chunks_mut::<N>().0.iter_mut()) {
+            let input = input_coefficients(&q);
+            let mut input_ntt = residues(&input, q_moduli);
+            for (table, limb) in table
+                .iter()
+                .zip(input_ntt.as_chunks_mut::<N>().0.iter_mut())
+            {
                 table.transform_slice(limb);
             }
             for mode in [
@@ -163,125 +319,31 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
                     HybridModDown::Centered => 1,
                     HybridModDown::PlaintextPreserving(t) => t,
                 };
-                let mut columns = Vec::new();
-                let mut z = [vec![IBig::ZERO; N], vec![IBig::ZERO; N]];
-                let mut signal = vec![IBig::ZERO; N];
-                let mut digit_support = IBig::ZERO;
-                for (column_index, partition) in parameters.hybrid_rns().partitions().enumerate() {
-                    let range = partition.q_range();
-                    let part_moduli = &q_moduli[range.start..range.end];
-                    let part = product(part_moduli);
-                    let digit_weights: Vec<_> = part_moduli
-                        .iter()
-                        .map(|&qi| {
-                            let modulus = IBig::from(qi);
-                            let hat = &part / qi;
-                            let hat_inverse = inverse(&hat % &modulus, &modulus);
-                            (modulus, hat, hat_inverse)
-                        })
-                        .collect();
-                    // Each digit is the unreduced CRT sum of its partition residues.
-                    let digit: Vec<_> = a
-                        .iter()
-                        .map(|x| {
-                            digit_weights
-                                .iter()
-                                .fold(IBig::ZERO, |sum, (qi, hat, hat_inverse)| {
-                                    sum + modulo(&(x * hat_inverse), qi) * hat
-                                })
-                        })
-                        .collect();
-                    let max_digit = digit_weights
-                        .iter()
-                        .fold(IBig::ZERO, |sum, (qi, hat, _)| sum + hat * (qi - 1u64));
-                    assert!(digit.iter().all(|x| x >= &IBig::ZERO && x <= &max_digit));
-                    digit_support += max_digit;
-                    let idempotent = part_moduli.iter().fold(IBig::ZERO, |sum, &qi| {
-                        let qi = IBig::from(qi);
-                        let hat = &q / &qi;
-                        let inv = inverse(&hat % &qi, &qi);
-                        sum + hat * inv
-                    });
-                    let idempotent = modulo(&idempotent, &q);
-                    let weight = &p * &idempotent;
-                    let mask: Vec<_> = (0..N)
-                        .map(|i| {
-                            if i % 2 == 0 {
-                                &qp / 2u64 - IBig::from(i * 13 + column_index)
-                            } else {
-                                -(&qp / 2u64) + IBig::from(i * 7 + column_index)
-                            }
-                        })
-                        .collect();
-                    let error: Vec<_> = (0..N)
-                        .map(|i| IBig::from((i + column_index) as i32 % 5 - 2) * t)
-                        .collect();
-                    let masked = convolution(&mask, &secret);
-                    let body: Vec<_> = h
-                        .iter()
-                        .zip(&masked)
-                        .zip(&error)
-                        .map(|((h, m), e)| &weight * h - m + e)
-                        .collect();
-                    for (acc, input) in z.iter_mut().zip([&body, &mask]) {
-                        for (out, term) in acc.iter_mut().zip(convolution(&digit, input)) {
-                            *out += term;
-                        }
-                    }
-                    let weighted_h: Vec<_> = h.iter().map(|h| h * &idempotent).collect();
-                    for (out, term) in signal.iter_mut().zip(convolution(&digit, &weighted_h)) {
-                        *out += term;
-                    }
-                    for component in [&body, &mask] {
-                        let mut r = residues(component, &qp_moduli);
-                        parameters.transform_qp_assign(&table, &mut r);
-                        columns.extend(r);
-                    }
+                let partitions = parameters
+                    .hybrid_rns()
+                    .partitions()
+                    .map(|partition| &q_moduli[partition.q_range()]);
+                let reference = integer_product(&input, partitions, &q, &p, &secret, &message, t);
+
+                let mut columns = Vec::with_capacity(parameters.key_len());
+                for component in reference.columns.iter().flatten() {
+                    let mut residues = residues(component, &qp_moduli);
+                    parameters.transform_qp_assign(&table, &mut residues);
+                    columns.extend(residues);
                 }
-                // Remove a centered multiple of t so the numerator is divisible by P.
-                let t_inverse_p = inverse(IBig::from(t), &p);
-                let expected: Vec<Vec<_>> = z
-                    .iter()
-                    .map(|component| {
-                        component
-                            .iter()
-                            .map(|x| {
-                                let correction = center(&(x * &t_inverse_p), &p) * t;
-                                let numerator = x - correction;
-                                assert_eq!(&numerator % &p, IBig::ZERO);
-                                numerator / &p
-                            })
-                            .collect()
-                    })
-                    .collect();
                 let mut evaluator =
                     NativeHybridProduct::try_new(&parameters, &table, mode).unwrap();
                 let mut output = vec![0; 2 * parameters.q_poly_len()];
-                evaluator.product_to(&a_ntt, &columns, &mut output);
+                evaluator.product_to(&input_ntt, &columns, &mut output);
                 for (actual, expected) in output
                     .chunks_exact_mut(parameters.q_poly_len())
-                    .zip(&expected)
+                    .zip(&reference.reduced)
                 {
                     for (table, limb) in table.iter().zip(actual.as_chunks_mut::<N>().0.iter_mut())
                     {
                         table.inverse_transform_slice(limb);
                     }
                     assert_eq!(actual, residues(expected, q_moduli));
-                }
-                let mut phase = expected[0].clone();
-                for (out, term) in phase.iter_mut().zip(convolution(&expected[1], &secret)) {
-                    *out += term;
-                }
-                // In units of t, the input errors contribute at most 2 N digit_support / P.
-                // Centering adds at most 1/2 for the body and each nonzero secret term.
-                let bound_numerator = 2u64 * IBig::from(N) * &digit_support * 2u64 + &p * 3u64;
-                let denominator = 2u64 * &p;
-                let bound = (&bound_numerator + &denominator - 1u64) / &denominator;
-                for (phase, signal) in phase.iter().zip(&signal) {
-                    let error = phase - signal;
-                    assert_eq!(&error % t, 0u64);
-                    let noise = error / t;
-                    assert!(noise >= -&bound && noise <= bound);
                 }
             }
         }

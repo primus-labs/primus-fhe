@@ -495,6 +495,13 @@ fn trace_inputs(ring: Ring) -> [Poly; 3] {
     ]
 }
 
+fn one_stage_trace_input(ring: Ring) -> Poly {
+    // Consecutive coefficients exercise both retained and discarded indices.
+    let mut input = [0; N];
+    input[..4].copy_from_slice(&[1, 2, ring.0 - 1, ring.0 - 2]);
+    input
+}
+
 #[test]
 fn ntt_reverse_trace_matches_exact_same_secret_oracle() {
     let ring = Ring(257);
@@ -530,22 +537,26 @@ fn ntt_reverse_trace_matches_exact_same_secret_oracle() {
     );
     let mut workspace = NttNtruTraceWorkspace::new(PolyLength::new(N));
     let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
-    for input in trace_inputs(ring) {
+    let mut check = |input, retained| {
         let ciphertext = NtruCiphertext::new(coefficients(input));
         let phase = ring.mul(SECRET, input);
+        let expected = modular_trace(ring, inverse, input, retained);
+        assert_eq!(ring.mul(SECRET, expected), project(phase, retained));
+        trace.apply_reverse_partial_to(
+            &ciphertext,
+            retained,
+            &mut output,
+            modulus,
+            &table,
+            &mut workspace,
+        );
+        assert_eq!(polynomial(output.as_ref()), expected);
+    };
+
+    check(one_stage_trace_input(ring), N / 2);
+    for input in trace_inputs(ring) {
         for retained in [1, 2, 4, N] {
-            let expected = modular_trace(ring, inverse, input, retained);
-            let projection = project(phase, retained);
-            assert_eq!(ring.mul(SECRET, expected), projection);
-            trace.apply_reverse_partial_to(
-                &ciphertext,
-                retained,
-                &mut output,
-                modulus,
-                &table,
-                &mut workspace,
-            );
-            assert_eq!(polynomial(output.as_ref()), expected);
+            check(input, retained);
         }
     }
 }
@@ -600,20 +611,25 @@ fn check_native_trace<Table: FftTable>() {
                 .map(move |bits| std::array::from_fn(|i| base + ((bits >> (i % 8)) & 1) as i128))
         });
     let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
-    for input in trace_inputs(ring).into_iter().chain(parity_inputs) {
+    let mut check = |input, retained| {
         let ciphertext = NtruCiphertext::new(coefficients(input));
+        let expected = native_trace(ring, inverse, input, retained);
+        trace.apply_reverse_partial_to(
+            &ciphertext,
+            retained,
+            &mut output,
+            &mut fft,
+            &mut workspace,
+        );
+        // The small native-u32 fixture rounds back to the exact modular
+        // result, including the unsigned floor error, on both FFT engines.
+        assert_eq!(polynomial(output.as_ref()), expected);
+    };
+
+    check(one_stage_trace_input(ring), N / 2);
+    for input in trace_inputs(ring).into_iter().chain(parity_inputs) {
         for retained in [1, 2, 4, N] {
-            let expected = native_trace(ring, inverse, input, retained);
-            trace.apply_reverse_partial_to(
-                &ciphertext,
-                retained,
-                &mut output,
-                &mut fft,
-                &mut workspace,
-            );
-            // Both engines round this small native-u32 fixture back to the
-            // exact modular result, including the unsigned floor error.
-            assert_eq!(polynomial(output.as_ref()), expected);
+            check(input, retained);
         }
     }
 }

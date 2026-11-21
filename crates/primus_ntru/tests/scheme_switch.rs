@@ -3,18 +3,20 @@ use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_integer::FheUint;
 use primus_modulus::BarrettModulus;
 use primus_ntru::{
     FourierNgswCiphertext, FourierNlevCiphertext, FourierNtruEncryptWorkspace,
     FourierNtruExternalProductWorkspace, FourierNtruGadgetEncryptWorkspace,
     FourierNtruSchemeSwitchKey, FourierNtruSecretKey, NlevCiphertext, NlevParameters,
-    NtruCiphertext, NtruParameters, NttNgswCiphertext, NttNlevCiphertext,
-    NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace, NttNtruSchemeSwitchKey,
-    NttNtruSecretKey, SecretKeyDistr,
+    NtruCiphertext, NtruParameters, NtruProjectionMethod, NttNgswCiphertext, NttNlevCiphertext,
+    NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace, NttNtruProjectionKey,
+    NttNtruSchemeSwitchKey, NttNtruSecretKey, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
-use rand::{SeedableRng, rngs::StdRng};
+use primus_reduce::RingContext;
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 #[path = "support/trace_ring.rs"]
 mod trace_ring;
@@ -64,6 +66,25 @@ fn messages(q: u128) -> [Polynomial<Vec<u64>>; 2] {
     })
 }
 
+fn gadget_parameters<T: FheUint, M: RingContext<T>>(
+    parameters: &NtruParameters<T, M>,
+    log_basis: u32,
+    levels: Option<usize>,
+) -> NlevParameters<T, M> {
+    NlevParameters::with_ntru_params(
+        parameters,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(log_basis),
+            level_count: levels.map(DecompositionLevelCount::new),
+        },
+    )
+}
+
+#[track_caller]
+fn assert_rejected(operation: impl FnOnce()) {
+    assert!(catch_unwind(AssertUnwindSafe(operation)).is_err());
+}
+
 #[test]
 fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
     let (parameters, table) = ntt_parameters(16);
@@ -88,22 +109,10 @@ fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
         output
     });
     for log_key_basis in [3, 10] {
-        let key_parameters = NlevParameters::with_ntru_params(
-            &parameters,
-            DecompositionConfig {
-                log_basis: DecompositionBaseLog::new(log_key_basis),
-                level_count: None,
-            },
-        );
+        let key_parameters = gadget_parameters(&parameters, log_key_basis, None);
         // L_output below and above L_key=5 for B_key=2^10.
         for output_levels in [2, 6] {
-            let output_parameters = NlevParameters::with_ntru_params(
-                &parameters,
-                DecompositionConfig {
-                    log_basis: DecompositionBaseLog::new(8),
-                    level_count: Some(DecompositionLevelCount::new(output_levels)),
-                },
-            );
+            let output_parameters = gadget_parameters(&parameters, 8, Some(output_levels));
             let ss = NttNtruSchemeSwitchKey::generate(
                 &secret,
                 &key,
@@ -166,63 +175,8 @@ fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
                     u128::from(Q) / 2048,
                 );
             }
-            output.as_mut().fill(7);
-            let mut wrong = NttNtruExternalProductWorkspace::new(PolyLength::new(2 * N));
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
-                    &input,
-                    &mut output,
-                    modulus,
-                    &table,
-                    &mut wrong
-                )))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&value| value == 7));
-            let short = NlevCiphertext::new(&input.as_ref()[..input.as_ref().len() - 1]);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
-                    &short,
-                    &mut output,
-                    modulus,
-                    &table,
-                    &mut scratch
-                )))
-                .is_err()
-            );
-            assert!(output.as_ref().iter().all(|&value| value == 7));
         }
     }
-    let foreign = primus_decompose::primitive::ApproxSignedBasis::new(
-        None,
-        DecompositionBaseLog::new(8),
-        Some(DecompositionLevelCount::new(2)),
-    );
-    let key_parameters = NlevParameters::with_ntru_params(
-        &parameters,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(10),
-            level_count: None,
-        },
-    );
-    let mut untouched = StdRng::seed_from_u64(19);
-    let mut invalid = StdRng::seed_from_u64(19);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| NttNtruSchemeSwitchKey::generate(
-            &secret,
-            &key,
-            &foreign,
-            &key_parameters,
-            &table,
-            &mut invalid,
-            &mut generation
-        )))
-        .is_err()
-    );
-    assert_eq!(
-        rand::Rng::next_u64(&mut invalid),
-        rand::Rng::next_u64(&mut untouched)
-    );
 }
 
 fn fourier<Table: FftTable>() {
@@ -252,21 +206,9 @@ fn fourier<Table: FftTable>() {
         output
     });
     for log_key_basis in [3, 10] {
-        let key_parameters = NlevParameters::with_ntru_params(
-            &parameters,
-            DecompositionConfig {
-                log_basis: DecompositionBaseLog::new(log_key_basis),
-                level_count: None,
-            },
-        );
+        let key_parameters = gadget_parameters(&parameters, log_key_basis, None);
         for output_levels in [2, 7] {
-            let output_parameters = NlevParameters::with_ntru_params(
-                &parameters,
-                DecompositionConfig {
-                    log_basis: DecompositionBaseLog::new(8),
-                    level_count: Some(DecompositionLevelCount::new(output_levels)),
-                },
-            );
+            let output_parameters = gadget_parameters(&parameters, 8, Some(output_levels));
             let ss = FourierNtruSchemeSwitchKey::generate(
                 &secret,
                 &key,
@@ -317,39 +259,6 @@ fn fourier<Table: FftTable>() {
                 );
                 assert_phase(row.as_ref(), messages[bit as usize].as_ref(), q, q / 2048);
             }
-            output.as_mut().fill(Complex64::new(7.0, 0.0));
-            let mut wrong = FourierNtruExternalProductWorkspace::new(PolyLength::new(2 * N));
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
-                    &input,
-                    &mut output,
-                    &mut fft,
-                    &mut wrong
-                )))
-                .is_err()
-            );
-            assert!(
-                output
-                    .as_ref()
-                    .iter()
-                    .all(|&value| value == Complex64::new(7.0, 0.0))
-            );
-            let short = NlevCiphertext::new(&input.as_ref()[..input.as_ref().len() - 1]);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| ss.apply_to(
-                    &short,
-                    &mut output,
-                    &mut fft,
-                    &mut scratch
-                )))
-                .is_err()
-            );
-            assert!(
-                output
-                    .as_ref()
-                    .iter()
-                    .all(|&value| value == Complex64::new(7.0, 0.0))
-            );
         }
     }
 }
@@ -360,12 +269,92 @@ fn fourier_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
     fourier::<TfheFftTable>();
 }
 
+#[test]
+fn ntt_scheme_switch_rejects_incompatible_resources_before_sampling_or_writing() {
+    let (parameters, table) = ntt_parameters(16);
+    let modulus = parameters.cipher_modulus();
+    let secret = oracle_secret(LENGTH);
+    let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
+    let key_parameters = gadget_parameters(&parameters, 10, None);
+    let output_parameters = gadget_parameters(&parameters, 8, Some(2));
+    let mut generation = NttNtruGadgetEncryptWorkspace::new(LENGTH);
+
+    let foreign_basis = primus_decompose::primitive::ApproxSignedBasis::new(
+        None,
+        DecompositionBaseLog::new(8),
+        Some(DecompositionLevelCount::new(2)),
+    );
+    let mut rng = StdRng::seed_from_u64(19);
+    let mut untouched = StdRng::seed_from_u64(19);
+    assert_rejected(|| {
+        let _ = NttNtruSchemeSwitchKey::generate(
+            &secret,
+            &key,
+            &foreign_basis,
+            &key_parameters,
+            &table,
+            &mut rng,
+            &mut generation,
+        );
+    });
+    assert_eq!(rng.next_u64(), untouched.next_u64());
+
+    let switch = NttNtruSchemeSwitchKey::generate(
+        &secret,
+        &key,
+        output_parameters.basis(),
+        &key_parameters,
+        &table,
+        &mut rng,
+        &mut generation,
+    );
+    let len = output_parameters.nlev_len();
+    let mut output = NttNgswCiphertext::new(vec![7; len]);
+    for (input_len, workspace_length) in [(len - 1, LENGTH), (len, PolyLength::new(2 * N))] {
+        let input = NlevCiphertext::new(vec![1; input_len]);
+        let mut workspace = NttNtruExternalProductWorkspace::new(workspace_length);
+        assert_rejected(|| switch.apply_to(&input, &mut output, modulus, &table, &mut workspace));
+        assert!(output.as_ref().iter().all(|&x| x == 7));
+    }
+}
+
+#[test]
+fn fourier_scheme_switch_rejects_incompatible_resources_before_writing() {
+    // Input and workspace validation precedes the FFT engine's arithmetic.
+    let table = RustFftTable::new(LENGTH);
+    let mut fft = FftEngine::new(&table);
+    let parameters = native_parameters(16);
+    let secret = oracle_secret(LENGTH);
+    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
+    let key_parameters = gadget_parameters(&parameters, 10, None);
+    let output_parameters = gadget_parameters(&parameters, 8, Some(2));
+    let switch = FourierNtruSchemeSwitchKey::generate(
+        &secret,
+        &key,
+        output_parameters.basis(),
+        &key_parameters,
+        &mut fft,
+        &mut StdRng::seed_from_u64(119),
+        &mut FourierNtruGadgetEncryptWorkspace::new(LENGTH),
+    );
+    let len = output_parameters.nlev_len();
+    let sentinel = Complex64::new(7.0, 0.0);
+    let mut output =
+        FourierNgswCiphertext::new(vec![sentinel; output_parameters.fourier_nlev_len()]);
+    for (input_len, workspace_length) in [(len - 1, LENGTH), (len, PolyLength::new(2 * N))] {
+        let input = NlevCiphertext::new(vec![1; input_len]);
+        let mut workspace = FourierNtruExternalProductWorkspace::new(workspace_length);
+        assert_rejected(|| switch.apply_to(&input, &mut output, &mut fft, &mut workspace));
+        assert!(output.as_ref().iter().all(|&x| x == sentinel));
+    }
+}
+
 // Exercise the same complete algorithms with both word widths and odd/even log2(N).
-fn projection_methods<T: primus_integer::FheUint, Table: NttTable<ValueT = T>>(
+fn projection_methods<T: FheUint, Table: NttTable<ValueT = T>>(
     modulus: BarrettModulus<T>,
     table: &Table,
 ) {
-    use primus_ntru::NtruProjectionMethod::*;
+    use NtruProjectionMethod::*;
     let length = table.poly_length();
     let n = length.get();
     let q: u64 = modulus.value().as_into();
@@ -378,17 +367,13 @@ fn projection_methods<T: primus_integer::FheUint, Table: NttTable<ValueT = T>>(
     );
     let secret = oracle_secret(length);
     let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, table).unwrap();
-    let config = |log_basis, levels: Option<usize>| DecompositionConfig {
-        log_basis: DecompositionBaseLog::new(log_basis),
-        level_count: levels.map(DecompositionLevelCount::new),
-    };
-    let trace = NlevParameters::with_ntru_params(&parameters, config(3, None));
-    let ss = NlevParameters::with_ntru_params(&parameters, config(4, None));
-    let output = NlevParameters::with_ntru_params(&parameters, config(6, Some(2)));
+    let trace = gadget_parameters(&parameters, 3, None);
+    let ss = gadget_parameters(&parameters, 4, None);
+    let output = gadget_parameters(&parameters, 6, Some(2));
     let mut generation = NttNtruGadgetEncryptWorkspace::new(length);
     for method in [Separate, FusedLastStage, FusedLastThreeStages, PairedTrace] {
         let mut rng = StdRng::seed_from_u64(714);
-        let projection = primus_ntru::NttNtruProjectionKey::generate(
+        let projection = NttNtruProjectionKey::generate(
             method,
             &secret,
             &key,
@@ -464,43 +449,6 @@ fn projection_methods<T: primus_integer::FheUint, Table: NttTable<ValueT = T>>(
                 );
             }
         }
-        // Reject an incomplete output before either the scratch or output is touched.
-        control.as_mut().fill(T::as_from(7u32));
-        projected.fill(T::as_from(11u32));
-        let len = control.as_ref().len() - 1;
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| projection.project_to(
-                cipher.as_view(),
-                NttNgswCiphertext::new(&mut control.as_mut()[..len]),
-                &mut projected,
-                &mut scratch,
-                modulus,
-                table,
-                &mut product,
-            )))
-            .is_err()
-        );
-        assert!(control.as_ref().iter().all(|&x| x == T::as_from(7u32)));
-        assert!(projected.iter().all(|&x| x == T::as_from(11u32)));
-        // Scratch is exact-sized for the selected algorithm, not merely a minimum.
-        for len in [projection.scratch_len() - 1, projection.scratch_len() + 1] {
-            let mut invalid = vec![T::as_from(13u32); len];
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| projection.project_to(
-                    cipher.as_view(),
-                    control.as_mut_view(),
-                    &mut projected,
-                    &mut invalid,
-                    modulus,
-                    table,
-                    &mut product,
-                )))
-                .is_err()
-            );
-            assert!(control.as_ref().iter().all(|&x| x == T::as_from(7u32)));
-            assert!(projected.iter().all(|&x| x == T::as_from(11u32)));
-            assert!(invalid.iter().all(|&x| x == T::as_from(13u32)));
-        }
     }
 }
 
@@ -512,5 +460,55 @@ fn projection_methods_remove_general_tails_and_preserve_output_levels() {
         projection_methods(q32, &primus_ntt::U32NttTable::new(length, q32).unwrap());
         let q64 = BarrettModulus::new(Q);
         projection_methods(q64, &U64NttTable::new(length, q64).unwrap());
+    }
+}
+
+#[test]
+fn projection_rejects_inexact_buffers_before_writing() {
+    let (parameters, table) = ntt_parameters(16);
+    let modulus = parameters.cipher_modulus();
+    let secret = oracle_secret(LENGTH);
+    let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
+    let trace = gadget_parameters(&parameters, 3, None);
+    let scheme_switch = gadget_parameters(&parameters, 4, None);
+    let output = gadget_parameters(&parameters, 6, Some(2));
+    // project_to validates lengths before dispatching to any projection method.
+    let projection = NttNtruProjectionKey::generate(
+        NtruProjectionMethod::FusedLastThreeStages,
+        &secret,
+        &key,
+        output.basis(),
+        &trace,
+        &scheme_switch,
+        &table,
+        &mut StdRng::seed_from_u64(714),
+        &mut NttNtruGadgetEncryptWorkspace::new(LENGTH),
+    );
+    let input = NtruCiphertext::new([1; N]);
+    let output_len = output.nlev_len();
+    let scratch_len = projection.scratch_len();
+    let mut control = vec![7; output_len];
+    let mut projected = vec![11; output_len];
+    let mut scratch = vec![13; scratch_len + 1];
+    let mut product = NttNtruExternalProductWorkspace::new(LENGTH);
+    for (output_len, scratch_len) in [
+        (output_len - 1, scratch_len),
+        (output_len, scratch_len - 1),
+        (output_len, scratch_len + 1),
+    ] {
+        assert_rejected(|| {
+            projection.project_to(
+                input.as_view(),
+                NttNgswCiphertext::new(&mut control[..output_len]),
+                &mut projected,
+                &mut scratch[..scratch_len],
+                modulus,
+                &table,
+                &mut product,
+            );
+        });
+        assert!(control.iter().all(|&x| x == 7));
+        assert!(projected.iter().all(|&x| x == 11));
+        assert!(scratch.iter().all(|&x| x == 13));
     }
 }

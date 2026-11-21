@@ -3,17 +3,16 @@ use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
-use primus_modulus::{BarrettModulus, NativeModulus};
+use primus_modulus::BarrettModulus;
 use primus_ntru::{
     FourierNtruCiphertext, FourierNtruEncryptWorkspace, FourierNtruGadgetEncryptWorkspace,
     FourierNtruSecretKey, FourierNtruTraceKey, FourierNtruTraceWorkspace, NlevParameters,
-    NtruCiphertext, NtruParameters, NtruSecretKey, NttNtruCiphertext,
-    NttNtruGadgetEncryptWorkspace, NttNtruSecretKey, NttNtruTraceKey, NttNtruTraceWorkspace,
-    SecretKeyDistr,
+    NtruCiphertext, NtruSecretKey, NttNtruCiphertext, NttNtruGadgetEncryptWorkspace,
+    NttNtruSecretKey, NttNtruTraceKey, NttNtruTraceWorkspace, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
-use rand::{Rng, SeedableRng, TryCryptoRng, TryRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 #[path = "support/trace_ring.rs"]
 mod trace_ring;
@@ -275,6 +274,16 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
         expected[0] = value;
         assert_phase(cipher, &expected, secret.as_slice(), Q.into());
     }
+
+    let mut wrong_workspace = NttNtruTraceWorkspace::new(PolyLength::new(2 * N));
+    let mut output = NtruCiphertext::new(vec![7; N]);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            trace.apply_reverse_to(&input, &mut output, modulus, &table, &mut wrong_workspace);
+        }))
+        .is_err()
+    );
+    assert_eq!(output.as_ref(), &[7; N]);
 }
 
 fn fourier_trace<Table: FftTable>() {
@@ -384,117 +393,22 @@ fn fourier_trace<Table: FftTable>() {
         expected[0] = value;
         assert_phase(cipher, &expected, secret.as_slice(), q);
     }
+
+    let mut wrong_workspace = FourierNtruTraceWorkspace::new(PolyLength::new(2 * N));
+    let mut output = NtruCiphertext::new(vec![7; N]);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            trace.apply_reverse_to(&input, &mut output, &mut fft, &mut wrong_workspace);
+        }))
+        .is_err()
+    );
+    assert_eq!(output.as_ref(), &[7; N]);
 }
 
 #[test]
 fn fourier_trace_projection_and_expansion_match_ring_phases() {
     fourier_trace::<RustFftTable>();
     fourier_trace::<TfheFftTable>();
-}
-
-// Deterministic zero-noise evaluation-key fixture. This is not a production RNG.
-struct ZeroRng;
-impl TryRng for ZeroRng {
-    type Error = std::convert::Infallible;
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(0)
-    }
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        Ok(0)
-    }
-    fn try_fill_bytes(&mut self, output: &mut [u8]) -> Result<(), Self::Error> {
-        output.fill(0);
-        Ok(())
-    }
-}
-impl TryCryptoRng for ZeroRng {}
-
-#[test]
-fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
-    let mut secret = vec![0; N];
-    secret[0] = 1;
-    let secret = NtruSecretKey::<u32>::new(secret, SecretKeyDistr::UniformBinary);
-    let modulus = BarrettModulus::new(257u32);
-    let table = primus_ntt::UintNttTable::new(LENGTH, modulus).unwrap();
-    let params = NtruParameters::new(LENGTH, 4, modulus, SecretKeyDistr::UniformBinary, 0.7);
-    let params = NlevParameters::with_ntru_params(
-        &params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(3),
-            level_count: None,
-        },
-    );
-    let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
-    let trace = NttNtruTraceKey::generate(
-        &secret,
-        &key,
-        &params,
-        &table,
-        &mut ZeroRng,
-        &mut NttNtruGadgetEncryptWorkspace::new(LENGTH),
-    );
-    let mut input = NtruCiphertext::<Vec<u32>>::zero(N);
-    input.as_mut()[..4].copy_from_slice(&[1, 2, 256, 255]);
-    let mut output = NtruCiphertext::new(vec![7; N]);
-    let mut workspace = NttNtruTraceWorkspace::new(LENGTH);
-    trace.apply_reverse_partial_to(&input, N / 2, &mut output, modulus, &table, &mut workspace);
-    let mut expected = vec![0; N];
-    expected[0] = 1;
-    expected[2] = 256;
-    assert_eq!(output.as_ref(), expected);
-    let mut wrong = NttNtruTraceWorkspace::new(PolyLength::new(2 * N));
-    output.as_mut().fill(7);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            trace.apply_reverse_to(&input, &mut output, modulus, &table, &mut wrong);
-        }))
-        .is_err()
-    );
-    assert_eq!(output.as_ref(), &[7; N]);
-
-    let table = RustFftTable::new(LENGTH);
-    let mut fft = FftEngine::new(&table);
-    let params = NtruParameters::new(
-        LENGTH,
-        4u32,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
-    let params = NlevParameters::with_ntru_params(
-        &params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(8),
-            level_count: None,
-        },
-    );
-    let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
-    let trace = FourierNtruTraceKey::generate(
-        &secret,
-        &key,
-        &params,
-        &mut fft,
-        &mut ZeroRng,
-        &mut FourierNtruGadgetEncryptWorkspace::new(LENGTH),
-    );
-    input.as_mut().fill(0);
-    input.as_mut()[0] = 1;
-    input.as_mut()[2] = u32::MAX;
-    let mut workspace = FourierNtruTraceWorkspace::new(LENGTH);
-    trace.apply_reverse_partial_to(&input, N / 2, &mut output, &mut fft, &mut workspace);
-    // floor(1/2) and floor((2^32-1)/2), then the even projection doubles them.
-    expected[0] = 0;
-    expected[2] = u32::MAX - 1;
-    assert_eq!(output.as_ref(), expected);
-    let mut wrong = FourierNtruTraceWorkspace::new(PolyLength::new(2 * N));
-    output.as_mut().fill(7);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            trace.apply_reverse_to(&input, &mut output, &mut fft, &mut wrong);
-        }))
-        .is_err()
-    );
-    assert_eq!(output.as_ref(), &[7; N]);
 }
 
 // Batch generation must establish shared resources before the first degree
