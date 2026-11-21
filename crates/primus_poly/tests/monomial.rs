@@ -153,6 +153,18 @@ fn monomial_operations_match_independent_ring_arithmetic() {
     check::<u64, _>(BarrettModulus::new(Q64), Q64.into());
 }
 
+#[test]
+fn crt_monomial_uses_each_limbs_modulus() {
+    let moduli = [17u32, 97].map(BarrettModulus::new);
+    // X(3 + 4X) = -4 + 3X and X^3(3 + 4X) = 4 - 3X when X^2 = -1.
+    // Both limbs start with the same coefficients, so each negation reveals its modulus.
+    for (exponent, expected) in [(1, [13, 3, 93, 3]), (3, [4, 14, 4, 94])] {
+        let mut polynomial = CrtPolynomial::new([3, 4, 3, 4]);
+        polynomial.mul_monomial_assign(exponent, 2, &moduli);
+        assert_eq!(polynomial.as_ref(), expected, "exponent={exponent}");
+    }
+}
+
 // Start at both ends of the redundant range, then retain it across paired and
 // odd-tail updates. The independent scatter oracle always computes in Z_q.
 fn check_lazy_monomials<T: FheUint + Into<u64>>(q: T) {
