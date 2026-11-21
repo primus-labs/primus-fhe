@@ -68,7 +68,9 @@ fn fourier_automorphism<Table: FftTable>() {
     let mut output = NtruCiphertext::new(vec![7u32; N]);
     let mut transformed_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
     let mut transformed_coeff_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
-    for log_basis in [3, 10] {
+    // Cover the substitution degrees with one basis and a nonidentity degree
+    // with the other; degree and decomposition configure different operations.
+    for (log_basis, degrees) in [(3, &[1, 3, N + 1, 2 * N - 1][..]), (10, &[3][..])] {
         let gadget = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -76,7 +78,7 @@ fn fourier_automorphism<Table: FftTable>() {
                 level_count: None,
             },
         );
-        for degree in [1, 3, N + 1, 2 * N - 1] {
+        for &degree in degrees {
             let auto = FourierNtruAutomorphismKey::generate(
                 degree,
                 &secret,
@@ -101,11 +103,12 @@ fn fourier_automorphism<Table: FftTable>() {
             output.write_fourier_form(&mut transformed_coeff_output, &mut fft);
             // Different representative/rounding paths need not be bit-identical.
             // Both must decrypt the independently substituted target message.
+            let expected = substitute(&message, degree);
             for output in [&transformed_output, &transformed_coeff_output] {
                 assert_eq!(
                     key.decrypt_message(output, &parameters, &mut fft, &mut decrypt)
                         .as_ref(),
-                    substitute(&message, degree),
+                    expected,
                     "degree={degree}, log_basis={log_basis}",
                 );
             }
@@ -243,7 +246,7 @@ fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
     let mut output = NtruCiphertext::new(vec![7u32; N]);
     let mut transformed_output = NttNtruCiphertext::<Vec<u32>>::zero(N);
     let mut transformed_coeff_output = NttNtruCiphertext::<Vec<u32>>::zero(N);
-    for log_basis in [3, 10] {
+    for (log_basis, degrees) in [(3, &[1, 3, N + 1, 2 * N - 1][..]), (10, &[3][..])] {
         let gadget = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -251,7 +254,7 @@ fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
                 level_count: None,
             },
         );
-        for degree in [1, 3, N + 1, 2 * N - 1] {
+        for &degree in degrees {
             let auto = NttNtruAutomorphismKey::generate(
                 degree,
                 &secret,

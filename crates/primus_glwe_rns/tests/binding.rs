@@ -4,18 +4,18 @@ mod support;
 
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
-    CrtGlweAutoEvaluator, CrtGlweAutoKey, CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey,
-    CrtGlweExpandCoeffParallelEvaluator, CrtGlweTraceEvaluator, CrtGlweTraceKey,
-    DcrtGlweAutoEvaluator, DcrtGlweAutoKey, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
-    DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
-    DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator,
-    DcrtGlweTraceKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey,
-    RnsDomainError, SecretKeyDistr,
+    CrtGlweAutoEvaluator, CrtGlweAutoKey, CrtGlweEncryptionParameters, CrtGlweExpandCoeffEvaluator,
+    CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator, CrtGlweTraceEvaluator,
+    CrtGlweTraceKey, DcrtGlweAutoEvaluator, DcrtGlweAutoKey, DcrtGlweExpandCoeffEvaluator,
+    DcrtGlweExpandCoeffKey, DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweKeySwitchEvaluator,
+    DcrtGlweKeySwitchingKey, DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey,
+    DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
+    HybridRnsGlweKeySwitchingKey, RnsDomainError, SecretKeyDistr,
 };
-use primus_lattice::GlweDimension;
+use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
-use primus_rns::{HybridRNS, HybridRNSPartitioning};
+use primus_rns::{HybridRNS, HybridRNSPartitioning, RNSBase};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -39,10 +39,9 @@ fn encryption_bindings_check_layout_and_ordered_moduli() {
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let params = parameters(1, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
+    let table = params.ntt_table();
     let mut rng = StdRng::seed_from_u64(0x4249_4e44);
-    let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (_, key) = params.generate_key_pair(&table, &mut rng);
     let public_key = key
         .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
         .unwrap()
@@ -142,10 +141,9 @@ fn classic_switch_binding_checks_radix_and_retained_levels() {
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let params = parameters(1, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
+    let table = params.ntt_table();
     let mut rng = StdRng::seed_from_u64(0x4741_4447);
-    let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
-    let dcrt_secret = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
     let gadget = params.gadget(
         DecompositionBaseLog::new(4),
         Some(DecompositionLevelCount::new(1)),
@@ -314,14 +312,13 @@ fn automorphism_bindings_check_layout_order_and_decomposition() {
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let params = parameters(1, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
+    let table = params.ntt_table();
     let gadget = params.gadget(
         DecompositionBaseLog::new(4),
         Some(DecompositionLevelCount::new(1)),
     );
     let mut rng = StdRng::seed_from_u64(0x4155_544f);
-    let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
-    let dcrt_secret = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
     let crt_auto = CrtGlweAutoKey::new(
         &gadget,
         params.encryption_parameters(),
@@ -534,10 +531,9 @@ fn automorphism_key_sets_reject_foreign_secrets_before_sampling() {
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let params = parameters(1, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
+    let table = params.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
-    let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
-    let dcrt_secret = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
 
     for (length, dimension, values) in [
         (64, 1, &[257, 769][..]),
@@ -657,77 +653,104 @@ fn automorphism_key_sets_reject_foreign_secrets_before_sampling() {
 
 #[test]
 fn independent_sampling_and_table_inputs_reject_before_key_generation() {
-    let n = PolyLength::new(32);
-    let q = [257u32, 769].map(BarrettModulus::new);
-    let params = parameters(1, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
-    let gadget = params.gadget(DecompositionBaseLog::new(4), None);
+    // Use the wide GLev domain. Matching dimensions and limb counts cannot
+    // detect a table or sampler that presents the same primes in reverse order.
+    let params = support::probe_parameters(3);
+    let n = params.poly_length();
+    let q = params.base_q().moduli();
+    let table = params.ntt_table();
+    let gadget = params.gadget(DecompositionBaseLog::new(20), None);
     let mut rng = StdRng::seed_from_u64(427);
-    let secret = GlweSecretKey::generate(params.glwe_size(), params.secret_key_sampler(), &mut rng);
-    let dcrt_secret = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, dcrt_secret) = params.generate_key_pair(&table, &mut rng);
     let public_key = dcrt_secret
         .try_bind_raw(params.encryption_parameters(), params.base_q(), &table)
         .unwrap()
         .public_key(&mut rng);
-    let longer_sampling = parameters(1, 64, &q);
-    let wider_sampling = parameters(2, 32, &q);
-    let reversed_sampling = parameters(1, 32, &[q[1], q[0]]);
-    let longer_table = UintDcrtTable::new(PolyLength::new(64), &q).unwrap();
-    let reversed_table = UintDcrtTable::new(n, &[q[1], q[0]]).unwrap();
-
-    for (sampling, table) in [
-        (longer_sampling.encryption_parameters(), &table),
-        (wider_sampling.encryption_parameters(), &table),
-        (reversed_sampling.encryption_parameters(), &table),
-        (params.encryption_parameters(), &longer_table),
-        (params.encryption_parameters(), &reversed_table),
+    let reversed = [q[1], q[0]];
+    let reversed_base = RNSBase::new(&reversed).unwrap();
+    let sampling_for = |dimension, length, base: &RNSBase<u64, BarrettModulus<u64>>| {
+        let size = GlweSize::new(GlweDimension::new(dimension), length);
+        CrtGlweEncryptionParameters::try_new(
+            RnsGlweSize::new(size, base.moduli_count()),
+            base,
+            SecretKeyDistr::SparseTernary,
+            3.2,
+        )
+        .unwrap()
+    };
+    let longer = PolyLength::new(64);
+    let longer_sampling = sampling_for(3, longer, params.base_q());
+    let wider_sampling = sampling_for(4, n, params.base_q());
+    let reversed_sampling = sampling_for(3, n, &reversed_base);
+    let longer_table = UintDcrtTable::new(longer, q).unwrap();
+    let reversed_table = UintDcrtTable::new(n, &reversed).unwrap();
+    let wrong_length = RnsDomainError::PolynomialLengthMismatch {
+        expected: n.get(),
+        actual: longer.get(),
+    };
+    let order_mismatch = |expected, actual| RnsDomainError::ModulusOrderMismatch {
+        index: 0,
+        expected,
+        actual,
+    };
+    let wrong_basis = order_mismatch(q[1].value(), q[0].value());
+    let wrong_table_order = order_mismatch(q[0].value(), q[1].value());
+    let wrong_dimension = RnsDomainError::DimensionMismatch {
+        expected: 3,
+        actual: 4,
+    };
+    let sampling = params.encryption_parameters();
+    for (input, sampling, table, expected) in [
+        ("sampler length", &longer_sampling, &table, &wrong_length),
+        (
+            "sampler dimension",
+            &wider_sampling,
+            &table,
+            &wrong_dimension,
+        ),
+        ("sampler basis", &reversed_sampling, &table, &wrong_basis),
+        ("table length", sampling, &longer_table, &wrong_length),
+        ("table order", sampling, &reversed_table, &wrong_table_order),
     ] {
-        assert!(
+        assert_eq!(
             dcrt_secret
                 .try_bind_gadget(&gadget, sampling, table)
-                .is_err()
+                .err()
+                .as_ref(),
+            Some(expected),
+            "secret gadget: {input}"
         );
-        assert!(
+        assert_eq!(
             public_key
                 .try_bind_gadget(&gadget, sampling, table)
-                .is_err()
+                .err()
+                .as_ref(),
+            Some(expected),
+            "public gadget: {input}"
         );
-        // The complete key set has to validate before its first encrypted row.
-        type Generator<'a> = &'a dyn Fn(&mut StdRng);
-        let generators: [Generator<'_>; 5] = [
-            &|rng| {
+        // Trace and expansion share one key-set generator per representation.
+        // Exercise both before they can encrypt the first row.
+        type Generator<'a> = (&'a str, &'a dyn Fn(&mut StdRng));
+        let generators: [Generator<'_>; 2] = [
+            ("CRT trace", &|rng| {
                 let _ = CrtGlweTraceKey::new(&gadget, sampling, table, &secret, &dcrt_secret, rng);
-            },
-            &|rng| {
+            }),
+            ("DCRT trace", &|rng| {
                 let _ = DcrtGlweTraceKey::new(&gadget, sampling, table, &dcrt_secret, rng);
-            },
-            &|rng| {
-                let _ = DcrtGlweRevTraceKey::new(&gadget, sampling, table, &dcrt_secret, rng);
-            },
-            &|rng| {
-                let _ = CrtGlweExpandCoeffKey::new(
-                    &gadget,
-                    sampling,
-                    table,
-                    &secret,
-                    &dcrt_secret,
-                    rng,
-                );
-            },
-            &|rng| {
-                let _ = DcrtGlweExpandCoeffKey::new(&gadget, sampling, table, &dcrt_secret, rng);
-            },
+            }),
         ];
-        for generate in generators {
+        for (operation, generate) in generators {
             let mut rejected = StdRng::seed_from_u64(428);
             let mut untouched = StdRng::seed_from_u64(428);
             assert!(
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| generate(&mut rejected)))
-                    .is_err()
+                    .is_err(),
+                "{operation}: accepted {input}"
             );
             assert_eq!(
                 rand::Rng::next_u64(&mut rejected),
-                rand::Rng::next_u64(&mut untouched)
+                rand::Rng::next_u64(&mut untouched),
+                "{operation}: sampled before rejecting {input}"
             );
         }
     }
@@ -757,15 +780,10 @@ fn evaluation_rejects_incomplete_layouts_before_writes() {
     let n = PolyLength::new(32);
     let q = [257u32, 769].map(BarrettModulus::new);
     let parameters = parameters(2, n.get(), &q);
-    let table = UintDcrtTable::new(n, &q).unwrap();
+    let table = parameters.ntt_table();
     let gadget = parameters.gadget(DecompositionBaseLog::new(4), None);
     let mut rng = StdRng::seed_from_u64(0x4c45_4e47_5448);
-    let secret = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, key) = parameters.generate_key_pair(&table, &mut rng);
     let crt_auto_key = CrtGlweAutoKey::new(
         &gadget,
         parameters.encryption_parameters(),

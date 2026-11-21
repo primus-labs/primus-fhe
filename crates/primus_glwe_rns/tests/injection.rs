@@ -1,16 +1,14 @@
 //! The scheme injection boundary preserves the existing raw encryption kernel.
 
+mod support;
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
-    SecretKeyDistr,
-};
-use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
+use primus_glwe_rns::{DcrtGlweCiphertext, SecretKeyDistr};
+use primus_lattice::GlweDimension;
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::CrtPolynomial;
-use primus_rns::RNSBase;
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -18,22 +16,22 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 fn injections_match_raw_encoded_inputs_and_validate_before_callbacks() {
     let n = PolyLength::new(32);
     let moduli = [65537u64, 114689].map(BarrettModulus::new);
-    let base = RNSBase::new(&moduli).unwrap();
-    let table = U64DcrtTable::new(n, &moduli).unwrap();
-    let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), n), 2);
-    let sampling =
-        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
-            .unwrap();
-    let coefficient_key = GlweSecretKey::<u64>::generate(
-        size.glwe_size(),
-        sampling.secret_key_sampler(),
-        &mut StdRng::seed_from_u64(1),
+    let parameters = support::RawParameters::new(
+        GlweDimension::new(2),
+        n,
+        &moduli,
+        SecretKeyDistr::SparseTernary,
+        3.2,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
+    let size = parameters.size();
+    let sampling = parameters.encryption_parameters();
+    let base = parameters.base_q();
+    let table = U64DcrtTable::new(n, &moduli).unwrap();
+    let (_, key) = parameters.generate_key_pair(&table, &mut StdRng::seed_from_u64(1));
     // Returned contexts borrow the actual resources directly.
-    let secret_context = key.try_bind_raw(&sampling, &base, &table).unwrap();
+    let secret_context = key.try_bind_raw(sampling, base, &table).unwrap();
     let public = secret_context.public_key(&mut StdRng::seed_from_u64(2));
-    let mut public_context = public.try_bind_raw(&sampling, &base, &table).unwrap();
+    let mut public_context = public.try_bind_raw(sampling, base, &table).unwrap();
     let message = CrtPolynomial::new(
         (0..size.rns_poly_len())
             .map(|i| (i % 17) as u64)

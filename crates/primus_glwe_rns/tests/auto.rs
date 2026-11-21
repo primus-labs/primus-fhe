@@ -4,10 +4,9 @@ mod support;
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
     CrtGlweAutoEvaluator, CrtGlweAutoKey, DcrtGlweAutoEvaluator, DcrtGlweAutoKey,
-    DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
+    DcrtGlweCiphertext,
 };
 use primus_lattice::glwe::CrtGlwe;
-use primus_ntt::UintDcrtTable;
 use rand::{SeedableRng, rngs::StdRng};
 
 #[test]
@@ -15,14 +14,9 @@ fn crt_and_dcrt_automorphisms_match_coefficient_phase_oracle() {
     let parameters = support::probe_parameters(3);
     let n = parameters.poly_length().get();
     let base = parameters.base_q();
-    let table = UintDcrtTable::new(parameters.poly_length(), base.moduli()).unwrap();
+    let table = parameters.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
-    let secret = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, key) = parameters.generate_key_pair(&table, &mut rng);
 
     let context = key
         .try_bind_raw(

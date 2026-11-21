@@ -1,12 +1,10 @@
 //! Public encryption identities, reusable workspaces and transform/allocation budgets.
 
-use primus_decompose::{
-    DecompositionBaseLog, DecompositionLevelCount, big_integer::BigUintApproxSignedBasis,
-};
+use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKeyWorkspace,
+    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::{AsFrom, FheUint};
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize, ggsw::DcrtGgsw};
@@ -21,7 +19,6 @@ use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::Arc,
 };
 use zeroize::Zeroize;
 
@@ -300,15 +297,13 @@ where
         ErrorDistribution::CenteredBinomial { eta: 1 },
     )
     .unwrap();
-    let parameters = Arc::new(
-        CrtGlweEncryptionParameters::try_with_error_distribution(
-            size,
-            &base,
-            SecretKeyDistr::SparseTernary,
-            ErrorDistribution::CenteredBinomial { eta: 21 },
-        )
-        .unwrap(),
-    );
+    let parameters = CrtGlweEncryptionParameters::try_with_error_distribution(
+        size,
+        &base,
+        SecretKeyDistr::SparseTernary,
+        ErrorDistribution::CenteredBinomial { eta: 21 },
+    )
+    .unwrap();
 
     let secret: Vec<i64> = (0..64).map(|i| (i % 3) as i64 - 1).collect();
     let coefficient_key = GlweSecretKey::<T>::new(
@@ -394,8 +389,7 @@ where
     let product = u128::from(values[0]) * u128::from(values[1]);
     let log_basis = DecompositionBaseLog::new(8);
     let levels = DecompositionLevelCount::new(2);
-    let basis = BigUintApproxSignedBasis::new(base.moduli_product(), log_basis, Some(levels));
-    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+    let gadget = CrtGlevParameters::try_new(size, base, log_basis, Some(levels)).unwrap();
 
     let mut encryptor = public
         .try_bind_gadget(&gadget, &parameters, &table)
@@ -482,15 +476,13 @@ fn prepared_public_and_gadget_calls_reuse_outputs_without_allocating_or_extra_nt
     let moduli = [257u64, 769].map(BarrettModulus::new);
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(32)), 2);
-    let parameters = Arc::new(
-        CrtGlweEncryptionParameters::try_with_error_distribution(
-            size,
-            &base,
-            SecretKeyDistr::SparseTernary,
-            ErrorDistribution::CenteredBinomial { eta: 1 },
-        )
-        .unwrap(),
-    );
+    let parameters = CrtGlweEncryptionParameters::try_with_error_distribution(
+        size,
+        &base,
+        SecretKeyDistr::SparseTernary,
+        ErrorDistribution::CenteredBinomial { eta: 1 },
+    )
+    .unwrap();
     let table = DcrtTable::<CountedTable>::new(PolyLength::new(32), &moduli).unwrap();
     let secret = GlweSecretKey::new(vec![1; 64], size.glwe_size(), SecretKeyDistr::SparseTernary);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
@@ -514,12 +506,13 @@ fn prepared_public_and_gadget_calls_reuse_outputs_without_allocating_or_extra_nt
     let (_, allocations, transforms) =
         observe(|| raw.encrypt_encoded_crt_to(&message, &mut output, &mut rng));
     assert_eq!((allocations, transforms), (0, budget));
-    let basis = BigUintApproxSignedBasis::new(
-        base.moduli_product(),
+    let gadget = CrtGlevParameters::try_new(
+        size,
+        base,
         DecompositionBaseLog::new(8),
         Some(DecompositionLevelCount::new(2)),
-    );
-    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+    )
+    .unwrap();
 
     let mut gadget_encryptor = public
         .try_bind_gadget(&gadget, &parameters, &table)
@@ -541,10 +534,9 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     let moduli = [257u64, 769].map(BarrettModulus::new);
     let base = RNSBase::new(&moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), PolyLength::new(32)), 2);
-    let parameters = Arc::new(
+    let parameters =
         CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
-            .unwrap(),
-    );
+            .unwrap();
     let table = DcrtTable::<U64NttTable>::new(PolyLength::new(32), &moduli).unwrap();
     let secret = GlweSecretKey::new(vec![1; 32], size.glwe_size(), SecretKeyDistr::SparseTernary);
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
@@ -575,27 +567,8 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     // must be rejected even when the ephemeral polynomial has the same length.
     let foreign_size =
         RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), PolyLength::new(32)), 2);
-    let foreign_parameters = CrtGlweEncryptionParameters::try_new(
-        foreign_size,
-        &base,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    )
-    .unwrap();
-    let foreign_secret = GlweSecretKey::new(
-        vec![1; 64],
-        foreign_size.glwe_size(),
-        SecretKeyDistr::SparseTernary,
-    );
-    let foreign_key = DcrtGlweSecretKey::from_coeff_secret_key(&foreign_secret, &table);
-    let foreign_public = foreign_key
-        .try_bind_raw(&foreign_parameters, &base, &table)
-        .unwrap()
-        .public_key(&mut StdRng::seed_from_u64(84));
-    let mut foreign_raw = foreign_public
-        .try_bind_raw(&foreign_parameters, &base, &table)
-        .unwrap();
-    std::mem::swap(raw.workspace_mut(), foreign_raw.workspace_mut());
+    let mut foreign_workspace = DcrtGlwePublicKeyWorkspace::new(foreign_size);
+    std::mem::swap(raw.workspace_mut(), &mut foreign_workspace);
     let mut output = DcrtGlweCiphertext::new(vec![7; size.rns_glwe_len()]);
     let mut rng = StdRng::seed_from_u64(85);
     let mut untouched = StdRng::seed_from_u64(85);
@@ -607,13 +580,14 @@ fn public_and_gadget_reject_invalid_inputs_before_sampling_or_writes() {
     );
     assert!(output.as_ref().iter().all(|&value| value == 7));
     assert_eq!(rng.next_u64(), untouched.next_u64());
-    std::mem::swap(raw.workspace_mut(), foreign_raw.workspace_mut());
-    let basis = BigUintApproxSignedBasis::new(
-        base.moduli_product(),
+    std::mem::swap(raw.workspace_mut(), &mut foreign_workspace);
+    let gadget = CrtGlevParameters::try_new(
+        size,
+        base,
         DecompositionBaseLog::new(8),
         Some(DecompositionLevelCount::new(2)),
-    );
-    let gadget = CrtGlevParameters::try_from_parts(size, base, basis).unwrap();
+    )
+    .unwrap();
 
     let mut encryptor = public
         .try_bind_gadget(&gadget, &parameters, &table)

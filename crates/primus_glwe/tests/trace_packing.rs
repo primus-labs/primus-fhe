@@ -19,6 +19,39 @@ use common::{K, N, assert_phase, encrypt, message, phase, secret};
 
 const Q: u64 = 1_125_899_906_826_241;
 
+// Indexed projection must preserve the requested order and duplicate indices.
+fn check_index_projection(
+    message: &[u64],
+    secret: &[i64],
+    q: u128,
+    mut project: impl FnMut(&[usize], &mut [u64]),
+) -> Vec<u64> {
+    let glwe_len = GlweSize::new(GlweDimension::new(K), PolyLength::new(N)).glwe_len();
+    let indices = [N - 1, 0, 7, 7];
+    let mut selected = vec![0; indices.len() * glwe_len];
+    project(&indices, &mut selected);
+    for (ciphertext, index) in selected.chunks_exact(glwe_len).zip(indices) {
+        let mut expected = vec![0; N];
+        expected[0] = message[index];
+        assert_phase(ciphertext, &expected, secret, q);
+    }
+
+    // An invalid late index must be rejected before writing even the first row.
+    let invalid_output = &mut selected[..2 * glwe_len];
+    invalid_output.fill(7);
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            project(&[0, N], invalid_output);
+        }))
+        .is_err()
+    );
+    assert!(invalid_output.iter().all(|&value| value == 7));
+
+    let mut full = vec![0; N * glwe_len];
+    project(&(0..N).collect::<Vec<_>>(), &mut full);
+    full
+}
+
 // Prefix projection must preserve the general path's exact rounding, including
 // count=1 with a nonzero message tail. It is not prefix-only expansion.
 fn check_prefix_projection(reference: &[u64], mut project: impl FnMut(usize, &mut [u64])) {
@@ -196,30 +229,9 @@ fn ntt_trace_projection_and_packing() {
             .collect();
         assert_eq!(phase(output.as_ref(), &s, Q.into()), expected);
     }
-    let indices = [N - 1, 0, 7, 7];
-    let mut selected = vec![0; indices.len() * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &indices,
-        &mut selected,
-        modulus,
-        &ntt,
-        &mut workspace,
-    );
-    for (c, &i) in selected.chunks_exact(size.glwe_len()).zip(&indices) {
-        let mut expected = vec![0; N];
-        expected[0] = m[i];
-        assert_phase(c, &expected, &s, Q.into());
-    }
-    let mut projected = vec![0; N * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &(0..N).collect::<Vec<_>>(),
-        &mut projected,
-        modulus,
-        &ntt,
-        &mut workspace,
-    );
+    let projected = check_index_projection(&m, &s, Q.into(), |indices, output| {
+        key.project_coefficients_to(&input, indices, output, modulus, &ntt, &mut workspace);
+    });
     check_prefix_projection(&projected, |count, output| {
         key.project_prefix_coefficients_to(&input, count, output, modulus, &ntt, &mut workspace);
     });
@@ -285,21 +297,6 @@ fn ntt_trace_projection_and_packing() {
         );
         assert!(output.as_ref().iter().all(|&v| v == 7));
     }
-    let mut selected = vec![7; 2 * size.glwe_len()];
-    assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            key.project_coefficients_to(
-                &input,
-                &[0, N],
-                &mut selected,
-                modulus,
-                &ntt,
-                &mut workspace,
-            );
-        }))
-        .is_err()
-    );
-    assert!(selected.iter().all(|&v| v == 7));
 }
 
 #[test]
@@ -363,22 +360,9 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
     let mut expected = vec![0; N];
     expected[2] = u64::MAX - 1;
     assert_eq!(phase(output.as_ref(), &s, q), expected);
-    let indices = [N - 1, 0, 7, 7];
-    let mut selected = vec![0; indices.len() * size.glwe_len()];
-    key.project_coefficients_to(&input, &indices, &mut selected, &mut fft, &mut workspace);
-    for (c, &i) in selected.chunks_exact(size.glwe_len()).zip(&indices) {
-        let mut expected = vec![0; N];
-        expected[0] = m[i];
-        assert_phase(c, &expected, &s, q);
-    }
-    let mut projected = vec![0; N * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &(0..N).collect::<Vec<_>>(),
-        &mut projected,
-        &mut fft,
-        &mut workspace,
-    );
+    let projected = check_index_projection(&m, &s, q, |indices, output| {
+        key.project_coefficients_to(&input, indices, output, &mut fft, &mut workspace);
+    });
     check_prefix_projection(&projected, |count, output| {
         key.project_prefix_coefficients_to(&input, count, output, &mut fft, &mut workspace);
     });
@@ -444,12 +428,4 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
         );
         assert!(output.as_ref().iter().all(|&v| v == 7));
     }
-    let mut selected = vec![7; 2 * size.glwe_len()];
-    assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            key.project_coefficients_to(&input, &[0, N], &mut selected, &mut fft, &mut workspace);
-        }))
-        .is_err()
-    );
-    assert!(selected.iter().all(|&v| v == 7));
 }

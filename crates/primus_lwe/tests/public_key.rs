@@ -1,4 +1,7 @@
 //! Small functional dimensions include vector blocks and incomplete tails.
+
+mod support;
+
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
@@ -43,14 +46,7 @@ fn check_equations<T: FheUint, M: RingContext<T>>(modulus: M) {
             .map(|&s| centered(s.as_into(), q))
             .collect();
         let mut rng = StdRng::seed_from_u64(0x1_ee11);
-        let key = LwePublicKey::generate(
-            secret.as_view(),
-            params.dimension(),
-            params.cipher_modulus(),
-            params.cipher_modulus_uniform_distr(),
-            params.noise_distribution(),
-            &mut rng,
-        );
+        let key = support::public_key(&secret, params.encryption_parameters(), &mut rng);
         assert_eq!(key.dimension(), LweDimension::new(dimension));
         assert_eq!(key.as_slice().len(), dimension * (dimension + 1));
 
@@ -188,14 +184,7 @@ fn both_embeddings_decrypt_and_key_switch() {
     );
     let mut rng = StdRng::seed_from_u64(0x1_ee13);
     let secret = LweSecretKey::generate(params.encryption_parameters(), &mut rng);
-    let key = LwePublicKey::generate(
-        secret.as_view(),
-        params.dimension(),
-        params.cipher_modulus(),
-        params.cipher_modulus_uniform_distr(),
-        params.noise_distribution(),
-        &mut rng,
-    );
+    let key = support::public_key(&secret, params.encryption_parameters(), &mut rng);
     let output_secret = LweSecretKey::generate(output_params.encryption_parameters(), &mut rng);
     let key_parameters = LweKeySwitchingParameters::new(
         output_params.encryption_parameters().clone(),
@@ -235,14 +224,7 @@ fn public_key_boundaries_reject_before_writing_or_sampling() {
     );
     let mut rng = StdRng::seed_from_u64(0x1_ee14);
     let secret = LweSecretKey::generate(params.encryption_parameters(), &mut rng);
-    let key = LwePublicKey::generate(
-        secret.as_view(),
-        params.dimension(),
-        params.cipher_modulus(),
-        params.cipher_modulus_uniform_distr(),
-        params.noise_distribution(),
-        &mut rng,
-    );
+    let key = support::public_key(&secret, params.encryption_parameters(), &mut rng);
     for (length, dimension, q, message) in [
         (0, 3, 97, 0),
         (3, 3, 97, 0),

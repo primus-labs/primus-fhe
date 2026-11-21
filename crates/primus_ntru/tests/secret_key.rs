@@ -365,16 +365,6 @@ fn parameters_require_secret_support_below_explicit_modulus() {
                     },
                 ))
             );
-            assert!(
-                std::panic::catch_unwind(|| NtruParameters::new(
-                    PolyLength::new(POLY_LENGTH),
-                    2,
-                    BarrettModulus::new(q),
-                    distribution,
-                    0.7,
-                ))
-                .is_err()
-            );
         }
         assert!(
             NtruParameters::try_new(
@@ -397,6 +387,17 @@ fn parameters_require_secret_support_below_explicit_modulus() {
             .is_ok()
         );
     }
+    // The panicking constructor delegates all validation to try_new.
+    assert!(
+        std::panic::catch_unwind(|| NtruParameters::new(
+            PolyLength::new(POLY_LENGTH),
+            2,
+            BarrettModulus::new(36u32),
+            SecretKeyDistr::gaussian(3.0),
+            0.7,
+        ))
+        .is_err()
+    );
 }
 
 #[test]

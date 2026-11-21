@@ -3,8 +3,8 @@ mod support;
 
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, DcrtGlweSecretKey,
-    GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
+    DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, GlweSecretKey,
+    HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{GlweSize, glwe::DcrtGlwe};
@@ -114,24 +114,13 @@ fn test_rns_glwe_ksk() {
     let glwe_params = support::probe_parameters(dimension);
     let poly_length = glwe_params.poly_length();
     let base = glwe_params.base_q();
-    let table = UintDcrtTable::new(poly_length, base.moduli()).unwrap();
+    let table = glwe_params.ntt_table();
     let mut rng = StdRng::seed_from_u64(0x005e_ed4b_534b);
 
     let rns_glwe_len = glwe_params.rns_glwe_len();
 
-    let sk_1 = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk_1 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_1, &table);
-
-    let sk_2 = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk_2 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_2, &table);
+    let (sk_1, dcrt_sk_1) = glwe_params.generate_key_pair(&table, &mut rng);
+    let (_, dcrt_sk_2) = glwe_params.generate_key_pair(&table, &mut rng);
 
     let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
 
@@ -199,7 +188,6 @@ fn test_rns_glwe_ksk_hybrid() {
     let qp_moduli_vals: Vec<BarrettModulus<ValueT>> =
         q_moduli.iter().chain(p_moduli.iter()).copied().collect();
     let qp_table = UintDcrtTable::new(poly_length, &qp_moduli_vals).unwrap();
-    let q_table = UintDcrtTable::new(poly_length, &q_moduli).unwrap();
 
     let mut rng = StdRng::seed_from_u64(42);
 
@@ -210,23 +198,13 @@ fn test_rns_glwe_ksk_hybrid() {
         SecretKeyDistr::SparseTernary,
         3.20,
     );
+    let q_table = glwe_params.ntt_table();
 
     let decomposition_count = 2;
     let hybrid_rns = primus_rns::HybridRNS::new(&q_moduli, &p_moduli, decomposition_count).unwrap();
 
-    let sk_1 = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let sk_2 = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk_2 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_2, &q_table);
-
-    let dcrt_sk_1 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_1, &q_table);
+    let (sk_1, dcrt_sk_1) = glwe_params.generate_key_pair(&q_table, &mut rng);
+    let (sk_2, dcrt_sk_2) = glwe_params.generate_key_pair(&q_table, &mut rng);
 
     let key_switching_key = HybridRnsGlweKeySwitchingKey::generate(
         &sk_1,

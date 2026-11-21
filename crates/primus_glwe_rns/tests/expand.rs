@@ -6,10 +6,9 @@ use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
     CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator,
     DcrtGlweCiphertext, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
-    DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey,
+    DcrtGlweExpandCoeffParallelEvaluator,
 };
 use primus_lattice::glwe::CrtGlwe;
-use primus_ntt::UintDcrtTable;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -52,16 +51,11 @@ fn crt_and_dcrt_full_and_partial_expansion_match_parallel_and_plaintext() {
     let parameters = support::probe_parameters(2);
     let n = parameters.poly_length().get();
     let len = parameters.rns_glwe_len();
-    let table = UintDcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let table = parameters.ntt_table();
     let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
     let sampling = parameters.encryption_parameters();
     let mut rng = StdRng::seed_from_u64(42);
-    let secret = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, key) = parameters.generate_key_pair(&table, &mut rng);
     let context = key
         .try_bind_raw(sampling, parameters.base_q(), &table)
         .unwrap();
@@ -239,12 +233,7 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
             .sum::<usize>()
     };
     let mut rng = StdRng::seed_from_u64(0x5052_4546_4958);
-    let secret = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, key) = parameters.generate_key_pair(&table, &mut rng);
 
     let context = key
         .try_bind_raw(

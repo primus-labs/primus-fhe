@@ -1,13 +1,14 @@
 //! Switch between independent keys, including a change in GLWE mask count.
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::SecretKeySampler;
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlweDecryptWorkspace, FourierGlweKeySwitchingKey, FourierGlweKeySwitchingWorkspace,
     FourierGlweSecretKey, GlevParameters, GlweKeySwitchingParameters, GlweParameters,
-    GlweSecretKey, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
+    GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
     NttGlweKeySwitchingWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
@@ -23,10 +24,28 @@ const INPUT_DIMENSION: usize = 2;
 const POLY_LENGTH: usize = 32;
 const PLAINTEXT_MODULUS: u32 = 16;
 
-fn plaintext() -> Vec<u32> {
-    (0..POLY_LENGTH)
-        .map(|index| (index as u32 * 7 + 3) % PLAINTEXT_MODULUS)
-        .collect()
+fn plaintext() -> Polynomial<Vec<u32>> {
+    Polynomial::new(
+        (0..POLY_LENGTH)
+            .map(|index| (index as u32 * 7 + 3) % PLAINTEXT_MODULUS)
+            .collect(),
+    )
+}
+
+fn output_secret_key(
+    size: GlweSize,
+    sampler: &SecretKeySampler<u32>,
+    rng: &mut StdRng,
+) -> GlweSecretKey<u32> {
+    let generated = GlweSecretKey::generate(size, sampler, rng);
+    if size.dimension().get() != 1 {
+        return generated;
+    }
+    // The rank-one target models an LWE key prefix with a public zero tail.
+    let active_key_len = POLY_LENGTH - 13;
+    let mut padded = vec![0; POLY_LENGTH];
+    padded[..active_key_len].copy_from_slice(&generated.as_slice()[..active_key_len]);
+    GlweSecretKey::new(padded, size, generated.distr())
 }
 
 #[test]
@@ -50,8 +69,7 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         &ntt,
         &mut rng,
     );
-    let message_values = plaintext();
-    let message = Polynomial::new(message_values.clone());
+    let message = plaintext();
     let mut encrypted: NttGlwe<Vec<u32>> = NttGlwe::zero(input_params.glwe_len());
     input_key.encrypt_message_to(
         &message,
@@ -72,22 +90,11 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
             SecretKeyDistr::UniformBinary,
             0.7,
         );
-        let generated_output_key = GlweSecretKey::generate(
+        let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),
             &mut rng,
         );
-        let output_coeff_key = if output_dimension == 1 {
-            // The target key has an active LWE-key prefix followed by zeros,
-            // as used by the KeyswitchBootstrap pipeline.
-            let active_key_len = POLY_LENGTH - 13;
-            let mut padded = vec![0; POLY_LENGTH];
-            padded[..active_key_len]
-                .copy_from_slice(&generated_output_key.as_slice()[..active_key_len]);
-            GlweSecretKey::new(padded, output_params.size(), SecretKeyDistr::UniformBinary)
-        } else {
-            generated_output_key
-        };
         let output_key = NttGlweSecretKey::from_coeff_secret_key(&output_coeff_key, &ntt);
         let glev = GlevParameters::with_glwe_params(
             &output_params,
@@ -125,7 +132,7 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
             output_key
                 .decrypt_message(&switched_ntt, &output_params, &ntt)
                 .as_ref(),
-            message_values
+            message.as_ref()
         );
         assert_eq!((storage[0], storage[output_len + 1]), (7, 7));
     }
@@ -144,16 +151,15 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         SecretKeyDistr::UniformBinary,
         0.7,
     );
-    let input_coeff_key = primus_glwe::GlweSecretKey::generate(
+    let input_coeff_key = GlweSecretKey::generate(
         input_params.size(),
-        (input_params.encryption_parameters()).secret_key_sampler(),
+        input_params.secret_key_sampler(),
         &mut rng,
     );
     let mut input_key =
         FourierGlweEncryptor::try_new(&input_coeff_key, input_params.encryption_parameters())
             .unwrap();
-    let message_values = plaintext();
-    let message = Polynomial::new(message_values.clone());
+    let message = plaintext();
     let mut encrypted = FourierGlweOwned::zero(input_params.fourier_glwe_len());
 
     input_key.encrypt_message_to(
@@ -176,20 +182,11 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
             SecretKeyDistr::UniformBinary,
             0.7,
         );
-        let generated_output_key = GlweSecretKey::<u32>::generate(
+        let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),
             &mut rng,
         );
-        let output_coeff_key = if output_dimension == 1 {
-            let active_key_len = POLY_LENGTH - 13;
-            let mut padded = vec![0; POLY_LENGTH];
-            padded[..active_key_len]
-                .copy_from_slice(&generated_output_key.as_slice()[..active_key_len]);
-            GlweSecretKey::new(padded, output_params.size(), SecretKeyDistr::UniformBinary)
-        } else {
-            generated_output_key
-        };
         let mut output_key =
             FourierGlweEncryptor::try_new(&output_coeff_key, output_params.encryption_parameters())
                 .unwrap();
@@ -230,7 +227,7 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
                     &mut decrypt_workspace,
                 )
                 .as_ref(),
-            message_values
+            message.as_ref()
         );
         assert_eq!((storage[0], storage[output_len + 1]), (7, 7));
     }

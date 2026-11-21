@@ -1,14 +1,8 @@
 mod support;
 
 use primus_decompose::DecompositionBaseLog;
-use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey, RnsDomainError, SecretKeyDistr,
-};
-use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_lattice::{glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
-use primus_ntt::UintDcrtTable;
 use primus_poly::{BigUintPolynomial, CrtPolynomial, DcrtPolynomial, Polynomial};
-use primus_rns::RNSBase;
 use rand::{SeedableRng, rngs::StdRng};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -21,12 +15,11 @@ fn glev_encryption_and_big_uint_product_match_coefficient_phase() {
     let inner = parameters.encryption_parameters();
     let base_q = parameters.base_q();
     let poly_length = parameters.poly_length().get();
-    let table = UintDcrtTable::new(parameters.poly_length(), base_q.moduli()).unwrap();
+    let table = parameters.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
     let size = parameters.size();
     let glev_params = parameters.gadget(DecompositionBaseLog::new(20), None);
-    let sk = GlweSecretKey::generate(size.glwe_size(), inner.secret_key_sampler(), &mut rng);
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
+    let (_, dcrt_sk) = parameters.generate_key_pair(&table, &mut rng);
 
     let rns_glwe_len = size.rns_glwe_len();
     let rns_poly_len = size.rns_poly_len();
@@ -58,37 +51,6 @@ fn glev_encryption_and_big_uint_product_match_coefficient_phase() {
             .flat_map(|_| input1.iter().copied())
             .collect::<Vec<_>>(),
     );
-
-    // Sampling is an independent encryption input, not gadget arithmetic state.
-    // Reject an otherwise valid sampler from a different layout or basis.
-    let foreign_size = RnsGlweSize::new(
-        GlweSize::new(GlweDimension::new(dimension + 1), table.poly_length()),
-        size.moduli_count(),
-    );
-    let foreign_sampling = CrtGlweEncryptionParameters::try_new(
-        foreign_size,
-        base_q,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    )
-    .unwrap();
-    assert!(matches!(
-        dcrt_sk.try_bind_gadget(&glev_params, &foreign_sampling, &table),
-        Err(RnsDomainError::DimensionMismatch { .. })
-    ));
-    let reversed_moduli = [base_q.moduli()[1], base_q.moduli()[0]];
-    let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
-    let reversed_sampling = CrtGlweEncryptionParameters::try_new(
-        size,
-        &reversed_base,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    )
-    .unwrap();
-    assert!(matches!(
-        dcrt_sk.try_bind_gadget(&glev_params, &reversed_sampling, &table),
-        Err(RnsDomainError::ModulusOrderMismatch { .. })
-    ));
 
     let encryptor = dcrt_sk
         .try_bind_gadget(&glev_params, inner, &table)

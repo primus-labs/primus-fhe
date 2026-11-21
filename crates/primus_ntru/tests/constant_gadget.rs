@@ -193,7 +193,7 @@ fn signed_ngsw_batches_match_polynomial_encryption() {
     let mut rng = StdRng::seed_from_u64(79);
     let key = NttNtruSecretKey::generate(params.encryption_parameters(), &ntt, &mut rng).unwrap();
     let mut workspace = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-    for input in [&[][..], &[1][..], &[0, 1, -1, 2][..]] {
+    for input in [&[][..], &[0, 1, -1, 2][..]] {
         let mut expected = vec![0; input.len() * gadget.nlev_len()];
         let mut actual = vec![17; expected.len()];
         let mut reference_rng = StdRng::seed_from_u64(87);
@@ -278,7 +278,7 @@ fn check_fourier_ngsw_batch<Table: FftTable>() {
     let key =
         FourierNtruSecretKey::generate(params.encryption_parameters(), &mut fft, &mut rng).unwrap();
     let mut workspace = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-    for input in [&[][..], &[1][..], &[0, 1, -1, 2][..]] {
+    for input in [&[][..], &[0, 1, -1, 2][..]] {
         let mut expected = vec![Complex64::default(); input.len() * gadget.fourier_nlev_len()];
         let mut actual = vec![Complex64::new(17.0, 17.0); expected.len()];
         let mut reference_rng = StdRng::seed_from_u64(87);

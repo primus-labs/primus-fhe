@@ -115,6 +115,28 @@ fn fallible_parameters_check_layout_codec_and_samplers() {
             primus_encoding::CodecError::InsufficientScaleRecovery
         ))
     ));
+
+    // At q=13 the Gaussian support can include magnitudes up to 12.
+    let gaussian = |sigma| {
+        GlweParameters::try_new(
+            GlweDimension::new(1),
+            PolyLength::new(N),
+            2u32,
+            BarrettModulus::new(13),
+            SecretKeyDistr::gaussian(sigma),
+            0.7,
+        )
+    };
+    assert!(gaussian(1.0).is_ok());
+    assert!(matches!(
+        gaussian(1.1),
+        Err(Error::SecretKey(
+            primus_distr::SecretKeySamplerError::ModulusTooSmall {
+                maximum_magnitude: 13,
+                modulus_minus_one: 12,
+            }
+        ))
+    ));
 }
 
 #[test]
@@ -312,23 +334,6 @@ fn fourier_evaluation_key_generation_rejects_before_sampling() {
     check_fourier_evaluation_key_generation_boundaries::<RustFftTable>();
     #[cfg(feature = "tfhe-fft")]
     check_fourier_evaluation_key_generation_boundaries::<primus_fft::TfheFftTable>();
-}
-
-#[test]
-fn secret_support_is_checked_at_parameter_construction() {
-    for (sigma, valid) in [(1.0, true), (1.1, false)] {
-        let result = catch_unwind(|| {
-            GlweParameters::new(
-                GlweDimension::new(1),
-                PolyLength::new(N),
-                2u32,
-                BarrettModulus::new(13),
-                SecretKeyDistr::gaussian(sigma),
-                0.7,
-            )
-        });
-        assert_eq!(result.is_ok(), valid);
-    }
 }
 
 #[test]

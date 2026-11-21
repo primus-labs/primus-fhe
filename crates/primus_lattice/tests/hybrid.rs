@@ -25,15 +25,18 @@ fn center(x: &IBig, m: &IBig) -> IBig {
 fn product(values: &[u64]) -> IBig {
     values.iter().fold(IBig::ONE, |p, &v| p * v)
 }
-fn inverse(a: u64, m: u64) -> u64 {
-    let (mut r0, mut r1, mut s0, mut s1) = (m as i128, a as i128, 0i128, 1i128);
-    while r1 != 0 {
-        let q = r0 / r1;
-        (r0, r1) = (r1, r0 - q * r1);
-        (s0, s1) = (s1, s0 - q * s1);
+// One extended GCD suffices for both the prime limbs and the full auxiliary product.
+fn inverse(a: IBig, m: &IBig) -> IBig {
+    let (mut r0, mut r1, mut s0, mut s1) = (m.clone(), a, IBig::ZERO, IBig::ONE);
+    while r1 != IBig::ZERO {
+        let q = &r0 / &r1;
+        let remainder = r0 - &q * &r1;
+        let coefficient = s0 - q * &s1;
+        (r0, r1) = (r1, remainder);
+        (s0, s1) = (s1, coefficient);
     }
-    assert_eq!(r0, 1);
-    s0.rem_euclid(m as i128) as u64
+    assert_eq!(r0, IBig::ONE);
+    modulo(&s0, m)
 }
 fn convolution(a: &[IBig], b: &[IBig]) -> Vec<IBig> {
     let mut out = vec![IBig::ZERO; N];
@@ -168,24 +171,35 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
                     let range = partition.q_range();
                     let part_moduli = &q_moduli[range.start..range.end];
                     let part = product(part_moduli);
+                    let digit_weights: Vec<_> = part_moduli
+                        .iter()
+                        .map(|&qi| {
+                            let modulus = IBig::from(qi);
+                            let hat = &part / qi;
+                            let hat_inverse = inverse(&hat % &modulus, &modulus);
+                            (modulus, hat, hat_inverse)
+                        })
+                        .collect();
+                    // Each digit is the unreduced CRT sum of its partition residues.
                     let digit: Vec<_> = a
                         .iter()
                         .map(|x| {
-                            part_moduli.iter().fold(IBig::ZERO, |sum, &qi| {
-                                let hat = &part / qi;
-                                let inv = inverse(&hat % qi, qi);
-                                sum + modulo(&(x * inv), &IBig::from(qi)) * hat
-                            })
+                            digit_weights
+                                .iter()
+                                .fold(IBig::ZERO, |sum, (qi, hat, hat_inverse)| {
+                                    sum + modulo(&(x * hat_inverse), qi) * hat
+                                })
                         })
                         .collect();
-                    let max_digit = part_moduli
+                    let max_digit = digit_weights
                         .iter()
-                        .fold(IBig::ZERO, |sum, &qi| sum + (&part / qi) * (qi - 1));
+                        .fold(IBig::ZERO, |sum, (qi, hat, _)| sum + hat * (qi - 1u64));
                     assert!(digit.iter().all(|x| x >= &IBig::ZERO && x <= &max_digit));
                     digit_support += max_digit;
                     let idempotent = part_moduli.iter().fold(IBig::ZERO, |sum, &qi| {
-                        let hat = &q / qi;
-                        let inv = inverse(&hat % qi, qi);
+                        let qi = IBig::from(qi);
+                        let hat = &q / &qi;
+                        let inv = inverse(&hat % &qi, &qi);
                         sum + hat * inv
                     });
                     let idempotent = modulo(&idempotent, &q);
@@ -224,19 +238,8 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
                         columns.extend(r);
                     }
                 }
-                let t_inverse_p = {
-                    let mut r0 = p.clone();
-                    let mut r1 = IBig::from(t);
-                    let mut s0 = IBig::ZERO;
-                    let mut s1 = IBig::ONE;
-                    while r1 != IBig::ZERO {
-                        let q = &r0 / &r1;
-                        (r0, r1) = (r1.clone(), r0 - &q * &r1);
-                        (s0, s1) = (s1.clone(), s0 - q * s1);
-                    }
-                    assert_eq!(r0, IBig::ONE);
-                    modulo(&s0, &p)
-                };
+                // Remove a centered multiple of t so the numerator is divisible by P.
+                let t_inverse_p = inverse(IBig::from(t), &p);
                 let expected: Vec<Vec<_>> = z
                     .iter()
                     .map(|component| {
@@ -269,6 +272,8 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
                 for (out, term) in phase.iter_mut().zip(convolution(&expected[1], &secret)) {
                     *out += term;
                 }
+                // In units of t, the input errors contribute at most 2 N digit_support / P.
+                // Centering adds at most 1/2 for the body and each nonzero secret term.
                 let bound_numerator = 2u64 * IBig::from(N) * &digit_support * 2u64 + &p * 3u64;
                 let denominator = 2u64 * &p;
                 let bound = (&bound_numerator + &denominator - 1u64) / &denominator;
