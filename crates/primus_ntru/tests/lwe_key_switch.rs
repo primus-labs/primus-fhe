@@ -254,11 +254,6 @@ fn check_shared_input_returns<T: FheUint, M: RingContext<T>>(
                 assert_eq!(output, &expected[index]);
             }
 
-            // The bound prefix path uses the same scalar integer oracle and leaves
-            // complete ciphertexts beyond the supplied output slice untouched.
-            assert_eq!(&outputs[count..], tail);
-            evaluator.return_prefix_to(input.as_view(), &mut outputs[..count], workspace);
-            assert_eq!(&outputs[..count], &expected[..count]);
             assert_eq!(&outputs[count..], tail);
         }
     }
@@ -401,6 +396,11 @@ fn coefficient_rounding_extraction_and_independent_lwe_key_switch() {
     check_moduli::<u64>();
 }
 
+#[track_caller]
+fn assert_rejected(operation: impl FnOnce()) {
+    assert!(catch_unwind(AssertUnwindSafe(operation)).is_err());
+}
+
 // Invalid scalar inputs leave the caller's output unchanged.
 fn check_scalar_errors(key: &NtruLweKeySwitchingKey<u32>) {
     let evaluator = LweReturnEvaluator::new(key, BarrettModulus::new(65537));
@@ -418,17 +418,9 @@ fn check_scalar_errors(key: &NtruLweKeySwitchingKey<u32>) {
         let input = NtruCiphertext::new(vec![9u32; input_len]);
         let mut output = LweCiphertext::new(vec![17u32; output_len]);
         let before = output.as_ref().to_vec();
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                evaluator.return_at_to(
-                    input.as_view(),
-                    index,
-                    output.as_mut_view(),
-                    &mut workspace,
-                );
-            }))
-            .is_err()
-        );
+        assert_rejected(|| {
+            evaluator.return_at_to(input.as_view(), index, output.as_mut_view(), &mut workspace);
+        });
         assert_eq!(output.as_ref(), before);
     }
 }
@@ -451,23 +443,48 @@ fn check_shared_input_errors(key: &NtruLweKeySwitchingKey<u32>) {
             .map(|len| LweCiphertext::new(vec![17u32; len]))
             .collect();
         let before = outputs.clone();
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| evaluator.return_many_at_to(
+        assert_rejected(|| {
+            evaluator.return_many_at_to(
                 input.as_view(),
                 indices.into_iter(),
                 &mut outputs,
                 &mut workspace,
-            )))
-            .is_err()
-        );
+            );
+        });
         assert_eq!(outputs, before);
     }
+}
+
+fn check_prefix_matches_scalar_returns(key: &NtruLweKeySwitchingKey<u32>) {
+    let evaluator = LweReturnEvaluator::new(key, BarrettModulus::new(65537));
+    let mut workspace = evaluator.new_batch_workspace();
+    // Nonconstant coefficients survive Q→q rounding. Include a short second
+    // tile and a whole ciphertext beyond the requested prefix.
+    let input = NtruCiphertext::new((0..N as u32).map(|i| i << 24).collect::<Vec<_>>());
+    let count = workspace.batch_capacity() + 1;
+    let sentinel = LweCiphertext::new(vec![17; key.output_dimension().ciphertext_len()]);
+    let mut prefix = vec![sentinel.clone(); count + 1];
+    evaluator.return_prefix_to(input.as_view(), &mut prefix[..count], &mut workspace);
+    let mut expected = sentinel.clone();
+    let mut scalar_workspace = evaluator.new_scalar_workspace();
+    for (index, output) in prefix[..count].iter().enumerate() {
+        evaluator.return_at_to(
+            input.as_view(),
+            index,
+            expected.as_mut_view(),
+            &mut scalar_workspace,
+        );
+        assert_eq!(output, &expected, "prefix index {index}");
+    }
+    assert_eq!(prefix[count], sentinel);
 }
 
 // Bound streams retain their valid prefix on rejection and invalidate it on submission/discard.
 fn check_bound_return_state(key: &NtruLweKeySwitchingKey<u32>) {
     let modulus = BarrettModulus::new(65537u32);
-    assert!(catch_unwind(|| LweReturnEvaluator::new(key, BarrettModulus::new(65539u32))).is_err());
+    assert_rejected(|| {
+        let _ = LweReturnEvaluator::new(key, BarrettModulus::new(65539u32));
+    });
     let evaluator = LweReturnEvaluator::new(key, modulus);
     let mut workspace = evaluator.new_batch_workspace();
     let input = NtruCiphertext::new(vec![9u32; N]);
@@ -480,46 +497,21 @@ fn check_bound_return_state(key: &NtruLweKeySwitchingKey<u32>) {
     );
     let mut output = [LweCiphertext::new(vec![17; expected.as_ref().len()])];
     let untouched = output.clone();
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.append_at(input.as_view(), 3, &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.append_at(input.as_view(), 3, &mut workspace));
 
     workspace.begin_batch();
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.return_prefix_to(input.as_view(), &mut output, &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.return_prefix_to(input.as_view(), &mut output, &mut workspace));
     assert_eq!(output, untouched);
     evaluator.append_at(input.as_view(), 3, &mut workspace);
     for (input_len, index) in [(N - 1, 0), (N, N)] {
         let invalid = NtruCiphertext::new(vec![9; input_len]);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                evaluator.append_at(invalid.as_view(), index, &mut workspace);
-            }))
-            .is_err()
-        );
+        assert_rejected(|| evaluator.append_at(invalid.as_view(), index, &mut workspace));
     }
     let mut invalid_outputs = [LweCiphertext::new(vec![17; 3])];
     let before = invalid_outputs.clone();
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.return_batch_to(&mut invalid_outputs, &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.return_batch_to(&mut invalid_outputs, &mut workspace));
     assert_eq!(invalid_outputs, before);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.return_batch_to(&mut [], &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.return_batch_to(&mut [], &mut workspace));
     assert!(workspace.is_batch_active());
     evaluator.return_batch_to(&mut output, &mut workspace);
     assert_eq!(output[0], expected);
@@ -528,12 +520,7 @@ fn check_bound_return_state(key: &NtruLweKeySwitchingKey<u32>) {
     workspace.begin_batch();
     evaluator.append_at(input.as_view(), 0, &mut workspace);
     workspace.discard_batch();
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.return_batch_to(&mut output, &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.return_batch_to(&mut output, &mut workspace));
     assert_eq!(output[0], expected);
     workspace.begin_batch();
     evaluator.return_batch_to(&mut [], &mut workspace);
@@ -544,12 +531,7 @@ fn check_bound_return_state(key: &NtruLweKeySwitchingKey<u32>) {
     for _ in 0..workspace.batch_capacity() {
         evaluator.append_at(input.as_view(), 3, &mut workspace);
     }
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            evaluator.append_at(input.as_view(), 0, &mut workspace);
-        }))
-        .is_err()
-    );
+    assert_rejected(|| evaluator.append_at(input.as_view(), 0, &mut workspace));
     let mut tile = vec![untouched[0].clone(); workspace.batch_capacity()];
     evaluator.return_batch_to(&mut tile, &mut workspace);
     assert!(tile.iter().all(|output| output == &expected));
@@ -561,6 +543,13 @@ fn check_bound_workspace_errors(key: &NtruLweKeySwitchingKey<u32>) {
     let modulus = BarrettModulus::new(65537u32);
     let evaluator = LweReturnEvaluator::new(key, modulus);
     let input = NtruCiphertext::new(vec![9; N]);
+    let mut expected = LweCiphertext::zero(key.output_dimension().get());
+    evaluator.return_at_to(
+        input.as_view(),
+        0,
+        expected.as_mut_view(),
+        &mut evaluator.new_scalar_workspace(),
+    );
     for (n, dimension) in [(2 * N, 3), (N, 2)] {
         let parameters = LweKeySwitchingParameters::new(
             primus_lwe::LweEncryptionParameters::new(
@@ -585,59 +574,36 @@ fn check_bound_workspace_errors(key: &NtruLweKeySwitchingKey<u32>) {
         let mut wrong_workspace = other.new_batch_workspace();
         let mut outputs = [LweCiphertext::new(vec![17; 4])];
         let before = outputs.clone();
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                evaluator.return_many_at_to(
-                    input.as_view(),
-                    0..1,
-                    &mut outputs,
-                    &mut wrong_workspace,
-                );
-            }))
-            .is_err()
-        );
+        assert_rejected(|| {
+            evaluator.return_many_at_to(input.as_view(), 0..1, &mut outputs, &mut wrong_workspace);
+        });
         assert_eq!(outputs, before);
         if n != N {
             let mut wrong_scalar = other.new_scalar_workspace();
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    evaluator.return_at_to(
-                        input.as_view(),
-                        0,
-                        outputs[0].as_mut_view(),
-                        &mut wrong_scalar,
-                    );
-                }))
-                .is_err()
-            );
+            assert_rejected(|| {
+                evaluator.return_at_to(
+                    input.as_view(),
+                    0,
+                    outputs[0].as_mut_view(),
+                    &mut wrong_scalar,
+                );
+            });
             assert_eq!(outputs, before);
             wrong_workspace.begin_batch();
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    evaluator.append_at(input.as_view(), 0, &mut wrong_workspace);
-                }))
-                .is_err()
-            );
+            assert_rejected(|| evaluator.append_at(input.as_view(), 0, &mut wrong_workspace));
             wrong_workspace.discard_batch();
         }
 
         let mut workspace = evaluator.new_batch_workspace();
-        evaluator.return_prefix_to(input.as_view(), &mut outputs, &mut workspace);
-        let expected = outputs.clone();
         workspace.begin_batch();
         evaluator.append_at(input.as_view(), 0, &mut workspace);
         let mut wrong_outputs = [LweCiphertext::new(vec![17; dimension + 1])];
         let before = wrong_outputs.clone();
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                other.return_batch_to(&mut wrong_outputs, &mut workspace);
-            }))
-            .is_err()
-        );
+        assert_rejected(|| other.return_batch_to(&mut wrong_outputs, &mut workspace));
         assert_eq!(wrong_outputs, before);
         assert!(workspace.is_batch_active());
         evaluator.return_batch_to(&mut outputs, &mut workspace);
-        assert_eq!(outputs, expected);
+        assert_eq!(outputs[0], expected);
     }
 }
 
@@ -658,18 +624,15 @@ fn check_generation_errors(key_parameters: &LweKeySwitchingParameters<u32, Barre
             SecretKeyDistr::UniformBinary,
             key_parameters.output().cipher_modulus(),
         );
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                NtruLweKeySwitchingKey::generate(
-                    &secret,
-                    UintModulus(source_q),
-                    &output_key,
-                    key_parameters,
-                    &mut rng,
-                );
-            }))
-            .is_err()
-        );
+        assert_rejected(|| {
+            NtruLweKeySwitchingKey::generate(
+                &secret,
+                UintModulus(source_q),
+                &output_key,
+                key_parameters,
+                &mut rng,
+            );
+        });
         assert_eq!(rng.next_u64(), untouched.next_u64());
     }
 }
@@ -707,6 +670,7 @@ fn validation_precedes_output_writes_and_key_sampling() {
     );
     check_scalar_errors(&key);
     check_shared_input_errors(&key);
+    check_prefix_matches_scalar_returns(&key);
     check_bound_return_state(&key);
     check_bound_workspace_errors(&key);
     check_generation_errors(&key_parameters);
