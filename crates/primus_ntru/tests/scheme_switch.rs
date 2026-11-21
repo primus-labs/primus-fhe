@@ -3,12 +3,12 @@ use primus_shape::PolyLength;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
-use primus_modulus::{BarrettModulus, NativeModulus};
+use primus_modulus::BarrettModulus;
 use primus_ntru::{
     FourierNgswCiphertext, FourierNlevCiphertext, FourierNtruEncryptWorkspace,
     FourierNtruExternalProductWorkspace, FourierNtruGadgetEncryptWorkspace,
     FourierNtruSchemeSwitchKey, FourierNtruSecretKey, NlevCiphertext, NlevParameters,
-    NtruCiphertext, NtruParameters, NtruSecretKey, NttNgswCiphertext, NttNlevCiphertext,
+    NtruCiphertext, NtruParameters, NttNgswCiphertext, NttNlevCiphertext,
     NttNtruExternalProductWorkspace, NttNtruGadgetEncryptWorkspace, NttNtruSchemeSwitchKey,
     NttNtruSecretKey, SecretKeyDistr,
 };
@@ -16,16 +16,9 @@ use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
 use rand::{SeedableRng, rngs::StdRng};
 
-const N: usize = 32;
-const Q: u64 = 1_125_899_906_826_241;
-
-fn secret() -> NtruSecretKey<u64> {
-    let mut coefficients = vec![0; N];
-    coefficients[0] = 1;
-    coefficients[1] = 1;
-    coefficients[3] = -1;
-    NtruSecretKey::new(coefficients, SecretKeyDistr::SparseTernary)
-}
+#[path = "support/trace_ring.rs"]
+mod trace_ring;
+use trace_ring::{LENGTH, N, Q, native_parameters, ntt_parameters, oracle_secret};
 
 // Independent negacyclic convolution by the fixed nonbinary secret 1+X-X³.
 fn assert_phase(cipher: &[u64], expected: &[u64], q: u128, tolerance: u128) {
@@ -73,20 +66,13 @@ fn messages(q: u128) -> [Polynomial<Vec<u64>>; 2] {
 
 #[test]
 fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
-    let modulus = BarrettModulus::new(Q);
-    let table = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        16,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
-    let secret = secret();
+    let (parameters, table) = ntt_parameters(16);
+    let modulus = parameters.cipher_modulus();
+    let secret = oracle_secret(LENGTH);
     let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
     let mut rng = StdRng::seed_from_u64(117);
-    let mut generation = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
-    let mut scratch = NttNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut generation = NttNtruGadgetEncryptWorkspace::new(LENGTH);
+    let mut scratch = NttNtruExternalProductWorkspace::new(LENGTH);
     let messages = messages(Q.into());
     let operands = messages.each_ref().map(|message| {
         let mut transformed = primus_ntru::NttNtruCiphertext::<Vec<u64>>::zero(N);
@@ -241,21 +227,15 @@ fn ntt_scheme_switch_has_independent_bases_and_produces_cmux_controls() {
 
 fn fourier<Table: FftTable>() {
     let q = 1u128 << 64;
-    let table = Table::new(PolyLength::new(N));
+    let table = Table::new(LENGTH);
     let mut fft = FftEngine::new(&table);
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        16u64,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
-    let secret = secret();
+    let parameters = native_parameters(16);
+    let secret = oracle_secret(LENGTH);
     let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
     let mut rng = StdRng::seed_from_u64(119);
-    let mut generation = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
-    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
-    let mut scratch = FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut generation = FourierNtruGadgetEncryptWorkspace::new(LENGTH);
+    let mut encrypt = FourierNtruEncryptWorkspace::new(LENGTH);
+    let mut scratch = FourierNtruExternalProductWorkspace::new(LENGTH);
     let messages = messages(q);
     let operands = messages.each_ref().map(|message| {
         let mut transformed = primus_ntru::FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
@@ -385,33 +365,28 @@ fn projection_methods<T: primus_integer::FheUint, Table: NttTable<ValueT = T>>(
     modulus: BarrettModulus<T>,
     table: &Table,
 ) {
-    use primus_integer::AsFrom;
     use primus_ntru::NtruProjectionMethod::*;
     let length = table.poly_length();
     let n = length.get();
     let q: u64 = modulus.value().as_into();
+    let parameters = NtruParameters::new(
+        length,
+        T::as_from(16u32),
+        modulus,
+        SecretKeyDistr::SparseTernary,
+        0.7,
+    );
+    let secret = oracle_secret(length);
+    let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, table).unwrap();
+    let config = |log_basis, levels: Option<usize>| DecompositionConfig {
+        log_basis: DecompositionBaseLog::new(log_basis),
+        level_count: levels.map(DecompositionLevelCount::new),
+    };
+    let trace = NlevParameters::with_ntru_params(&parameters, config(3, None));
+    let ss = NlevParameters::with_ntru_params(&parameters, config(4, None));
+    let output = NlevParameters::with_ntru_params(&parameters, config(6, Some(2)));
+    let mut generation = NttNtruGadgetEncryptWorkspace::new(length);
     for method in [Separate, FusedLastStage, FusedLastThreeStages, PairedTrace] {
-        let parameters = NtruParameters::new(
-            length,
-            T::as_from(16u32),
-            modulus,
-            SecretKeyDistr::SparseTernary,
-            0.7,
-        );
-        let mut coefficients = vec![T::SignedInteger::as_from(0i32); n];
-        coefficients[0] = T::SignedInteger::as_from(1i32);
-        coefficients[1] = T::SignedInteger::as_from(1i32);
-        coefficients[3] = T::SignedInteger::as_from(-1i32);
-        let secret = NtruSecretKey::new(coefficients, SecretKeyDistr::SparseTernary);
-        let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, table).unwrap();
-        let config = |log_basis, levels: Option<usize>| DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(log_basis),
-            level_count: levels.map(DecompositionLevelCount::new),
-        };
-        let trace = NlevParameters::with_ntru_params(&parameters, config(3, None));
-        let ss = NlevParameters::with_ntru_params(&parameters, config(4, None));
-        let output = NlevParameters::with_ntru_params(&parameters, config(6, Some(2)));
-        let mut generation = NttNtruGadgetEncryptWorkspace::new(length);
         let mut rng = StdRng::seed_from_u64(714);
         let projection = primus_ntru::NttNtruProjectionKey::generate(
             method,

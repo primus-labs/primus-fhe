@@ -16,6 +16,7 @@ use primus_lattice::glwe::{FourierGlweOwned, Glwe, NttGlwe};
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
+use primus_reduce::RingContext;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -29,6 +30,17 @@ fn plaintext() -> Polynomial<Vec<u32>> {
         (0..POLY_LENGTH)
             .map(|index| (index as u32 * 7 + 3) % PLAINTEXT_MODULUS)
             .collect(),
+    )
+}
+
+fn parameters<M: RingContext<u32>>(dimension: usize, modulus: M) -> GlweParameters<u32, M> {
+    GlweParameters::new(
+        GlweDimension::new(dimension),
+        PolyLength::new(POLY_LENGTH),
+        PLAINTEXT_MODULUS,
+        modulus,
+        SecretKeyDistr::UniformBinary,
+        0.7,
     )
 }
 
@@ -55,14 +67,7 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let modulus = BarrettModulus::new(MODULUS);
     let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
     let mut rng = StdRng::seed_from_u64(42);
-    let input_params = GlweParameters::new(
-        GlweDimension::new(INPUT_DIMENSION),
-        PolyLength::new(POLY_LENGTH),
-        PLAINTEXT_MODULUS,
-        modulus,
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let input_params = parameters(INPUT_DIMENSION, modulus);
     let (input_coeff_key, input_key) = NttGlweSecretKey::generate_pair(
         input_params.size(),
         input_params.encryption_parameters(),
@@ -82,14 +87,7 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let input = encrypted.into_coeff_form(&ntt);
 
     for output_dimension in [INPUT_DIMENSION, 1] {
-        let output_params = GlweParameters::new(
-            GlweDimension::new(output_dimension),
-            PolyLength::new(POLY_LENGTH),
-            PLAINTEXT_MODULUS,
-            modulus,
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
+        let output_params = parameters(output_dimension, modulus);
         let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),
@@ -143,14 +141,7 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
     let mut fft = FftEngine::new(&table);
     let mut rng = StdRng::seed_from_u64(42);
-    let input_params = GlweParameters::new(
-        GlweDimension::new(INPUT_DIMENSION),
-        PolyLength::new(POLY_LENGTH),
-        PLAINTEXT_MODULUS,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let input_params = parameters(INPUT_DIMENSION, NativeModulus::new());
     let input_coeff_key = GlweSecretKey::generate(
         input_params.size(),
         input_params.secret_key_sampler(),
@@ -174,14 +165,7 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     encrypted.write_torus_form(&mut input, &mut fft);
 
     for output_dimension in [INPUT_DIMENSION, 1] {
-        let output_params = GlweParameters::new(
-            GlweDimension::new(output_dimension),
-            PolyLength::new(POLY_LENGTH),
-            PLAINTEXT_MODULUS,
-            NativeModulus::new(),
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
+        let output_params = parameters(output_dimension, NativeModulus::new());
         let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),

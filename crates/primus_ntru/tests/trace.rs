@@ -15,16 +15,9 @@ use primus_ntt::{NttTable, U64NttTable};
 use primus_poly::Polynomial;
 use rand::{Rng, SeedableRng, TryCryptoRng, TryRng, rngs::StdRng};
 
-const N: usize = 32;
-const Q: u64 = 1_125_899_906_826_241;
-
-fn secret() -> NtruSecretKey<u64> {
-    let mut f = vec![0; N];
-    f[0] = 1;
-    f[1] = 1;
-    f[3] = -1;
-    NtruSecretKey::new(f, SecretKeyDistr::SparseTernary)
-}
+#[path = "support/trace_ring.rs"]
+mod trace_ring;
+use trace_ring::{LENGTH, N, Q, native_parameters, ntt_parameters, oracle_secret};
 
 // Independent schoolbook multiplication, including every non-target phase coefficient.
 fn phase(cipher: &[u64], secret: &[i64], q: u128) -> Vec<u64> {
@@ -164,15 +157,8 @@ fn check_operations(
 
 #[test]
 fn ntt_trace_projection_and_expansion_match_ring_phases() {
-    let modulus = BarrettModulus::new(Q);
-    let table = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        64,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let (parameters, table) = ntt_parameters(64);
+    let modulus = parameters.cipher_modulus();
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -180,7 +166,7 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
             level_count: None,
         },
     );
-    let secret = secret();
+    let secret = oracle_secret(LENGTH);
     let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
     let mut rng = StdRng::seed_from_u64(0x4e54_545f_5452_4143);
     let trace = NttNtruTraceKey::generate(
@@ -189,12 +175,11 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
         &gadget,
         &table,
         &mut rng,
-        &mut NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+        &mut NttNtruGadgetEncryptWorkspace::new(LENGTH),
     );
-    let mut workspace = NttNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut workspace = NttNtruTraceWorkspace::new(LENGTH);
     let mut coefficients = vec![0; 2 * N];
-    let mut external_product =
-        primus_ntru::NttNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut external_product = primus_ntru::NttNtruExternalProductWorkspace::new(LENGTH);
     let m = message(Q.into());
     let mut transformed = NttNtruCiphertext::<Vec<u64>>::zero(N);
     key.encrypt_encoded_to(
@@ -294,15 +279,9 @@ fn ntt_trace_projection_and_expansion_match_ring_phases() {
 
 fn fourier_trace<Table: FftTable>() {
     let q = 1u128 << 64;
-    let table = Table::new(PolyLength::new(N));
+    let table = Table::new(LENGTH);
     let mut fft = FftEngine::new(&table);
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        64u64,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let parameters = native_parameters(64);
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -310,7 +289,7 @@ fn fourier_trace<Table: FftTable>() {
             level_count: Some(DecompositionLevelCount::new(7)),
         },
     );
-    let secret = secret();
+    let secret = oracle_secret(LENGTH);
     let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut fft).unwrap();
     let mut rng = StdRng::seed_from_u64(0x4646_545f_5452_4143);
     let trace = FourierNtruTraceKey::generate(
@@ -319,15 +298,14 @@ fn fourier_trace<Table: FftTable>() {
         &gadget,
         &mut fft,
         &mut rng,
-        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+        &mut FourierNtruGadgetEncryptWorkspace::new(LENGTH),
     );
-    let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut workspace = FourierNtruTraceWorkspace::new(LENGTH);
     let mut coefficients = vec![0; 2 * N];
-    let mut external_product =
-        primus_ntru::FourierNtruExternalProductWorkspace::new(PolyLength::new(N));
+    let mut external_product = primus_ntru::FourierNtruExternalProductWorkspace::new(LENGTH);
     let m = message(q);
     let mut transformed = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
-    let mut encrypt = FourierNtruEncryptWorkspace::new(PolyLength::new(N));
+    let mut encrypt = FourierNtruEncryptWorkspace::new(LENGTH);
     key.encrypt_encoded_to(
         &Polynomial(m.as_slice()),
         &mut transformed,
@@ -433,19 +411,12 @@ impl TryCryptoRng for ZeroRng {}
 
 #[test]
 fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
-    const N: usize = 32;
     let mut secret = vec![0; N];
     secret[0] = 1;
     let secret = NtruSecretKey::<u32>::new(secret, SecretKeyDistr::UniformBinary);
     let modulus = BarrettModulus::new(257u32);
-    let table = primus_ntt::UintNttTable::new(PolyLength::new(N), modulus).unwrap();
-    let params = NtruParameters::new(
-        PolyLength::new(N),
-        4,
-        modulus,
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let table = primus_ntt::UintNttTable::new(LENGTH, modulus).unwrap();
+    let params = NtruParameters::new(LENGTH, 4, modulus, SecretKeyDistr::UniformBinary, 0.7);
     let params = NlevParameters::with_ntru_params(
         &params,
         DecompositionConfig {
@@ -460,12 +431,12 @@ fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
         &params,
         &table,
         &mut ZeroRng,
-        &mut NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+        &mut NttNtruGadgetEncryptWorkspace::new(LENGTH),
     );
     let mut input = NtruCiphertext::<Vec<u32>>::zero(N);
     input.as_mut()[..4].copy_from_slice(&[1, 2, 256, 255]);
     let mut output = NtruCiphertext::new(vec![7; N]);
-    let mut workspace = NttNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut workspace = NttNtruTraceWorkspace::new(LENGTH);
     trace.apply_reverse_partial_to(&input, N / 2, &mut output, modulus, &table, &mut workspace);
     let mut expected = vec![0; N];
     expected[0] = 1;
@@ -481,10 +452,10 @@ fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
     );
     assert_eq!(output.as_ref(), &[7; N]);
 
-    let table = RustFftTable::new(PolyLength::new(N));
+    let table = RustFftTable::new(LENGTH);
     let mut fft = FftEngine::new(&table);
     let params = NtruParameters::new(
-        PolyLength::new(N),
+        LENGTH,
         4u32,
         NativeModulus::new(),
         SecretKeyDistr::UniformBinary,
@@ -504,12 +475,12 @@ fn reverse_trace_preserves_the_distinct_modular_and_native_halving_paths() {
         &params,
         &mut fft,
         &mut ZeroRng,
-        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
+        &mut FourierNtruGadgetEncryptWorkspace::new(LENGTH),
     );
     input.as_mut().fill(0);
     input.as_mut()[0] = 1;
     input.as_mut()[2] = u32::MAX;
-    let mut workspace = FourierNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut workspace = FourierNtruTraceWorkspace::new(LENGTH);
     trace.apply_reverse_partial_to(&input, N / 2, &mut output, &mut fft, &mut workspace);
     // floor(1/2) and floor((2^32-1)/2), then the even projection doubles them.
     expected[0] = 0;
@@ -537,19 +508,18 @@ fn assert_rejected_before_sampling(generate: impl FnOnce(&mut StdRng)) {
 
 #[test]
 fn ntt_trace_generation_rejects_incompatible_resources_before_sampling() {
-    let length = PolyLength::new(N);
+    let length = LENGTH;
     let wrong_length = PolyLength::new(2 * N);
-    let modulus = BarrettModulus::new(Q);
+    let (parameters, table) = ntt_parameters(4);
+    let modulus = parameters.cipher_modulus();
     let other_modulus = BarrettModulus::new(1_073_692_673u64);
-    let table = U64NttTable::new(length, modulus).unwrap();
     let wrong_table = U64NttTable::new(wrong_length, modulus).unwrap();
     let other_table = U64NttTable::new(length, other_modulus).unwrap();
-    let secret = secret();
+    let secret = oracle_secret(LENGTH);
     let wrong_secret = NtruSecretKey::new(vec![0; 2 * N], SecretKeyDistr::SparseTernary);
     let key = NttNtruSecretKey::try_from_coeff_secret_key(&secret, modulus, &table).unwrap();
     let other_key =
         NttNtruSecretKey::try_from_coeff_secret_key(&secret, other_modulus, &other_table).unwrap();
-    let parameters = NtruParameters::new(length, 4, modulus, SecretKeyDistr::SparseTernary, 0.7);
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -574,21 +544,15 @@ fn ntt_trace_generation_rejects_incompatible_resources_before_sampling() {
 
 #[test]
 fn fourier_trace_generation_rejects_incompatible_resources_before_sampling() {
-    let length = PolyLength::new(N);
+    let length = LENGTH;
     let wrong_length = PolyLength::new(2 * N);
     let table = RustFftTable::new(length);
     let wrong_table = RustFftTable::new(wrong_length);
-    let secret = secret();
+    let secret = oracle_secret(LENGTH);
     let wrong_secret = NtruSecretKey::new(vec![0; 2 * N], SecretKeyDistr::SparseTernary);
     let key = FourierNtruSecretKey::try_from_coeff_secret_key(&secret, &mut FftEngine::new(&table))
         .unwrap();
-    let parameters = NtruParameters::new(
-        length,
-        4u64,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let parameters = native_parameters(4);
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {

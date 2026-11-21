@@ -287,21 +287,13 @@ fn ntt_cmux_selects_requested_glwe() {
 
 #[test]
 fn ntt_ternary_cmux_rotates_phase_with_encrypted_controls() {
-    use common::{K, N, encrypt, message, phase, secret};
-    use primus_glwe::GlweSecretKey;
+    use common::{N, encrypt, fixed_ternary_glwe, message, phase};
     use primus_lattice::workspace::NttGlweTernaryCmuxWorkspace;
 
     const Q: u64 = 132_120_577;
     let modulus = BarrettModulus::new(Q);
     let ntt = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
-    let glwe = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        16,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let (glwe, coeff_key) = fixed_ternary_glwe(modulus, 16, SecretKeyDistr::SparseTernary);
     let params = GlevParameters::with_glwe_params(
         &glwe,
         DecompositionConfig {
@@ -309,12 +301,11 @@ fn ntt_ternary_cmux_rotates_phase_with_encrypted_controls() {
             level_count: Some(DecompositionLevelCount::new(3)),
         },
     );
-    let secret = secret();
-    let coeff_key = GlweSecretKey::new(secret.clone(), glwe.size(), glwe.secret_key_distr());
+    let secret = coeff_key.as_slice();
     let key = NttGlweSecretKey::from_coeff_secret_key(&coeff_key, &ntt);
     let mut rng = StdRng::seed_from_u64(51);
-    let input = encrypt(&message(u128::from(Q)), &secret, u128::from(Q), &mut rng);
-    let input_phase = phase(input.as_ref(), &secret, u128::from(Q));
+    let input = encrypt(&message(u128::from(Q)), secret, u128::from(Q), &mut rng);
+    let input_phase = phase(input.as_ref(), secret, u128::from(Q));
     let mut controls = vec![0; 2 * params.ggsw_len()];
     let mut encrypt_workspace = NttGlweGadgetEncryptWorkspace::new(params.size());
     let mut workspace = NttGlweTernaryCmuxWorkspace::new(params.size());
@@ -346,7 +337,7 @@ fn ntt_ternary_cmux_rotates_phase_with_encrypted_controls() {
             assert_rotated_phase(
                 &input_phase,
                 output.as_ref(),
-                &secret,
+                secret,
                 u128::from(Q),
                 exponent as isize * selector,
             );
@@ -373,21 +364,14 @@ fn assert_rotated_phase(input: &[u64], output: &[u64], secret: &[i64], q: u128, 
 }
 
 fn check_fourier_ternary_cmux<Table: FftTable>() {
-    use common::{K, N, encrypt, message, phase, secret};
-    use primus_glwe::GlweSecretKey;
+    use common::{N, encrypt, fixed_ternary_glwe, message, phase};
     use primus_lattice::workspace::FourierGlweTernaryCmuxWorkspace;
 
     const Q: u128 = 1 << 64;
     let table = Table::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
-    let glwe = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        16u64,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let (glwe, coeff_key) =
+        fixed_ternary_glwe(NativeModulus::new(), 16, SecretKeyDistr::SparseTernary);
     let params = GlevParameters::with_glwe_params(
         &glwe,
         DecompositionConfig {
@@ -395,12 +379,11 @@ fn check_fourier_ternary_cmux<Table: FftTable>() {
             level_count: Some(DecompositionLevelCount::new(3)),
         },
     );
-    let secret = secret();
-    let coeff_key = GlweSecretKey::<u64>::new(secret.clone(), glwe.size(), glwe.secret_key_distr());
+    let secret = coeff_key.as_slice();
     let mut key = FourierGlweEncryptor::try_new(&coeff_key, glwe.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(51);
-    let input = encrypt(&message(Q), &secret, Q, &mut rng);
-    let input_phase = phase(input.as_ref(), &secret, Q);
+    let input = encrypt(&message(Q), secret, Q, &mut rng);
+    let input_phase = phase(input.as_ref(), secret, Q);
     let mut controls = vec![Complex64::default(); 2 * params.fourier_ggsw_len()];
 
     let mut workspace = FourierGlweTernaryCmuxWorkspace::new(params.size());
@@ -429,7 +412,7 @@ fn check_fourier_ternary_cmux<Table: FftTable>() {
             assert_rotated_phase(
                 &input_phase,
                 output.as_ref(),
-                &secret,
+                secret,
                 Q,
                 exponent as isize * selector,
             );

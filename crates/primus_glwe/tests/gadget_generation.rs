@@ -226,9 +226,8 @@ fn ntt_gadget_phases_and_external_product() {
     ));
     let basis = ApproxSignedBasis::new(Some(MODULUS), DecompositionBaseLog::new(8), None);
     let params = GlevParameters::try_from_parts(size, Arc::clone(&inner), basis).unwrap();
-    let coeff_secret_key =
-        GlweSecretKey::<u32>::generate(size, inner.secret_key_sampler(), &mut rng);
-    let secret_key = NttGlweSecretKey::from_coeff_secret_key(&coeff_secret_key, &ntt);
+    let (coeff_secret_key, secret_key) =
+        NttGlweSecretKey::generate_pair(size, &inner, &ntt, &mut rng);
     let mut workspace = NttGlweGadgetEncryptWorkspace::new(params.size());
 
     let mut raw_message = vec![0u32; POLY_LENGTH];

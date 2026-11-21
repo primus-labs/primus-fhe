@@ -6,8 +6,8 @@ use primus_fft::{FftEngine, FftTable, RustFftTable};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, GlevParameters, GlweParameters,
-    GlweSecretKey, GlweSize, NttGlweAutomorphismKey, NttGlweAutomorphismWorkspace,
-    NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
+    GlweSize, NttGlweAutomorphismKey, NttGlweAutomorphismWorkspace, NttGlweGadgetEncryptWorkspace,
+    NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::glwe::{Glwe, NttGlwe};
@@ -18,7 +18,7 @@ use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 mod common;
-use common::{K, N, assert_phase, encrypt, message, secret};
+use common::{N, assert_phase, encrypt, fixed_ternary_glwe, message};
 
 // Functional ring size; keep the original word widths, moduli and decomposition.
 const POLY_LENGTH: usize = 64;
@@ -147,15 +147,9 @@ fn fourier_automorphism_input<Table: FftTable>() {
     use primus_lattice::glwe::FourierGlwe;
     let table = Table::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
-    let size = GlweSize::new(GlweDimension::new(K), PolyLength::new(N));
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
+    let (params, coeff) =
+        fixed_ternary_glwe(NativeModulus::new(), 64, SecretKeyDistr::UniformTernary);
+    let size = params.size();
     let glev = GlevParameters::with_glwe_params(
         &params,
         DecompositionConfig {
@@ -163,15 +157,14 @@ fn fourier_automorphism_input<Table: FftTable>() {
             level_count: Some(DecompositionLevelCount::new(7)),
         },
     );
-    let s = secret();
-    let coeff = GlweSecretKey::<u64>::new(s.clone(), size, SecretKeyDistr::UniformTernary);
+    let s = coeff.as_slice();
     let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x4646544155544f);
 
     let mut workspace = FourierGlweAutomorphismWorkspace::new(size);
     let q = 1u128 << 64;
     let m = message(q);
-    let input = encrypt(&m, &s, q, &mut rng);
+    let input = encrypt(&m, s, q, &mut rng);
     let mut fourier_input = FourierGlwe::<Vec<Complex64>>::zero(size.fourier_glwe_len());
     input.write_fourier_form(&mut fourier_input, &mut fft);
     let mut fourier_output = fourier_input.clone();
@@ -188,7 +181,7 @@ fn fourier_automorphism_input<Table: FftTable>() {
             };
         }
         key.apply_to(&input, &mut output, &mut fft, &mut workspace);
-        assert_phase(output.as_ref(), &expected, &s, q);
+        assert_phase(output.as_ref(), &expected, s, q);
         key.apply_fourier_to(
             &fourier_input.as_view(),
             &mut fourier_output.as_mut_view(),
@@ -196,7 +189,7 @@ fn fourier_automorphism_input<Table: FftTable>() {
             &mut workspace,
         );
         fourier_output.write_torus_form(&mut output, &mut fft);
-        assert_phase(output.as_ref(), &expected, &s, q);
+        assert_phase(output.as_ref(), &expected, s, q);
         // A different N with the same total storage must fail before output writes.
         let mut wrong_workspace = FourierGlweAutomorphismWorkspace::new(GlweSize::new(
             GlweDimension::new(5),
