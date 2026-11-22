@@ -107,13 +107,6 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
             matches!(BfvAutomorphism::try_new(&limited, &auto), Err(BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
         );
     }
-    for exponent in [0, 2, 2 * N, usize::MAX] {
-        assert!(
-            client
-                .automorphism_key(0, exponent, config, &mut rng)
-                .is_err()
-        );
-    }
     let mut switch = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
     let mut relin = BfvRelinearizer::try_new(&context, &relin_key).unwrap();
     let mut auto = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
@@ -203,14 +196,14 @@ fn invalid_key_generation_is_rejected_before_sampling() {
         );
         assert_eq!(rng.next_u64(), expected.next_u64());
     }
-    for exponent in [0, 2, 64, usize::MAX] {
+    for exponent in [0, 2, 2 * N, usize::MAX] {
         let mut rng = StdRng::seed_from_u64(21);
         let mut expected = StdRng::seed_from_u64(21);
-        assert!(
-            client
-                .automorphism_key(0, exponent, valid, &mut rng)
-                .is_err()
-        );
+        assert!(matches!(
+            client.automorphism_key(0, exponent, valid, &mut rng),
+            Err(BfvEvaluationKeyError::Exponent { exponent: rejected, twice_n })
+                if rejected == exponent && twice_n == 2 * N
+        ));
         assert_eq!(rng.next_u64(), expected.next_u64());
     }
     let incompatible = [

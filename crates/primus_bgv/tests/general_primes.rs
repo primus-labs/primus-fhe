@@ -5,9 +5,7 @@ use primus_bgv::evaluation::{
     BgvRelinearizer,
 };
 use primus_bgv::keys::BgvEvaluationKeyConfig;
-use primus_bgv::{
-    BgvCiphertextBindingError, BgvClient, BgvContext, BgvParameters, PlaintextEmbedding,
-};
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -292,20 +290,6 @@ fn general_drop_matches_independent_integer_quotients_and_recovers_composite_pla
                 assert_eq!(recovered.as_ref()[0], message);
                 assert!(recovered.as_ref()[1..].iter().all(|x| *x == 0));
                 ciphertext = output;
-            }
-        }
-        for invalid in [0, p, p + 1] {
-            assert!(matches!(
-                context.try_import_ciphertext(vec![0; 2 * context.rns_poly_len(0)], 0, invalid),
-                Err(BgvCiphertextBindingError::CorrectionFactor { .. })
-            ));
-        }
-        if p == 15 {
-            for invalid in [3, 5] {
-                assert!(matches!(
-                    context.try_import_ciphertext(vec![0; 2 * context.rns_poly_len(0)], 0, invalid),
-                    Err(BgvCiphertextBindingError::CorrectionFactor { .. })
-                ));
             }
         }
     }

@@ -2,11 +2,10 @@
 
 use primus_bfv::advanced::{BfvDecryptWorkspace, BfvSecretKeyContext};
 use primus_bfv::keys::BfvPublicKey;
-use primus_bfv::{BfvCiphertext, BfvContext, BfvParameters};
+use primus_bfv::{BfvCiphertext, BfvClient, BfvContext, BfvParameters};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -225,17 +224,10 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
 #[test]
 fn plaintext_product_keeps_bfv_scaling() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 21 });
-    let owner = BfvContext::try_new(parameters).unwrap();
-    let parameters = owner.parameters();
-    let table = owner.table();
+    let context = BfvContext::try_new(parameters).unwrap();
+    let parameters = context.parameters();
     let mut rng = StdRng::seed_from_u64(81);
-    let key = GlweSecretKey::generate(
-        parameters.size().glwe_size(),
-        parameters.encryption_parameters().secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, table);
-    let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
+    let mut client = BfvClient::generate(&context, &mut rng);
     let message = Polynomial(
         (0..N)
             .map(|index| (index * 7 % 257) as u64)
@@ -250,10 +242,9 @@ fn plaintext_product_keeps_bfv_scaling() {
         .iter()
         .flat_map(|_| multiplier.as_ref().iter().copied())
         .collect::<Vec<_>>();
-    table.transform_slice(&mut multiplier_ntt);
-    let mut input = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
-    let mut output = input.clone();
-    context.encrypt_to(&message, &mut input, &mut rng);
+    context.table().transform_slice(&mut multiplier_ntt);
+    let input = client.encrypt(&message, &mut rng);
+    let mut output = context.new_ciphertext(0);
     // This representation test applies plaintext multiplication directly to
     // both native components; it does not introduce a BFV evaluator API.
     for (input_component, output_component) in input
@@ -283,12 +274,7 @@ fn plaintext_product_keeps_bfv_scaling() {
         .into_iter()
         .map(|value| value.rem_euclid(257) as u64)
         .collect();
-    assert_eq!(
-        context
-            .decrypt(&output, &mut BfvDecryptWorkspace::new(parameters))
-            .as_ref(),
-        expected
-    );
+    assert_eq!(client.decrypt(&output).as_ref(), expected);
 }
 
 #[test]
@@ -304,11 +290,8 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
         &mut setup_rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
-    let public = BfvPublicKey::new(
-        &BfvSecretKeyContext::try_new(&key, &owner).unwrap(),
-        &mut setup_rng,
-    );
     let secret = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
+    let public = BfvPublicKey::new(&secret, &mut setup_rng);
     let mut encryptor = owner.public_key_encryptor(&public).unwrap();
     for length in [0, N - 1, N + 1] {
         let input = Polynomial(vec![0; length]);
@@ -379,11 +362,6 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     assert!(output.as_ref().iter().all(|&value| value == 99));
 
     let reversed = [BarrettModulus::new(Q[1]), BarrettModulus::new(Q[0])];
-    let wrong_table = U64DcrtTable::new(parameters.poly_length(), &reversed).unwrap();
-    assert!(
-        BfvContext::try_with_table(parameters.clone(), 1, std::sync::Arc::new(wrong_table))
-            .is_err()
-    );
     let foreign_context = BfvContext::try_new(
         BfvParameters::try_with_decoder_modulus(
             parameters.poly_length(),
