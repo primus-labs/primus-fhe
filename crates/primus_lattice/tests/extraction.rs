@@ -158,7 +158,8 @@ fn packed_extraction_matches_negacyclic_sample_order() {
         [94, 93, 1, 2, 30],
         [95, 94, 93, 1, 40],
     ];
-    for count in [1, 2, 4] {
+    // One body skips rotation; a full set exercises rotation through the last mask index.
+    for count in [1, 4] {
         let packed = MultiMsgLwe::new(&storage[..4 + count]);
         let all = packed.extract_all(count, modulus);
         assert_eq!(all.len(), count);

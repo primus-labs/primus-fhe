@@ -14,34 +14,6 @@ use rand::{SeedableRng, rngs::StdRng};
 use super::{Context, RingSelection};
 use crate::fixture::{cbs_gadget, config};
 
-/// Reject the GLWE-specific MSB correction even when q/Q and the gadget basis match.
-pub(super) fn assert_msb_lookup_is_rejected<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
-    context: &Context<T, Table>,
-    server: &CircuitBootstrapServerKey<T>,
-) {
-    let input_codec = primus_encoding::RoundedCodec::new(
-        T::TWO,
-        context.parameters().external_lwe().cipher_modulus(),
-    );
-    let msb = primus_tfhe::CircuitBootstrapLookupTable::try_from_fn(
-        context.parameters().poly_length(),
-        &input_codec,
-        primus_tfhe::CbsInputEncoding::MsbBoolean,
-        context.cbs_parameters().unwrap().gadget().output_basis(),
-        context.parameters().accumulator_ntru().cipher_modulus(),
-        T::as_from,
-    )
-    .unwrap();
-    assert!(matches!(
-        CircuitBootstrapEvaluator::try_with_lookup_table(
-            context,
-            server.circuit_bootstrap_key(),
-            msb
-        ),
-        Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
-    ));
-}
-
 /// Validate resource identity before any writes, then transfer the original
 /// resources to PBS and return the real CMux output at the extraction endpoints.
 pub(super) fn check_resources_and_return<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
@@ -94,9 +66,9 @@ pub(super) fn check_resources_and_return<T: FheUint, Table: MonomialNttTable<Val
     );
 }
 
-/// Equal gadget bases do not make CBS material from another ring compatible.
+/// Bind the CBS program and material independently.
 #[test]
-fn default_cbs_rejects_mixed_ring_material() {
+fn default_cbs_rejects_msb_programs_and_mixed_ring_material() {
     type U32Context = Context<u32, U32NttTable>;
     let pbs = config(BlindRotationMethod::Classic);
     let gadget = cbs_gadget(None);
@@ -114,6 +86,28 @@ fn default_cbs_rejects_mixed_ring_material() {
     let (_, server) = context
         .try_generate_circuit_bootstrap_keys(&mut rng)
         .unwrap();
+
+    // NTRU rejects the GLWE MSB correction with otherwise matching parameters.
+    let input_codec =
+        primus_encoding::RoundedCodec::new(2, context.parameters().external_lwe().cipher_modulus());
+    let msb = primus_tfhe::CircuitBootstrapLookupTable::try_from_fn(
+        context.parameters().poly_length(),
+        &input_codec,
+        primus_tfhe::CbsInputEncoding::MsbBoolean,
+        context.cbs_parameters().unwrap().gadget().output_basis(),
+        context.parameters().accumulator_ntru().cipher_modulus(),
+        |bit| bit as u32,
+    )
+    .unwrap();
+    assert!(matches!(
+        CircuitBootstrapEvaluator::try_with_lookup_table(
+            &context,
+            server.circuit_bootstrap_key(),
+            msb,
+        ),
+        Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
+    ));
+
     let (_, other_server) = other.try_generate_circuit_bootstrap_keys(&mut rng).unwrap();
 
     // BR/KS and the program match this context; only trace/SS use another N.

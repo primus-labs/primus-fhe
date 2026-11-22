@@ -5,16 +5,17 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
-    SecretKeyDistr,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{DcrtTable, NttTable};
+use primus_ntt::{DcrtTable, NttTable, UintDcrtTable};
 use primus_poly::{CrtPolynomial, DcrtPolynomial};
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 use primus_shape::PolyLength;
+use rand::rngs::StdRng;
 
 pub const PROBE_SCALE: i128 = 1 << 42;
 
@@ -66,6 +67,19 @@ where
     }
     pub fn secret_key_sampler(&self) -> &primus_distr::SecretKeySampler<T> {
         self.core.secret_key_sampler()
+    }
+    pub fn ntt_table(&self) -> UintDcrtTable<T> {
+        UintDcrtTable::new(self.poly_length(), self.base.moduli()).unwrap()
+    }
+    pub fn generate_key_pair(
+        &self,
+        table: &DcrtTable<impl NttTable<ValueT = T>>,
+        rng: &mut StdRng,
+    ) -> (GlweSecretKey<T>, DcrtGlweSecretKey<T>) {
+        let coefficients =
+            GlweSecretKey::generate(self.glwe_size(), self.secret_key_sampler(), rng);
+        let dcrt = DcrtGlweSecretKey::from_coeff_secret_key(&coefficients, table);
+        (coefficients, dcrt)
     }
     pub fn gadget(
         &self,

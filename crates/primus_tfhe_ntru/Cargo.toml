@@ -16,7 +16,6 @@ primus_ntru = { path = "../primus_ntru" }
 primus_reduce = { path = "../primus_reduce" }
 primus_tfhe = { path = "../primus_tfhe" }
 
-num-traits = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 

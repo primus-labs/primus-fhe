@@ -1,6 +1,6 @@
 //! Cross-validates `BarrettModulus` against `UintModulus` and wide arithmetic.
 
-use primus_modulus::{BarrettModulus, UintModulus};
+use primus_modulus::{BarrettModulus, UintModulus, integer::FheUint};
 use primus_reduce::{FieldContext, prelude::*};
 use rand::{
     SeedableRng,
@@ -13,20 +13,12 @@ type ValueT = u32;
 const MODULUS: ValueT = 536_813_569;
 const SEED: u64 = 0x4241_5252_4554_5431;
 
-/// Check the reciprocal algorithm's strict modulus bound for u32 and u64.
+/// Exercise the panicking constructor. `config.rs` covers the fallible bounds in both widths.
 #[test]
-fn constructor_bounds() {
-    assert!(std::panic::catch_unwind(|| BarrettModulus::<ValueT>::new(0)).is_err());
-    assert!(std::panic::catch_unwind(|| BarrettModulus::<ValueT>::new(1)).is_err());
-
-    let u32_limit = 1u32 << (u32::BITS - 2);
-    assert!(std::panic::catch_unwind(|| BarrettModulus::<u32>::new(u32_limit)).is_err());
-    assert!(BarrettModulus::<u32>::try_new(u32_limit - 1).is_some());
-    assert!(BarrettModulus::<u32>::try_new(u32_limit).is_none());
-
-    let u64_limit = 1u64 << (u64::BITS - 2);
-    assert!(BarrettModulus::<u64>::try_new(u64_limit - 1).is_some());
-    assert!(BarrettModulus::<u64>::try_new(u64_limit).is_none());
+fn panicking_constructor_rejects_invalid_moduli() {
+    for q in [0, 1, 1 << (ValueT::BITS - 2)] {
+        assert!(std::panic::catch_unwind(|| BarrettModulus::<ValueT>::new(q)).is_err());
+    }
 }
 
 fn field_trait<M: FieldContext<ValueT>>(_modulus: M) {}
@@ -107,9 +99,50 @@ fn mul_ops() {
     }
 }
 
-/// A per-term modular sum checks reduction across scalar/SIMD accumulation block boundaries.
+fn check_dot_product<T: FheUint + Into<u128>>(
+    modulus: impl ReduceDotProduct<T> + Copy,
+    q: T,
+    lhs: &[T],
+    rhs: &[T],
+) {
+    let q = q.into();
+    // Reducing each wide product avoids sharing Barrett's block accumulator.
+    let expected = lhs
+        .iter()
+        .zip(rhs)
+        .fold(0u128, |sum, (&a, &b)| (sum + a.into() * b.into()) % q);
+    let slice_result: u128 = modulus.reduce_dot_product(lhs, rhs).into();
+    let iterator_result: u128 = modulus
+        .reduce_dot_product_iter(lhs.iter().copied(), rhs.iter().copied())
+        .into();
+    let len = lhs.len();
+    assert_eq!(slice_result, expected, "slice: q={q}, len={len}");
+    assert_eq!(iterator_result, expected, "iterator: q={q}, len={len}");
+}
+
+fn check_dot_product_boundaries<T: FheUint + Into<u128>>(
+    modulus: impl ReduceDotProduct<T> + Copy,
+    q: T,
+) {
+    // Source residues can exceed the destination modulus and stress both limbs.
+    let maximum = T::MAX >> 2u32;
+    let lengths = [0usize, 1, 15, 16, 17].into_iter();
+    // A full block is required to actually dispatch to SIMD.
+    #[cfg(feature = "simd")]
+    let lengths = {
+        let block = 16 * T::LANE_COUNT;
+        lengths.chain([block - 1, block, block + 1, 2 * block + 1])
+    };
+    for len in lengths {
+        let lhs: Vec<T> = (0..len).map(|i| maximum - T::as_from(i % 3)).collect();
+        let rhs: Vec<T> = (0..len).map(|i| maximum - T::as_from(i % 5)).collect();
+        check_dot_product(modulus, q, &lhs, &rhs);
+    }
+}
+
+/// Verify canonical and near-boundary operands across scalar and SIMD accumulation blocks.
 #[test]
-fn dot_product() {
+fn dot_products_match_wide_remainders() {
     let m = BarrettModulus::<u32>::new(MODULUS);
     let distr = Uniform::new(0, MODULUS).unwrap();
     let mut rng = StdRng::seed_from_u64(SEED);
@@ -126,74 +159,30 @@ fn dot_product() {
         let a: Vec<u32> = (0..len).map(|_| distr.sample(&mut rng)).collect();
         let b: Vec<u32> = (0..len).map(|_| distr.sample(&mut rng)).collect();
 
-        let expected = a.iter().zip(&b).fold(0u64, |acc, (&x, &y)| {
-            (acc + x as u64 * y as u64) % MODULUS as u64
-        }) as u32;
-        assert_eq!(
-            m.reduce_dot_product(&a, &b),
-            expected,
-            "dot_product len={len}"
-        );
-        assert_eq!(
-            m.reduce_dot_product_iter(a.iter().copied(), b.iter().copied()),
-            expected,
-            "dot_product_iter len={len}"
-        );
+        check_dot_product(m, MODULUS, &a, &b);
     }
-}
 
-/// Source residues can exceed the destination modulus. Maximal operands stress
-/// the two-limb accumulator, including full SIMD blocks and scalar tails.
-#[test]
-fn dot_product_accumulator_boundary() {
-    macro_rules! check_width {
-        ($ty:ty) => {{
-            fn check(modulus: impl ReduceDotProduct<$ty> + Copy, q: $ty) {
-                let maximum = (1 as $ty << (<$ty>::BITS - 2)) - 1;
-                let lengths = vec![0, 1, 15, 16, 17];
-                // A full block is required to actually dispatch to SIMD.
-                #[cfg(feature = "simd")]
-                let lengths = {
-                    let block = 16 * <$ty as primus_modulus::integer::SimdInteger>::LANE_COUNT;
-                    let mut lengths = lengths;
-                    lengths.extend([block - 1, block, block + 1, 2 * block + 1]);
-                    lengths
-                };
-                for len in lengths {
-                    let lhs: Vec<$ty> = (0..len).map(|i| maximum - (i % 3) as $ty).collect();
-                    let rhs: Vec<$ty> = (0..len).map(|i| maximum - (i % 5) as $ty).collect();
-                    // Reduce each u128 product independently: no block accumulator
-                    // or Barrett operation is reused by this oracle.
-                    let expected = lhs.iter().zip(&rhs).fold(0u128, |sum, (&a, &b)| {
-                        (sum + a as u128 * b as u128) % q as u128
-                    }) as $ty;
-                    assert_eq!(
-                        modulus.reduce_dot_product(&lhs, &rhs),
-                        expected,
-                        "q={q}, len={len}",
-                    );
-                    assert_eq!(
-                        modulus.reduce_dot_product_iter(lhs.iter().copied(), rhs.iter().copied()),
-                        expected,
-                    );
-                }
-            }
-            // A small destination and the largest valid modulus exercise very
-            // different reciprocals while sharing the same operand bound.
-            for q in [17, (1 as $ty << (<$ty>::BITS - 2)) - 1] {
-                check(BarrettModulus::new(q), q);
-            }
-            #[cfg(feature = "derive")]
-            {
-                #[derive(primus_modulus::Barrett)]
-                #[modulus(ty = $ty, value = 17)]
-                struct FixedModulus;
-                check(FixedModulus, 17);
-            }
-        }};
+    // A small destination and the largest valid modulus exercise very
+    // different reciprocals while sharing the same operand bound.
+    for q in [17u32, u32::MAX >> 2] {
+        check_dot_product_boundaries(BarrettModulus::new(q), q);
     }
-    check_width!(u32);
-    check_width!(u64);
+    for q in [17u64, u64::MAX >> 2] {
+        check_dot_product_boundaries(BarrettModulus::new(q), q);
+    }
+
+    #[cfg(feature = "derive")]
+    {
+        #[derive(primus_modulus::Barrett)]
+        #[modulus(ty = u32, value = 17)]
+        struct FixedModulus32;
+        #[derive(primus_modulus::Barrett)]
+        #[modulus(ty = u64, value = 17)]
+        struct FixedModulus64;
+
+        check_dot_product_boundaries(FixedModulus32, 17u32);
+        check_dot_product_boundaries(FixedModulus64, 17u64);
+    }
 }
 
 /// Compare multiply, scalar-multiply, and fused slice variants with independent wide products.
@@ -228,20 +217,20 @@ fn mul_slice_ops() {
 
         let mut lazy_assign = a.clone();
         m.lazy_reduce_mul_slice_assign(&mut lazy_assign, &b);
-        for v in lazy_assign.iter() {
-            assert!(*v < MODULUS * 2, "lazy >= 2M");
-        }
-        for (v, &exp) in lazy_assign.iter_mut().zip(&expected_mul) {
-            *v = m.reduce_once(*v);
-            assert_eq!(*v, exp, "lazy_mul_slice_assign len={len}");
-        }
         let mut lazy_to = vec![0; len];
         m.lazy_reduce_mul_slice_to(&a, &b, &mut lazy_to);
-        for v in lazy_to.iter_mut() {
-            assert!(*v < MODULUS * 2);
-            *v = m.reduce_once(*v);
+        for (operation, actual) in [
+            ("lazy_mul_slice_assign", lazy_assign),
+            ("lazy_mul_slice_to", lazy_to),
+        ] {
+            for (&value, &expected) in actual.iter().zip(&expected_mul) {
+                assert!(
+                    value < MODULUS * 2,
+                    "{operation} exceeded [0, 2q), len={len}"
+                );
+                assert_eq!(m.reduce_once(value), expected, "{operation} len={len}");
+            }
         }
-        assert_eq!(lazy_to, expected_mul, "lazy_mul_slice_to len={len}");
 
         let expected_acc: Vec<u32> = c
             .iter()

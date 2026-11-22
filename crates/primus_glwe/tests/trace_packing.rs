@@ -3,9 +3,8 @@ use primus_fft::{FftEngine, FftTable, RustFftTable};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlwePackingWorkspace, FourierGlweTraceKey, FourierGlweTraceWorkspace, GlevParameters,
-    GlweParameters, GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace,
-    NttGlwePackingWorkspace, NttGlweSecretKey, NttGlweTraceKey, NttGlweTraceWorkspace,
-    SecretKeyDistr,
+    GlweSize, NttGlweGadgetEncryptWorkspace, NttGlwePackingWorkspace, NttGlweSecretKey,
+    NttGlweTraceKey, NttGlweTraceWorkspace, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{glwe::Glwe, lwe::Lwe};
@@ -15,9 +14,42 @@ use primus_shape::PolyLength;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 mod common;
-use common::{K, N, assert_phase, encrypt, message, phase, secret};
+use common::{K, N, assert_phase, encrypt, fixed_ternary_glwe, message, phase};
 
 const Q: u64 = 1_125_899_906_826_241;
+
+// Indexed projection must preserve the requested order and duplicate indices.
+fn check_index_projection(
+    message: &[u64],
+    secret: &[i64],
+    q: u128,
+    mut project: impl FnMut(&[usize], &mut [u64]),
+) -> Vec<u64> {
+    let glwe_len = GlweSize::new(GlweDimension::new(K), PolyLength::new(N)).glwe_len();
+    let indices = [N - 1, 0, 7, 7];
+    let mut selected = vec![0; indices.len() * glwe_len];
+    project(&indices, &mut selected);
+    for (ciphertext, index) in selected.chunks_exact(glwe_len).zip(indices) {
+        let mut expected = vec![0; N];
+        expected[0] = message[index];
+        assert_phase(ciphertext, &expected, secret, q);
+    }
+
+    // An invalid late index must be rejected before writing even the first row.
+    let invalid_output = &mut selected[..2 * glwe_len];
+    invalid_output.fill(7);
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            project(&[0, N], invalid_output);
+        }))
+        .is_err()
+    );
+    assert!(invalid_output.iter().all(|&value| value == 7));
+
+    let mut full = vec![0; N * glwe_len];
+    project(&(0..N).collect::<Vec<_>>(), &mut full);
+    full
+}
 
 // Prefix projection must preserve the general path's exact rounding, including
 // count=1 with a nonzero message tail. It is not prefix-only expansion.
@@ -128,15 +160,8 @@ fn lwe_batch(count: usize, secret: &[i64], q: u128, rng: &mut StdRng) -> Vec<u64
 fn ntt_trace_projection_and_packing() {
     let modulus = BarrettModulus::new(Q);
     let ntt = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
-    let size = GlweSize::new(GlweDimension::new(K), PolyLength::new(N));
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64,
-        modulus,
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
+    let (params, coeff) = fixed_ternary_glwe(modulus, 64, SecretKeyDistr::UniformTernary);
+    let size = params.size();
     let glev = GlevParameters::with_glwe_params(
         &params,
         DecompositionConfig {
@@ -144,15 +169,14 @@ fn ntt_trace_projection_and_packing() {
             level_count: Some(DecompositionLevelCount::new(5)),
         },
     );
-    let s = secret();
-    let coeff = GlweSecretKey::new(s.clone(), size, SecretKeyDistr::UniformTernary);
+    let s = coeff.as_slice();
     let sk = NttGlweSecretKey::from_coeff_secret_key(&coeff, &ntt);
     let mut rng = StdRng::seed_from_u64(0x5452414345);
     let mut gadget = NttGlweGadgetEncryptWorkspace::new(glev.size());
     let key = NttGlweTraceKey::generate(&coeff, &sk, &glev, &ntt, &mut rng, &mut gadget);
     let mut workspace = NttGlweTraceWorkspace::new(size);
     let m = message(Q.into());
-    let input = encrypt(&m, &s, Q.into(), &mut rng);
+    let input = encrypt(&m, s, Q.into(), &mut rng);
     let mut output = Glwe::<Vec<u64>>::zero(size.glwe_len());
     for r in [1, 4, N] {
         key.apply_reverse_partial_to(&input, r, &mut output, modulus, &ntt, &mut workspace);
@@ -161,13 +185,13 @@ fn ntt_trace_projection_and_packing() {
             .enumerate()
             .map(|(i, &m)| if i % (N / r) == 0 { m } else { 0 })
             .collect();
-        assert_phase(output.as_ref(), &expected, &s, Q.into());
+        assert_phase(output.as_ref(), &expected, s, Q.into());
         key.apply_partial_to(&input, r, &mut output, modulus, &ntt, &mut workspace);
         let scaled: Vec<_> = expected
             .iter()
             .map(|&v| (u128::from(v) * (N / r) as u128 % u128::from(Q)) as u64)
             .collect();
-        assert_phase(output.as_ref(), &scaled, &s, Q.into());
+        assert_phase(output.as_ref(), &scaled, s, Q.into());
     }
     let mut trivial = Glwe::new(vec![0; size.glwe_len()]);
     let (_, body) = trivial.a_b_mut_slices(N);
@@ -194,49 +218,28 @@ fn ntt_trace_projection_and_packing() {
             .enumerate()
             .map(|(i, &v)| if i % (N / r) == 0 { v } else { 0 })
             .collect();
-        assert_eq!(phase(output.as_ref(), &s, Q.into()), expected);
+        assert_eq!(phase(output.as_ref(), s, Q.into()), expected);
     }
-    let indices = [N - 1, 0, 7, 7];
-    let mut selected = vec![0; indices.len() * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &indices,
-        &mut selected,
-        modulus,
-        &ntt,
-        &mut workspace,
-    );
-    for (c, &i) in selected.chunks_exact(size.glwe_len()).zip(&indices) {
-        let mut expected = vec![0; N];
-        expected[0] = m[i];
-        assert_phase(c, &expected, &s, Q.into());
-    }
-    let mut projected = vec![0; N * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &(0..N).collect::<Vec<_>>(),
-        &mut projected,
-        modulus,
-        &ntt,
-        &mut workspace,
-    );
+    let projected = check_index_projection(&m, s, Q.into(), |indices, output| {
+        key.project_coefficients_to(&input, indices, output, modulus, &ntt, &mut workspace);
+    });
     check_prefix_projection(&projected, |count, output| {
         key.project_prefix_coefficients_to(&input, count, output, modulus, &ntt, &mut workspace);
     });
     let mut expanded = vec![0; N * size.glwe_len()];
     key.expand_coefficients_to(&input, &mut expanded, modulus, &ntt, &mut workspace);
-    check_partial_expansion(&input, &expanded, &s, Q.into(), |input, count, output| {
+    check_partial_expansion(&input, &expanded, s, Q.into(), |input, count, output| {
         key.expand_partial_coefficients_to(input, count, output, modulus, &ntt, &mut workspace);
     });
     for count in [1, 4, N] {
-        let batch = lwe_batch(count, &s, Q.into(), &mut rng);
+        let batch = lwe_batch(count, s, Q.into(), &mut rng);
         let mut packing = NttGlwePackingWorkspace::new(size, count);
         key.pack_lwes_to(&batch, &mut output, modulus, &ntt, &mut packing);
         let mut expected = vec![0; N];
         for i in 0..count {
             expected[i * N / count] = (i as u64 + 1) * (Q / 64);
         }
-        assert_phase(output.as_ref(), &expected, &s, Q.into());
+        assert_phase(output.as_ref(), &expected, s, Q.into());
         if count == 1 {
             let mut single = Glwe::<Vec<u64>>::zero(size.glwe_len());
             key.pack_lwe_to(
@@ -285,21 +288,6 @@ fn ntt_trace_projection_and_packing() {
         );
         assert!(output.as_ref().iter().all(|&v| v == 7));
     }
-    let mut selected = vec![7; 2 * size.glwe_len()];
-    assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            key.project_coefficients_to(
-                &input,
-                &[0, N],
-                &mut selected,
-                modulus,
-                &ntt,
-                &mut workspace,
-            );
-        }))
-        .is_err()
-    );
-    assert!(selected.iter().all(|&v| v == 7));
 }
 
 #[test]
@@ -313,15 +301,8 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
     let modulus = NativeModulus::<u64>::new();
     let table = Table::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
-    let size = GlweSize::new(GlweDimension::new(K), PolyLength::new(N));
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64,
-        modulus,
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
+    let (params, coeff) = fixed_ternary_glwe(modulus, 64, SecretKeyDistr::UniformTernary);
+    let size = params.size();
     let glev = GlevParameters::with_glwe_params(
         &params,
         DecompositionConfig {
@@ -329,15 +310,14 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
             level_count: Some(DecompositionLevelCount::new(7)),
         },
     );
-    let s = secret();
-    let coeff = GlweSecretKey::<u64>::new(s.clone(), size, SecretKeyDistr::UniformTernary);
+    let s = coeff.as_slice();
     let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x5452414345);
 
     let key = FourierGlweTraceKey::generate(&mut sk, &glev, &mut fft, &mut rng);
     let mut workspace = FourierGlweTraceWorkspace::new(size);
     let m = message(q);
-    let input = encrypt(&m, &s, q, &mut rng);
+    let input = encrypt(&m, s, q, &mut rng);
     let mut output = Glwe::<Vec<u64>>::zero(size.glwe_len());
     for r in [1, 4, N] {
         key.apply_reverse_partial_to(&input, r, &mut output, &mut fft, &mut workspace);
@@ -346,13 +326,13 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
             .enumerate()
             .map(|(i, &m)| if i % (N / r) == 0 { m } else { 0 })
             .collect();
-        assert_phase(output.as_ref(), &expected, &s, q);
+        assert_phase(output.as_ref(), &expected, s, q);
         key.apply_partial_to(&input, r, &mut output, &mut fft, &mut workspace);
         let scaled: Vec<_> = expected
             .iter()
             .map(|&v| v.wrapping_mul((N / r) as u64))
             .collect();
-        assert_phase(output.as_ref(), &scaled, &s, q);
+        assert_phase(output.as_ref(), &scaled, s, q);
     }
     // A one-level reverse trace on a trivial ciphertext exposes unsigned floor
     // division for 1 and the wrapped representative -1 without FFT error.
@@ -362,40 +342,27 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
     key.apply_reverse_partial_to(&trivial, N / 2, &mut output, &mut fft, &mut workspace);
     let mut expected = vec![0; N];
     expected[2] = u64::MAX - 1;
-    assert_eq!(phase(output.as_ref(), &s, q), expected);
-    let indices = [N - 1, 0, 7, 7];
-    let mut selected = vec![0; indices.len() * size.glwe_len()];
-    key.project_coefficients_to(&input, &indices, &mut selected, &mut fft, &mut workspace);
-    for (c, &i) in selected.chunks_exact(size.glwe_len()).zip(&indices) {
-        let mut expected = vec![0; N];
-        expected[0] = m[i];
-        assert_phase(c, &expected, &s, q);
-    }
-    let mut projected = vec![0; N * size.glwe_len()];
-    key.project_coefficients_to(
-        &input,
-        &(0..N).collect::<Vec<_>>(),
-        &mut projected,
-        &mut fft,
-        &mut workspace,
-    );
+    assert_eq!(phase(output.as_ref(), s, q), expected);
+    let projected = check_index_projection(&m, s, q, |indices, output| {
+        key.project_coefficients_to(&input, indices, output, &mut fft, &mut workspace);
+    });
     check_prefix_projection(&projected, |count, output| {
         key.project_prefix_coefficients_to(&input, count, output, &mut fft, &mut workspace);
     });
     let mut expanded = vec![0; N * size.glwe_len()];
     key.expand_coefficients_to(&input, &mut expanded, &mut fft, &mut workspace);
-    check_partial_expansion(&input, &expanded, &s, q, |input, count, output| {
+    check_partial_expansion(&input, &expanded, s, q, |input, count, output| {
         key.expand_partial_coefficients_to(input, count, output, &mut fft, &mut workspace);
     });
     for count in [1, 4, N] {
-        let batch = lwe_batch(count, &s, q, &mut rng);
+        let batch = lwe_batch(count, s, q, &mut rng);
         let mut packing = FourierGlwePackingWorkspace::new(size, count);
         key.pack_lwes_to(&batch, &mut output, &mut fft, &mut packing);
         let mut expected = vec![0; N];
         for i in 0..count {
             expected[i * N / count] = ((i as u128 + 1) * (q / 64)) as u64;
         }
-        assert_phase(output.as_ref(), &expected, &s, q);
+        assert_phase(output.as_ref(), &expected, s, q);
         if count == 1 {
             let mut single = Glwe::<Vec<u64>>::zero(size.glwe_len());
             key.pack_lwe_to(
@@ -444,12 +411,4 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
         );
         assert!(output.as_ref().iter().all(|&v| v == 7));
     }
-    let mut selected = vec![7; 2 * size.glwe_len()];
-    assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            key.project_coefficients_to(&input, &[0, N], &mut selected, &mut fft, &mut workspace);
-        }))
-        .is_err()
-    );
-    assert!(selected.iter().all(|&v| v == 7));
 }

@@ -1,13 +1,14 @@
 //! Switch between independent keys, including a change in GLWE mask count.
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_distr::SecretKeySampler;
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlweDecryptWorkspace, FourierGlweKeySwitchingKey, FourierGlweKeySwitchingWorkspace,
     FourierGlweSecretKey, GlevParameters, GlweKeySwitchingParameters, GlweParameters,
-    GlweSecretKey, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
+    GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
     NttGlweKeySwitchingWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
@@ -15,6 +16,7 @@ use primus_lattice::glwe::{FourierGlweOwned, Glwe, NttGlwe};
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
+use primus_reduce::RingContext;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -23,10 +25,39 @@ const INPUT_DIMENSION: usize = 2;
 const POLY_LENGTH: usize = 32;
 const PLAINTEXT_MODULUS: u32 = 16;
 
-fn plaintext() -> Vec<u32> {
-    (0..POLY_LENGTH)
-        .map(|index| (index as u32 * 7 + 3) % PLAINTEXT_MODULUS)
-        .collect()
+fn plaintext() -> Polynomial<Vec<u32>> {
+    Polynomial::new(
+        (0..POLY_LENGTH)
+            .map(|index| (index as u32 * 7 + 3) % PLAINTEXT_MODULUS)
+            .collect(),
+    )
+}
+
+fn parameters<M: RingContext<u32>>(dimension: usize, modulus: M) -> GlweParameters<u32, M> {
+    GlweParameters::new(
+        GlweDimension::new(dimension),
+        PolyLength::new(POLY_LENGTH),
+        PLAINTEXT_MODULUS,
+        modulus,
+        SecretKeyDistr::UniformBinary,
+        0.7,
+    )
+}
+
+fn output_secret_key(
+    size: GlweSize,
+    sampler: &SecretKeySampler<u32>,
+    rng: &mut StdRng,
+) -> GlweSecretKey<u32> {
+    let generated = GlweSecretKey::generate(size, sampler, rng);
+    if size.dimension().get() != 1 {
+        return generated;
+    }
+    // The rank-one target models an LWE key prefix with a public zero tail.
+    let active_key_len = POLY_LENGTH - 13;
+    let mut padded = vec![0; POLY_LENGTH];
+    padded[..active_key_len].copy_from_slice(&generated.as_slice()[..active_key_len]);
+    GlweSecretKey::new(padded, size, generated.distr())
 }
 
 #[test]
@@ -36,22 +67,14 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let modulus = BarrettModulus::new(MODULUS);
     let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
     let mut rng = StdRng::seed_from_u64(42);
-    let input_params = GlweParameters::new(
-        GlweDimension::new(INPUT_DIMENSION),
-        PolyLength::new(POLY_LENGTH),
-        PLAINTEXT_MODULUS,
-        modulus,
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let input_params = parameters(INPUT_DIMENSION, modulus);
     let (input_coeff_key, input_key) = NttGlweSecretKey::generate_pair(
         input_params.size(),
         input_params.encryption_parameters(),
         &ntt,
         &mut rng,
     );
-    let message_values = plaintext();
-    let message = Polynomial::new(message_values.clone());
+    let message = plaintext();
     let mut encrypted: NttGlwe<Vec<u32>> = NttGlwe::zero(input_params.glwe_len());
     input_key.encrypt_message_to(
         &message,
@@ -64,30 +87,12 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let input = encrypted.into_coeff_form(&ntt);
 
     for output_dimension in [INPUT_DIMENSION, 1] {
-        let output_params = GlweParameters::new(
-            GlweDimension::new(output_dimension),
-            PolyLength::new(POLY_LENGTH),
-            PLAINTEXT_MODULUS,
-            modulus,
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
-        let generated_output_key = GlweSecretKey::generate(
+        let output_params = parameters(output_dimension, modulus);
+        let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),
             &mut rng,
         );
-        let output_coeff_key = if output_dimension == 1 {
-            // The target key has an active LWE-key prefix followed by zeros,
-            // as used by the KeyswitchBootstrap pipeline.
-            let active_key_len = POLY_LENGTH - 13;
-            let mut padded = vec![0; POLY_LENGTH];
-            padded[..active_key_len]
-                .copy_from_slice(&generated_output_key.as_slice()[..active_key_len]);
-            GlweSecretKey::new(padded, output_params.size(), SecretKeyDistr::UniformBinary)
-        } else {
-            generated_output_key
-        };
         let output_key = NttGlweSecretKey::from_coeff_secret_key(&output_coeff_key, &ntt);
         let glev = GlevParameters::with_glwe_params(
             &output_params,
@@ -125,7 +130,7 @@ fn ntt_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
             output_key
                 .decrypt_message(&switched_ntt, &output_params, &ntt)
                 .as_ref(),
-            message_values
+            message.as_ref()
         );
         assert_eq!((storage[0], storage[output_len + 1]), (7, 7));
     }
@@ -136,24 +141,16 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
     let mut fft = FftEngine::new(&table);
     let mut rng = StdRng::seed_from_u64(42);
-    let input_params = GlweParameters::new(
-        GlweDimension::new(INPUT_DIMENSION),
-        PolyLength::new(POLY_LENGTH),
-        PLAINTEXT_MODULUS,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
-    let input_coeff_key = primus_glwe::GlweSecretKey::generate(
+    let input_params = parameters(INPUT_DIMENSION, NativeModulus::new());
+    let input_coeff_key = GlweSecretKey::generate(
         input_params.size(),
-        (input_params.encryption_parameters()).secret_key_sampler(),
+        input_params.secret_key_sampler(),
         &mut rng,
     );
     let mut input_key =
         FourierGlweEncryptor::try_new(&input_coeff_key, input_params.encryption_parameters())
             .unwrap();
-    let message_values = plaintext();
-    let message = Polynomial::new(message_values.clone());
+    let message = plaintext();
     let mut encrypted = FourierGlweOwned::zero(input_params.fourier_glwe_len());
 
     input_key.encrypt_message_to(
@@ -168,28 +165,12 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
     encrypted.write_torus_form(&mut input, &mut fft);
 
     for output_dimension in [INPUT_DIMENSION, 1] {
-        let output_params = GlweParameters::new(
-            GlweDimension::new(output_dimension),
-            PolyLength::new(POLY_LENGTH),
-            PLAINTEXT_MODULUS,
-            NativeModulus::new(),
-            SecretKeyDistr::UniformBinary,
-            0.7,
-        );
-        let generated_output_key = GlweSecretKey::<u32>::generate(
+        let output_params = parameters(output_dimension, NativeModulus::new());
+        let output_coeff_key = output_secret_key(
             output_params.size(),
             output_params.secret_key_sampler(),
             &mut rng,
         );
-        let output_coeff_key = if output_dimension == 1 {
-            let active_key_len = POLY_LENGTH - 13;
-            let mut padded = vec![0; POLY_LENGTH];
-            padded[..active_key_len]
-                .copy_from_slice(&generated_output_key.as_slice()[..active_key_len]);
-            GlweSecretKey::new(padded, output_params.size(), SecretKeyDistr::UniformBinary)
-        } else {
-            generated_output_key
-        };
         let mut output_key =
             FourierGlweEncryptor::try_new(&output_coeff_key, output_params.encryption_parameters())
                 .unwrap();
@@ -230,7 +211,7 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
                     &mut decrypt_workspace,
                 )
                 .as_ref(),
-            message_values
+            message.as_ref()
         );
         assert_eq!((storage[0], storage[output_len + 1]), (7, 7));
     }

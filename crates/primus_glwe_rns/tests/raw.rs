@@ -3,7 +3,7 @@
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
     CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey,
-    RnsDomainError, SecretKeyDistr,
+    SecretKeyDistr,
 };
 use primus_integer::{AsFrom, FheUint};
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
@@ -441,69 +441,6 @@ fn additive_phase_shares_exclude_the_body_and_preserve_the_negative_sign() {
 }
 
 #[test]
-fn raw_binding_rejects_foreign_shapes_and_ordered_bases() {
-    let n = PolyLength::new(32);
-    let moduli = [257u32, 769].map(BarrettModulus::new);
-    let base = RNSBase::new(&moduli).unwrap();
-    let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), n), 2);
-    let parameters =
-        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
-            .unwrap();
-    let table = DcrtTable::<U32NttTable>::new(n, &moduli).unwrap();
-
-    let coefficient_key = GlweSecretKey::<u32>::new(
-        vec![0; n.get()],
-        size.glwe_size(),
-        SecretKeyDistr::SparseTernary,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let reversed_moduli = [moduli[1], moduli[0]];
-    let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
-    let reversed_table = DcrtTable::<U32NttTable>::new(n, &reversed_moduli).unwrap();
-    assert!(matches!(
-        key.try_bind_raw(&parameters, &reversed_base, &reversed_table),
-        Err(RnsDomainError::ModulusOrderMismatch { .. })
-    ));
-    // The phase-only entry point validates caller-owned numerical contexts
-    // independently of encryption sampling and NTT tables, before writes.
-    let ciphertext = DcrtGlweCiphertext::<Vec<u32>>::zero(size.rns_glwe_len());
-    for bad_moduli in [&reversed_moduli[..], &moduli[..1]] {
-        let mut output = DcrtPolynomial::new(vec![7; size.rns_poly_len()]);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                key.phase_to(&ciphertext, &mut output, bad_moduli);
-            }))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&value| value == 7));
-    }
-    let short_base = RNSBase::new(&moduli[..1]).unwrap();
-    assert!(matches!(
-        key.try_bind_raw(&parameters, &short_base, &table),
-        Err(RnsDomainError::ModuliCountMismatch { .. })
-    ));
-    let wrong_length_table = DcrtTable::<U32NttTable>::new(PolyLength::new(64), &moduli).unwrap();
-    assert!(matches!(
-        key.try_bind_raw(&parameters, &base, &wrong_length_table),
-        Err(RnsDomainError::PolynomialLengthMismatch { .. })
-    ));
-    for (rank, key_table, expected_dimension) in [(2, &table, true), (1, &reversed_table, false)] {
-        let key = GlweSecretKey::<u32>::new(
-            vec![0; rank * n.get()],
-            GlweSize::new(GlweDimension::new(rank), n),
-            SecretKeyDistr::SparseTernary,
-        );
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, key_table);
-        let error = key.try_bind_raw(&parameters, &base, &table).err().unwrap();
-        if expected_dimension {
-            assert!(matches!(error, RnsDomainError::DimensionMismatch { .. }));
-        } else {
-            assert!(matches!(error, RnsDomainError::ModulusOrderMismatch { .. }));
-        }
-    }
-}
-
-#[test]
 fn malformed_raw_layouts_are_rejected_before_writes_or_randomness() {
     let moduli = [257u64, 769].map(BarrettModulus::new);
     let base = RNSBase::new(&moduli).unwrap();
@@ -540,6 +477,21 @@ fn malformed_raw_layouts_are_rejected_before_writes_or_randomness() {
         assert_eq!(output.as_ref(), original.as_ref());
         assert_eq!(rng.next_u64(), untouched_rng.next_u64());
     }
+
+    // Phase-only callers supply bare moduli without going through a binding.
+    let ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(size.rns_glwe_len());
+    let reversed_moduli = [moduli[1], moduli[0]];
+    for bad_moduli in [&reversed_moduli[..], &moduli[..1]] {
+        let mut output = DcrtPolynomial::new(vec![7; size.rns_poly_len()]);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                key.phase_to(&ciphertext, &mut output, bad_moduli);
+            }))
+            .is_err()
+        );
+        assert!(output.as_ref().iter().all(|&value| value == 7));
+    }
+
     for (input_len, output_len) in [
         (size.rns_glwe_len() - 1, size.rns_poly_len()),
         (size.rns_glwe_len(), size.rns_poly_len() + 1),

@@ -1,13 +1,11 @@
 use primus_bfv::{BfvClient, BfvContext, BfvContextError, BfvParameters};
 use primus_distr::ErrorDistribution;
-use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
+use primus_glwe_rns::{RnsDomainError, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
 
 const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
 
@@ -48,19 +46,39 @@ fn context_and_import_reject_incompatible_resources() {
     assert!(std::ptr::eq(context.table(), shared.table()));
     assert_eq!(shared.codec(1).moduli_values(), &Q[..1]);
     let mut rng = StdRng::seed_from_u64(0x6060);
-    for (n, q) in [(64, Q.to_vec()), (32, vec![Q[1], Q[0]]), (32, vec![Q[0]])] {
-        let foreign = parameters(n, &q);
-        let table = U64DcrtTable::new(foreign.poly_length(), foreign.base_q().moduli()).unwrap();
-        let key = GlweSecretKey::generate(
-            foreign.size().glwe_size(),
-            foreign.encryption_parameters().secret_key_sampler(),
-            &mut rng,
-        );
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
+    for (n, q, mismatch) in [
+        (
+            64,
+            Q.as_slice(),
+            RnsDomainError::PolynomialLengthMismatch {
+                expected: 32,
+                actual: 64,
+            },
+        ),
+        (
+            32,
+            &[Q[1], Q[0]],
+            RnsDomainError::ModulusOrderMismatch {
+                index: 0,
+                expected: Q[0],
+                actual: Q[1],
+            },
+        ),
+        (
+            32,
+            &Q[..1],
+            RnsDomainError::ModuliCountMismatch {
+                expected: 2,
+                actual: 1,
+            },
+        ),
+    ] {
+        let foreign = BfvContext::try_new(parameters(n, q)).unwrap();
+        let key = BfvClient::generate(&foreign, &mut rng).into_secret_key();
         assert!(BfvClient::try_from_secret_key(&context, key).is_err());
         assert!(matches!(
-            BfvContext::try_with_table(parameters(32, &Q), 2, Arc::new(table)),
-            Err(BfvContextError::Binding(_))
+            BfvContext::try_with_table(parameters(32, &Q), 2, foreign.shared_table()),
+            Err(BfvContextError::Binding(error)) if error == mismatch
         ));
     }
 }

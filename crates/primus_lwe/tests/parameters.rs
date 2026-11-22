@@ -68,23 +68,6 @@ fn config_reports_modulus_and_sampler_errors() {
 }
 
 #[test]
-fn secret_support_is_checked_at_parameter_construction() {
-    for (sigma, valid) in [(1.0, true), (1.1, false)] {
-        // With q = 13, truncated magnitudes 12 and 13 straddle the bound.
-        let result = std::panic::catch_unwind(|| {
-            LweParameters::new(
-                LweDimension::new(16),
-                2u32,
-                BarrettModulus::new(13),
-                SecretKeyDistr::gaussian(sigma),
-                0.7,
-            )
-        });
-        assert_eq!(result.is_ok(), valid);
-    }
-}
-
-#[test]
 fn fallible_parameters_report_encoding_noise_and_secret_errors() {
     use primus_lwe::LweParameterError as Error;
     let make = |t, distr, noise| {
@@ -114,15 +97,19 @@ fn fallible_parameters_report_encoding_noise_and_secret_errors() {
     ] {
         assert!(matches!(make(4, distr, 0.7), Err(Error::SecretKey(_))));
     }
-    assert_eq!(
+    // With q = 13, the truncated Gaussian bounds 12 and 13 straddle q - 1.
+    let with_gaussian_secret = |sigma| {
         LweParameters::try_new(
             LweDimension::new(4),
             2,
             BarrettModulus::new(13u32),
-            SecretKeyDistr::gaussian(1.1),
-            0.7
+            SecretKeyDistr::gaussian(sigma),
+            0.7,
         )
-        .err(),
+    };
+    assert!(with_gaussian_secret(1.0).is_ok());
+    assert_eq!(
+        with_gaussian_secret(1.1).err(),
         Some(Error::SecretKey(
             primus_distr::SecretKeySamplerError::ModulusTooSmall {
                 maximum_magnitude: 13,

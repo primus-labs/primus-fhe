@@ -50,11 +50,6 @@ pub(super) fn circuit_selection<T: TorusFftValue, Table: FftTable>(
     } else {
         103
     });
-    // PBS-only setup rejects CBS key generation until the gadgets are added.
-    assert!(matches!(
-        context.try_generate_circuit_bootstrap_keys(&mut rng),
-        Err(primus_tfhe_ntru::KeyGenerationError::MissingCircuitBootstrapParameters)
-    ));
     let context = context
         .try_with_circuit_bootstrap(CbsGadgetConfig {
             trace: decomposition(),
@@ -109,7 +104,6 @@ pub(super) fn circuit_selection<T: TorusFftValue, Table: FftTable>(
     let mut cbs = context
         .circuit_bootstrap_evaluator_with_lookup_table(&server, program)
         .unwrap();
-    reject_msb_program(&context, &server);
     let mut oracle = PhaseDecryptor::new(&context, secret);
     let (input, mut control) = check_predicate(
         &context,
@@ -137,35 +131,6 @@ pub(super) fn circuit_selection<T: TorusFftValue, Table: FftTable>(
         &mut oracle,
         &mut rng,
     );
-}
-
-/// Reject GLWE's post-trace correction at the advanced binding boundary,
-/// even with matching q/Q, shape and output basis.
-fn reject_msb_program<T: TorusFftValue, Table: FftTable>(
-    context: &TfheContext<T, Table, PowOf2Modulus<T>>,
-    server: &CircuitBootstrapServerKey<T>,
-) {
-    let basis = context.cbs_parameters().unwrap().gadget().output_basis();
-    let modulus = context.parameters().accumulator_ntru().cipher_modulus();
-    let input_codec =
-        RoundedCodec::new(T::TWO, context.parameters().external_lwe().cipher_modulus());
-    let msb = CircuitBootstrapLookupTable::try_from_fn(
-        context.parameters().poly_length(),
-        &input_codec,
-        CbsInputEncoding::MsbBoolean,
-        basis,
-        modulus,
-        T::as_from,
-    )
-    .unwrap();
-    assert!(matches!(
-        CircuitBootstrapEvaluator::try_with_lookup_table(
-            context,
-            server.circuit_bootstrap_key(),
-            msb
-        ),
-        Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
-    ));
 }
 
 /// Check both predicate outcomes, every NGSW row and its one-level product.
@@ -295,9 +260,9 @@ fn tfhe_fft_u64_fixed_weight_classic_workflows() {
     circuit_selection::<u64, primus_fft::TfheFftTable>(config, true);
 }
 
-/// The shared Fourier binding must reject another ring before allocating an evaluator.
+/// Bind CBS parameters, program and material at their public entry points.
 #[test]
-fn default_cbs_rejects_mixed_ring_material() {
+fn default_cbs_rejects_msb_programs_and_mixed_ring_material() {
     use primus_tfhe_ntru_fourier::{CircuitBootstrapServerKey, TfheEvaluationError};
     // Engine selection does not change the binding check; exercise it once.
     #[cfg(feature = "rustfft")]
@@ -309,22 +274,49 @@ fn default_cbs_rejects_mixed_ring_material() {
     let gadget = CbsGadgetConfig {
         trace: decomposition(),
         scheme_switch: decomposition(),
-        output: decomposition(),
+        // Even native gadget weights let the MSB program compile.
+        output: DecompositionConfig {
+            level_count: Some(DecompositionLevelCount::new(3)),
+            ..decomposition()
+        },
     };
-    let context = Context::try_from_pbs_config(pbs)
-        .unwrap()
-        .try_with_circuit_bootstrap(gadget)
-        .unwrap();
+    let context = Context::try_from_pbs_config(pbs).unwrap();
+    let mut rng = StdRng::seed_from_u64(108);
+    assert!(matches!(
+        context.try_generate_circuit_bootstrap_keys(&mut rng),
+        Err(primus_tfhe_ntru::KeyGenerationError::MissingCircuitBootstrapParameters)
+    ));
+    let context = context.try_with_circuit_bootstrap(gadget).unwrap();
     let mut other_pbs = pbs;
     other_pbs.bsk_poly_length = PolyLength::new(64);
     let other = Context::try_from_pbs_config(other_pbs)
         .unwrap()
         .try_with_circuit_bootstrap(gadget)
         .unwrap();
-    let mut rng = StdRng::seed_from_u64(108);
     let (_, server) = context
         .try_generate_circuit_bootstrap_keys(&mut rng)
         .unwrap();
+
+    // NTRU rejects the GLWE MSB correction with otherwise matching parameters.
+    let input_codec = RoundedCodec::new(2, context.parameters().external_lwe().cipher_modulus());
+    let msb = CircuitBootstrapLookupTable::try_from_fn(
+        context.parameters().poly_length(),
+        &input_codec,
+        CbsInputEncoding::MsbBoolean,
+        context.cbs_parameters().unwrap().gadget().output_basis(),
+        context.parameters().accumulator_ntru().cipher_modulus(),
+        |bit| bit as u32,
+    )
+    .unwrap();
+    assert!(matches!(
+        CircuitBootstrapEvaluator::try_with_lookup_table(
+            &context,
+            server.circuit_bootstrap_key(),
+            msb,
+        ),
+        Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
+    ));
+
     let (_, other_server) = other.try_generate_circuit_bootstrap_keys(&mut rng).unwrap();
 
     // Keep q, native Q, precision and gadgets identical; change only trace/SS N.

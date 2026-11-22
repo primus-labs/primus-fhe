@@ -4,13 +4,11 @@ use primus_decompose::{ApproxSignedBasisError, big_integer::BigUintApproxSignedB
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, DcrtGlweSecretKey, GlweSecretKey, RnsDomainError,
-    SecretKeyDistr,
+    CrtGlweEncryptionParametersError, RnsDomainError, SecretKeyDistr,
 };
 use primus_integer::BigUint;
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
 use primus_modulus::BarrettModulus;
-use primus_ntt::UintDcrtTable;
 use primus_rns::RNSBase;
 use primus_shape::PolyLength;
 
@@ -433,37 +431,4 @@ fn cached_weights_and_centered_digits_follow_rns_order() {
             }
         }
     }
-}
-
-// Equal limb counts and lengths do not imply equal ordered evaluation domains.
-#[test]
-fn gadget_encryption_binding_rejects_table_modulus_order_mismatch() {
-    let moduli_values = [1_125_899_906_826_241u64, 1_125_899_906_629_633];
-    let moduli = moduli_values.map(BarrettModulus::new);
-    let crt_glwe = support::RawParameters::new(
-        GlweDimension::new(1),
-        PolyLength::new(32),
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.2,
-    );
-    let crt_gadget = crt_glwe.gadget(DecompositionBaseLog::new(20), None);
-    let reversed = [moduli[1], moduli[0]];
-    let wrong_order_table = UintDcrtTable::new(PolyLength::new(32), &reversed).unwrap();
-    use rand::{SeedableRng, rngs::StdRng};
-    let table = UintDcrtTable::new(PolyLength::new(32), &moduli).unwrap();
-    let secret = GlweSecretKey::generate(
-        crt_glwe.glwe_size(),
-        crt_glwe.secret_key_sampler(),
-        &mut StdRng::seed_from_u64(913),
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    assert!(matches!(
-        key.try_bind_gadget(
-            &crt_gadget,
-            crt_glwe.encryption_parameters(),
-            &wrong_order_table
-        ),
-        Err(RnsDomainError::ModulusOrderMismatch { index: 0, .. })
-    ));
 }

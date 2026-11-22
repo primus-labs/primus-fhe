@@ -1,6 +1,9 @@
 //! Small exact fixtures shared by evaluation tests.
 
-use primus_lattice::glwe::Glwe;
+use primus_glwe::{GlweParameters, GlweSecretKey, SecretKeyDistr};
+use primus_lattice::{GlweDimension, glwe::Glwe};
+use primus_reduce::RingContext;
+use primus_shape::PolyLength;
 use rand::{RngExt, rngs::StdRng};
 
 pub(super) const N: usize = 32;
@@ -64,14 +67,29 @@ pub(super) fn assert_phase(cipher: &[u64], expected: &[u64], secret: &[i64], q: 
     }
 }
 
-pub(super) fn secret() -> Vec<i64> {
-    (0..K * N)
+// Use fixed signed coefficients so the phase oracle can observe both mask signs.
+pub(super) fn fixed_ternary_glwe<M: RingContext<u64>>(
+    modulus: M,
+    plaintext_modulus: u64,
+    distribution: SecretKeyDistr,
+) -> (GlweParameters<u64, M>, GlweSecretKey<u64>) {
+    let params = GlweParameters::new(
+        GlweDimension::new(K),
+        PolyLength::new(N),
+        plaintext_modulus,
+        modulus,
+        distribution,
+        0.7,
+    );
+    let coefficients = (0..K * N)
         .map(|i| match (i * 7 + i / 3) % 3 {
             0 => -1,
             1 => 0,
             _ => 1,
         })
-        .collect()
+        .collect();
+    let key = GlweSecretKey::new(coefficients, params.size(), distribution);
+    (params, key)
 }
 
 pub(super) fn message(q: u128) -> Vec<u64> {

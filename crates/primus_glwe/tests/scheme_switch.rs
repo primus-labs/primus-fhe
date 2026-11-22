@@ -4,8 +4,8 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionL
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    GlevParameters, GlweParameters, GlweSecretKey, NttGlweGadgetEncryptWorkspace,
-    NttGlweSchemeSwitchKey, NttGlweSecretKey, SecretKeyDistr,
+    GlevParameters, GlweParameters, NttGlweGadgetEncryptWorkspace, NttGlweSchemeSwitchKey,
+    NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{
@@ -151,7 +151,7 @@ fn ntt_scheme_switch_produces_an_external_product_control() {
 }
 
 fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
-    use common::{K, N, assert_phase, encrypt, message, secret};
+    use common::{K, N, assert_phase, encrypt, fixed_ternary_glwe, message};
     use primus_fft::FftEngine;
     use primus_glwe::{FourierGlweSchemeSwitchKey, GlweSize};
     use primus_lattice::{
@@ -163,14 +163,8 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
 
     let table = Table::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64u64,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
+    let (params, coeff) =
+        fixed_ternary_glwe(NativeModulus::new(), 64, SecretKeyDistr::UniformTernary);
     // The output's gadget basis is independent of the scheme-switch key's basis.
     let output_params = GlevParameters::with_glwe_params(
         &params,
@@ -186,7 +180,8 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
             level_count: Some(DecompositionLevelCount::new(4)),
         },
     );
-    let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
+    let secret = coeff.as_slice();
+    let q = 1u128 << 64;
     let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x534348454d45);
     let key = FourierGlweSchemeSwitchKey::generate(
@@ -205,7 +200,7 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
     {
         let mut m = vec![0; N];
         m[N - 1] = scalar;
-        block.copy_from_slice(encrypt(&m, &secret(), 1u128 << 64, &mut rng).as_ref());
+        block.copy_from_slice(encrypt(&m, secret, q, &mut rng).as_ref());
     }
     let mut output = FourierGgsw::<Vec<_>>::zero(output_params.fourier_ggsw_len());
     let mut workspace = FourierGlweExternalProductWorkspace::new(key_params.size());
@@ -228,17 +223,17 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
             if row == K {
                 expected[N - 1] = scalar;
             } else {
-                for (i, &s) in secret()[row * N..(row + 1) * N].iter().enumerate() {
+                for (i, &s) in secret[row * N..(row + 1) * N].iter().enumerate() {
                     // -s(X) * X^(N-1), reduced modulo X^N+1.
                     let value = (s as u64).wrapping_mul(scalar);
                     expected[(i + N - 1) % N] = if i == 0 { value.wrapping_neg() } else { value };
                 }
             }
-            assert_phase(ciphertext, &expected, &secret(), 1u128 << 64);
+            assert_phase(ciphertext, &expected, secret, q);
         }
     }
-    let m = message(1u128 << 64);
-    let selected = encrypt(&m, &secret(), 1u128 << 64, &mut rng);
+    let m = message(q);
+    let selected = encrypt(&m, secret, q, &mut rng);
     let mut product = Glwe::new(vec![0; params.glwe_len()]);
     output.external_product_to(
         &selected,
@@ -252,7 +247,7 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
     for i in 1..N {
         expected[i - 1] = m[i].wrapping_neg();
     }
-    assert_phase(product.as_ref(), &expected, &secret(), 1u128 << 64);
+    assert_phase(product.as_ref(), &expected, secret, q);
 
     let wrong_table = Table::new(PolyLength::new(N * 2));
     let mut wrong_fft = FftEngine::new(&wrong_table);

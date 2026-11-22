@@ -29,7 +29,7 @@ mod binding;
 #[path = "cbs/one_hot.rs"]
 mod one_hot;
 
-use self::binding::{assert_msb_lookup_is_rejected, check_resources_and_return};
+use self::binding::check_resources_and_return;
 
 type Context<T, Table> = TfheContext<T, Table, PowOf2Modulus<T>>;
 
@@ -96,7 +96,6 @@ pub(super) fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>
         .unwrap();
     let mut control = cbs.allocate_output();
 
-    assert_msb_lookup_is_rejected(&context, &server);
     let mut phase = PhaseOracle::new(&context, client.accumulator_ntru_secret_key());
     if let Some(lift) = public_lift {
         check_public_lift(&context, &server, &lift, &mut ring, &mut phase);

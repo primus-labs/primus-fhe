@@ -347,53 +347,42 @@ fn check_native_lift<Table: FftTable>() {
             PolyLength::new(N),
             DecompositionLevelCount::new(levels),
         );
-        let mut initializer =
-            primus_lattice::nlev::FourierNlev::<Vec<_>>::zero(gadget.fourier_nlev_len());
-        let mut positive = initializer.clone();
-        let mut negative = initializer.clone();
-        key.encrypt_nlev_constant_to(
-            1,
-            &mut initializer,
-            &gadget,
-            &mut fft,
-            &mut ZeroRng,
-            &mut encryption,
-        );
-        for (ternary, bit) in [(false, 0), (false, 1), (true, -1), (true, 0), (true, 1)] {
+        // Zero sampled noise makes these rows identical wherever their bit
+        // is reused. The phase oracle below still checks every signed branch.
+        let [zero, one] = [0u32, 1].map(|bit| {
+            let mut control =
+                primus_lattice::nlev::FourierNlev::<Vec<_>>::zero(gadget.fourier_nlev_len());
             key.encrypt_nlev_constant_to(
-                u32::from(bit == 1),
-                &mut positive,
+                bit,
+                &mut control,
                 &gadget,
                 &mut fft,
                 &mut ZeroRng,
                 &mut encryption,
             );
-            key.encrypt_nlev_constant_to(
-                u32::from(bit == -1),
-                &mut negative,
-                &gadget,
-                &mut fft,
-                &mut ZeroRng,
-                &mut encryption,
-            );
-            for input in [
-                embedded_fixture(&[0, 1, 127, 128, 257, ring.0 - 1, ring.0 / 2, ring.0 / 2 + 1]),
-                embedded_fixture(&[256, 512, 768, 1024, 0, ring.0 - 256, ring.0 - 512, 1]),
-            ] {
-                let decomposed = digits(ring, input, basis);
-                let reconstructed: Poly = std::array::from_fn(|i| {
-                    decomposed
-                        .iter()
-                        .zip(basis.scalar_iter())
-                        .map(|(d, g)| d[i] * i128::from(g))
-                        .sum()
-                });
-                if levels == 3 {
-                    assert_ne!(ring.scale(reconstructed, 1), input);
-                } else {
-                    assert_eq!(ring.scale(reconstructed, 1), input);
-                }
-                let public = Polynomial::new(coefficients(input));
+            control
+        });
+        for input in [
+            embedded_fixture(&[0, 1, 127, 128, 257, ring.0 - 1, ring.0 / 2, ring.0 / 2 + 1]),
+            embedded_fixture(&[256, 512, 768, 1024, 0, ring.0 - 256, ring.0 - 512, 1]),
+        ] {
+            let decomposed = digits(ring, input, basis);
+            let reconstructed: Poly = std::array::from_fn(|i| {
+                decomposed
+                    .iter()
+                    .zip(basis.scalar_iter())
+                    .map(|(d, g)| d[i] * i128::from(g))
+                    .sum()
+            });
+            if levels == 3 {
+                assert_ne!(ring.scale(reconstructed, 1), input);
+            } else {
+                assert_eq!(ring.scale(reconstructed, 1), input);
+            }
+            let public = Polynomial::new(coefficients(input));
+            for (ternary, bit) in [(false, 0), (false, 1), (true, -1), (true, 0), (true, 1)] {
+                let positive = if bit == 1 { &one } else { &zero };
+                let negative = if bit == -1 { &one } else { &zero };
                 for exponent in 0..2 * N {
                     let rotation = match bit {
                         -1 => (2 * N - exponent) % (2 * N),
@@ -402,9 +391,9 @@ fn check_native_lift<Table: FftTable>() {
                     };
                     let expected_phase = ring.rotate(reconstructed, rotation);
                     let expected = ring.mul(inverse, expected_phase);
-                    initializer.lift_monomial_to(
-                        &positive,
-                        ternary.then_some(&negative),
+                    one.lift_monomial_to(
+                        positive,
+                        ternary.then_some(negative),
                         &public,
                         exponent,
                         &mut output,
@@ -431,8 +420,7 @@ fn native_fused_lift_matches_modular_inverse_and_decomposition_residual() {
 
 // Exact same-secret automorphism is f^-1 * sigma(f*c). This reference follows
 // the algebra, not the production permutation/key-switch implementation.
-fn modular_trace(ring: Ring, input: Poly, retained: usize) -> Poly {
-    let inverse = ring.inverse(SECRET);
+fn modular_trace(ring: Ring, inverse: Poly, input: Poly, retained: usize) -> Poly {
     let mut output = input;
     for k in retained.trailing_zeros() + 1..=N.trailing_zeros() {
         let half = ring.scale(output, inverse_scalar(2, ring.0).unwrap());
@@ -507,9 +495,17 @@ fn trace_inputs(ring: Ring) -> [Poly; 3] {
     ]
 }
 
+fn one_stage_trace_input(ring: Ring) -> Poly {
+    // Consecutive coefficients exercise both retained and discarded indices.
+    let mut input = [0; N];
+    input[..4].copy_from_slice(&[1, 2, ring.0 - 1, ring.0 - 2]);
+    input
+}
+
 #[test]
 fn ntt_reverse_trace_matches_exact_same_secret_oracle() {
     let ring = Ring(257);
+    let inverse = ring.inverse(SECRET);
     let modulus = BarrettModulus::new(257u32);
     let table = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
     let secret = NtruSecretKey::new(
@@ -540,22 +536,27 @@ fn ntt_reverse_trace_matches_exact_same_secret_oracle() {
         &mut NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N)),
     );
     let mut workspace = NttNtruTraceWorkspace::new(PolyLength::new(N));
+    let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
+    let mut check = |input, retained| {
+        let ciphertext = NtruCiphertext::new(coefficients(input));
+        let phase = ring.mul(SECRET, input);
+        let expected = modular_trace(ring, inverse, input, retained);
+        assert_eq!(ring.mul(SECRET, expected), project(phase, retained));
+        trace.apply_reverse_partial_to(
+            &ciphertext,
+            retained,
+            &mut output,
+            modulus,
+            &table,
+            &mut workspace,
+        );
+        assert_eq!(polynomial(output.as_ref()), expected);
+    };
+
+    check(one_stage_trace_input(ring), N / 2);
     for input in trace_inputs(ring) {
         for retained in [1, 2, 4, N] {
-            let expected = modular_trace(ring, input, retained);
-            let phase = ring.mul(SECRET, input);
-            let projection = project(phase, retained);
-            assert_eq!(ring.mul(SECRET, expected), projection);
-            let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
-            trace.apply_reverse_partial_to(
-                &NtruCiphertext::new(coefficients(input)),
-                retained,
-                &mut output,
-                modulus,
-                &table,
-                &mut workspace,
-            );
-            assert_eq!(polynomial(output.as_ref()), expected);
+            check(input, retained);
         }
     }
 }
@@ -609,20 +610,26 @@ fn check_native_trace<Table: FftTable>() {
                 .clone()
                 .map(move |bits| std::array::from_fn(|i| base + ((bits >> (i % 8)) & 1) as i128))
         });
+    let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
+    let mut check = |input, retained| {
+        let ciphertext = NtruCiphertext::new(coefficients(input));
+        let expected = native_trace(ring, inverse, input, retained);
+        trace.apply_reverse_partial_to(
+            &ciphertext,
+            retained,
+            &mut output,
+            &mut fft,
+            &mut workspace,
+        );
+        // The small native-u32 fixture rounds back to the exact modular
+        // result, including the unsigned floor error, on both FFT engines.
+        assert_eq!(polynomial(output.as_ref()), expected);
+    };
+
+    check(one_stage_trace_input(ring), N / 2);
     for input in trace_inputs(ring).into_iter().chain(parity_inputs) {
         for retained in [1, 2, 4, N] {
-            let expected = native_trace(ring, inverse, input, retained);
-            let mut output = NtruCiphertext::<Vec<u32>>::zero(N);
-            trace.apply_reverse_partial_to(
-                &NtruCiphertext::new(coefficients(input)),
-                retained,
-                &mut output,
-                &mut fft,
-                &mut workspace,
-            );
-            // Both engines round this small native-u32 fixture back to the
-            // exact modular result, including the unsigned floor error.
-            assert_eq!(polynomial(output.as_ref()), expected);
+            check(input, retained);
         }
     }
 }

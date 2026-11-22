@@ -2,7 +2,7 @@
 mod support;
 
 use primus_decompose::DecompositionBaseLog;
-use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey};
+use primus_glwe_rns::DcrtGlweCiphertext;
 use primus_lattice::{glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
 use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
@@ -21,11 +21,10 @@ fn external_product_matches_coefficient_phase_on_the_active_prefix() {
     let inner = parameters.encryption_parameters();
     let base_q = parameters.base_q();
     let poly_length = parameters.poly_length().get();
-    let table = UintDcrtTable::new(parameters.poly_length(), base_q.moduli()).unwrap();
+    let table = parameters.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
     let glev_params = parameters.gadget(DecompositionBaseLog::new(20), None);
-    let sk = GlweSecretKey::generate(parameters.glwe_size(), inner.secret_key_sampler(), &mut rng);
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
+    let (_, dcrt_sk) = parameters.generate_key_pair(&table, &mut rng);
     let dcrt_sk_context = dcrt_sk.try_bind_raw(inner, base_q, &table).unwrap();
     let pk = dcrt_sk_context.public_key(&mut rng);
 

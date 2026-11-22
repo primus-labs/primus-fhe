@@ -7,11 +7,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
 use primus_modulus::BarrettModulus;
-use primus_modulus::NativeModulus;
 use primus_ntru::{
     FourierNtruAutomorphismKey, FourierNtruAutomorphismWorkspace, FourierNtruCiphertext,
     FourierNtruDecryptWorkspace, FourierNtruEncryptWorkspace, FourierNtruGadgetEncryptWorkspace,
-    FourierNtruSecretKey, NlevParameters, NtruCiphertext, NtruParameters, NttNtruAutomorphismKey,
+    FourierNtruSecretKey, NlevParameters, NtruCiphertext, NttNtruAutomorphismKey,
     NttNtruAutomorphismWorkspace, NttNtruCiphertext, NttNtruGadgetEncryptWorkspace,
     NttNtruSecretKey, SecretKeyDistr,
 };
@@ -19,9 +18,9 @@ use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
-const N: usize = 64;
-const Q: u32 = 132_120_577;
-const P: u32 = 16;
+#[path = "support/u32_ring.rs"]
+mod test_ring;
+use test_ring::{LENGTH, N, P, native_parameters, ntt_parameters};
 
 fn substitute(input: &[u32], degree: usize) -> Vec<u32> {
     let mut output = vec![0; input.len()];
@@ -37,15 +36,9 @@ fn substitute(input: &[u32], degree: usize) -> Vec<u32> {
 }
 
 fn fourier_automorphism<Table: FftTable>() {
-    let table = Table::new(PolyLength::new(N));
+    let table = Table::new(LENGTH);
     let mut fft = FftEngine::new(&table);
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        P,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let parameters = native_parameters(SecretKeyDistr::SparseTernary);
     let mut rng = StdRng::seed_from_u64(0x6175_746f_464f_5552);
     let (secret, key) =
         FourierNtruSecretKey::generate_pair(parameters.encryption_parameters(), &mut fft, &mut rng)
@@ -58,17 +51,19 @@ fn fourier_automorphism<Table: FftTable>() {
         PlaintextEmbedding::Unsigned,
         &mut fft,
         &mut rng,
-        &mut FourierNtruEncryptWorkspace::new(PolyLength::new(N)),
+        &mut FourierNtruEncryptWorkspace::new(LENGTH),
     );
     let mut coefficients = NtruCiphertext::<Vec<u32>>::zero(N);
     input.write_torus_form(&mut coefficients, &mut fft);
-    let mut generation = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
-    let mut workspace = FourierNtruAutomorphismWorkspace::new(PolyLength::new(N));
-    let mut decrypt = FourierNtruDecryptWorkspace::new(PolyLength::new(N));
+    let mut generation = FourierNtruGadgetEncryptWorkspace::new(LENGTH);
+    let mut workspace = FourierNtruAutomorphismWorkspace::new(LENGTH);
+    let mut decrypt = FourierNtruDecryptWorkspace::new(LENGTH);
     let mut output = NtruCiphertext::new(vec![7u32; N]);
     let mut transformed_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
     let mut transformed_coeff_output = FourierNtruCiphertext::<Vec<Complex64>>::zero(N / 2);
-    for log_basis in [3, 10] {
+    // Cover the substitution degrees with one basis and a nonidentity degree
+    // with the other; degree and decomposition configure different operations.
+    for (log_basis, degrees) in [(3, &[1, 3, N + 1, 2 * N - 1][..]), (10, &[3][..])] {
         let gadget = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -76,7 +71,7 @@ fn fourier_automorphism<Table: FftTable>() {
                 level_count: None,
             },
         );
-        for degree in [1, 3, N + 1, 2 * N - 1] {
+        for &degree in degrees {
             let auto = FourierNtruAutomorphismKey::generate(
                 degree,
                 &secret,
@@ -101,11 +96,12 @@ fn fourier_automorphism<Table: FftTable>() {
             output.write_fourier_form(&mut transformed_coeff_output, &mut fft);
             // Different representative/rounding paths need not be bit-identical.
             // Both must decrypt the independently substituted target message.
+            let expected = substitute(&message, degree);
             for output in [&transformed_output, &transformed_coeff_output] {
                 assert_eq!(
                     key.decrypt_message(output, &parameters, &mut fft, &mut decrypt)
                         .as_ref(),
-                    substitute(&message, degree),
+                    expected,
                     "degree={degree}, log_basis={log_basis}",
                 );
             }
@@ -122,16 +118,10 @@ fn fourier_automorphism_preserves_the_original_nonbinary_secret() {
 #[test]
 fn fourier_automorphism_rejects_incompatible_resources_before_writes() {
     // Boundary checks run before any backend work; both FFT layouts are covered above.
-    let table = RustFftTable::new(PolyLength::new(N));
+    let table = RustFftTable::new(LENGTH);
     let short_table = RustFftTable::new(PolyLength::new(N / 2));
     let mut fft = FftEngine::new(&table);
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        P,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let parameters = native_parameters(SecretKeyDistr::SparseTernary);
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -143,7 +133,7 @@ fn fourier_automorphism_rejects_incompatible_resources_before_writes() {
     let (secret, key) =
         FourierNtruSecretKey::generate_pair(parameters.encryption_parameters(), &mut fft, &mut rng)
             .unwrap();
-    let mut generation = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
+    let mut generation = FourierNtruGadgetEncryptWorkspace::new(LENGTH);
     let auto = FourierNtruAutomorphismKey::generate(
         3,
         &secret,
@@ -214,15 +204,8 @@ fn fourier_automorphism_rejects_incompatible_resources_before_writes() {
 
 #[test]
 fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
-    let modulus = BarrettModulus::new(Q);
-    let table = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        P,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let (parameters, table) = ntt_parameters(SecretKeyDistr::SparseTernary);
+    let modulus = parameters.cipher_modulus();
     let mut rng = StdRng::seed_from_u64(0x6175_746f_4e54_5452);
     let (secret, key) =
         NttNtruSecretKey::generate_pair(parameters.encryption_parameters(), &table, &mut rng)
@@ -238,12 +221,12 @@ fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
     );
     let mut coefficients = NtruCiphertext::<Vec<u32>>::zero(N);
     input.write_coeff_form(&mut coefficients, &table);
-    let mut generation = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
-    let mut workspace = NttNtruAutomorphismWorkspace::new(PolyLength::new(N));
+    let mut generation = NttNtruGadgetEncryptWorkspace::new(LENGTH);
+    let mut workspace = NttNtruAutomorphismWorkspace::new(LENGTH);
     let mut output = NtruCiphertext::new(vec![7u32; N]);
     let mut transformed_output = NttNtruCiphertext::<Vec<u32>>::zero(N);
     let mut transformed_coeff_output = NttNtruCiphertext::<Vec<u32>>::zero(N);
-    for log_basis in [3, 10] {
+    for (log_basis, degrees) in [(3, &[1, 3, N + 1, 2 * N - 1][..]), (10, &[3][..])] {
         let gadget = NlevParameters::with_ntru_params(
             &parameters,
             DecompositionConfig {
@@ -251,7 +234,7 @@ fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
                 level_count: None,
             },
         );
-        for degree in [1, 3, N + 1, 2 * N - 1] {
+        for &degree in degrees {
             let auto = NttNtruAutomorphismKey::generate(
                 degree,
                 &secret,
@@ -289,18 +272,11 @@ fn ntt_automorphism_preserves_the_original_nonbinary_secret() {
 
 #[test]
 fn ntt_automorphism_rejects_incompatible_resources_before_writes() {
-    let modulus = BarrettModulus::new(Q);
+    let (parameters, table) = ntt_parameters(SecretKeyDistr::SparseTernary);
+    let modulus = parameters.cipher_modulus();
     let other_modulus = BarrettModulus::new(998_244_353);
-    let table = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
     let short_table = UintNttTable::new(PolyLength::new(N / 2), modulus).unwrap();
-    let other_table = UintNttTable::new(PolyLength::new(N), other_modulus).unwrap();
-    let parameters = NtruParameters::new(
-        PolyLength::new(N),
-        P,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let other_table = UintNttTable::new(LENGTH, other_modulus).unwrap();
     let gadget = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -312,7 +288,7 @@ fn ntt_automorphism_rejects_incompatible_resources_before_writes() {
     let (secret, key) =
         NttNtruSecretKey::generate_pair(parameters.encryption_parameters(), &table, &mut rng)
             .unwrap();
-    let mut generation = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(N));
+    let mut generation = NttNtruGadgetEncryptWorkspace::new(LENGTH);
     let auto = NttNtruAutomorphismKey::generate(
         3,
         &secret,

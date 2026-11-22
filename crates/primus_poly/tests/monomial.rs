@@ -107,36 +107,36 @@ fn check<T: FheUint + Into<u64>, M: RingContext<T>>(modulus: M, q: u128) {
             }
             for (&rb, second_rotated) in exponents.iter().zip(&second_rotations) {
                 let mut output = values[2 * len..].to_vec();
-                let mut expected = output.clone();
-                // Repeat on the initialized accumulator to exercise scratch reuse.
-                for _ in 0..2 {
-                    for ((acc, &first), &second) in
-                        expected.iter_mut().zip(&rotated).zip(second_rotated)
-                    {
-                        let sum = u128::from((*acc).into())
+                // The nonzero accumulator distinguishes an update from an overwrite.
+                let expected: Vec<_> = output
+                    .iter()
+                    .zip(&rotated)
+                    .zip(second_rotated)
+                    .map(|((&acc, &first), &second)| {
+                        let sum = u128::from(acc.into())
                             + u128::from(first.into())
                             + u128::from(second.into());
-                        *acc = T::as_from((sum % q) as u64);
-                    }
-                    if components == 1 {
-                        Polynomial(output.as_mut_slice())
-                            .add_mul_monomial_pair_assign(&first, ra, &second, rb, modulus);
-                    } else {
-                        primus_poly::add_mul_monomial_pair_assign(
-                            &mut output,
-                            first.as_ref(),
-                            ra,
-                            second.as_ref(),
-                            rb,
-                            n,
-                            modulus,
-                        );
-                    }
-                    assert_eq!(
-                        output, expected,
-                        "N={n}, components={components}, ra={ra}, rb={rb}"
+                        T::as_from((sum % q) as u64)
+                    })
+                    .collect();
+                if components == 1 {
+                    Polynomial(output.as_mut_slice())
+                        .add_mul_monomial_pair_assign(&first, ra, &second, rb, modulus);
+                } else {
+                    primus_poly::add_mul_monomial_pair_assign(
+                        &mut output,
+                        first.as_ref(),
+                        ra,
+                        second.as_ref(),
+                        rb,
+                        n,
+                        modulus,
                     );
                 }
+                assert_eq!(
+                    output, expected,
+                    "N={n}, components={components}, ra={ra}, rb={rb}"
+                );
             }
         }
     }
@@ -151,6 +151,18 @@ fn monomial_operations_match_independent_ring_arithmetic() {
     check::<u32, _>(BarrettModulus::new(132_120_577u32), 132_120_577);
     const Q64: u64 = 1_152_921_504_606_830_593;
     check::<u64, _>(BarrettModulus::new(Q64), Q64.into());
+}
+
+#[test]
+fn crt_monomial_uses_each_limbs_modulus() {
+    let moduli = [17u32, 97].map(BarrettModulus::new);
+    // X(3 + 4X) = -4 + 3X and X^3(3 + 4X) = 4 - 3X when X^2 = -1.
+    // Both limbs start with the same coefficients, so each negation reveals its modulus.
+    for (exponent, expected) in [(1, [13, 3, 93, 3]), (3, [4, 14, 4, 94])] {
+        let mut polynomial = CrtPolynomial::new([3, 4, 3, 4]);
+        polynomial.mul_monomial_assign(exponent, 2, &moduli);
+        assert_eq!(polynomial.as_ref(), expected, "exponent={exponent}");
+    }
 }
 
 // Start at both ends of the redundant range, then retain it across paired and
@@ -201,23 +213,14 @@ fn check_lazy_monomials<T: FheUint + Into<u64>>(q: T) {
                     .iter()
                     .map(|&v| u128::from(v.into()) % wide_q)
                     .collect();
-                for _ in 0..2 {
-                    lazy_add_mul_monomial_pair_assign(
-                        &mut actual,
-                        &first,
-                        a,
-                        &second,
-                        b,
-                        n,
-                        modulus,
-                    );
-                    assert!(actual.iter().all(|&v| v < q + q));
-                    lazy_add_mul_monomial_assign(&mut actual, &first, b, n, modulus);
-                    assert!(actual.iter().all(|&v| v < q + q));
-                    for rotated in [first_rotated, second_rotated, tail_rotated] {
-                        for (sum, &value) in expected.iter_mut().zip(rotated) {
-                            *sum = (*sum + u128::from(value.into())) % wide_q;
-                        }
+                lazy_add_mul_monomial_pair_assign(&mut actual, &first, a, &second, b, n, modulus);
+                assert!(actual.iter().all(|&v| v < q + q));
+                // The single update consumes the still-redundant result of the pair.
+                lazy_add_mul_monomial_assign(&mut actual, &first, b, n, modulus);
+                assert!(actual.iter().all(|&v| v < q + q));
+                for rotated in [first_rotated, second_rotated, tail_rotated] {
+                    for (sum, &value) in expected.iter_mut().zip(rotated) {
+                        *sum = (*sum + u128::from(value.into())) % wide_q;
                     }
                 }
                 modulus.reduce_once_slice_assign(&mut actual);

@@ -1,29 +1,8 @@
 use primus_modulus::BarrettModulus;
-use primus_poly::{DcrtPolynomial, NttPolynomial};
+use primus_poly::DcrtPolynomial;
 use primus_reduce::ReduceError;
 
-#[test]
-fn ntt_inverse_writes_reciprocals_and_rejects_zero() {
-    let modulus = BarrettModulus::new(17u32);
-    let input = NttPolynomial::new(vec![1, 2, 3, 4]);
-    let mut output = NttPolynomial::new(vec![u32::MAX; 4]);
-
-    input.inv_to(&mut output, modulus);
-
-    assert_eq!(output.as_slice(), &[1, 9, 6, 13]);
-
-    // The error identifies the noninvertible coefficient and its modulus.
-    let input = NttPolynomial::new(vec![1, 0, 3, 4]);
-
-    assert_eq!(
-        input.try_inv_to(&mut output, modulus),
-        Err(ReduceError::NoInverse {
-            value: 0,
-            modulus: 17,
-        })
-    );
-}
-
+// Reducer tests cover a single slice. DCRT pairs each slice with its own modulus.
 #[test]
 fn dcrt_inverse_preserves_modulus_order_and_reports_failing_component() {
     let moduli = [BarrettModulus::new(17u32), BarrettModulus::new(19u32)];

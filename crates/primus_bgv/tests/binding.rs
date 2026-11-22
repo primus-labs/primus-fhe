@@ -113,16 +113,29 @@ fn import_preserves_storage_and_borrows_keep_exact_owner_and_level() {
 }
 
 #[test]
-fn raw_factor_is_checked_when_adopting_or_exporting() {
+fn raw_factor_is_checked_when_importing_adopting_or_exporting() {
+    const COMPOSITE_P: u64 = 15;
     let source = BgvContext::try_with_levels(parameters(), 2).unwrap();
     let target = BgvContext::try_with_table(
-        parameters_with_plaintext_modulus(15),
+        parameters_with_plaintext_modulus(COMPOSITE_P),
         2,
         source.shared_table(),
     )
     .unwrap();
     let words = 2 * source.rns_poly_len(1);
-    let input = source.try_import_ciphertext(vec![0; words], 1, 3).unwrap();
+    // A wrapped unit (p + 1) and an in-range nonunit must both be rejected.
+    let storage = vec![0; words];
+    for factor in [0, COMPOSITE_P, COMPOSITE_P + 1, 5] {
+        assert_eq!(
+            target.try_import_ciphertext(storage.as_slice(), 1, factor),
+            Err(BgvCiphertextBindingError::CorrectionFactor {
+                factor,
+                plaintext_modulus: COMPOSITE_P,
+            })
+        );
+    }
+
+    let input = source.try_import_ciphertext(storage, 1, 3).unwrap();
     let mut raw = BgvCiphertext::zero_raw(words);
     BgvEvaluator::new(&source, 1).neg_to(&input, &mut raw);
     assert_eq!(raw.correction_factor(), 3);
@@ -136,7 +149,7 @@ fn raw_factor_is_checked_when_adopting_or_exporting() {
         target.try_bind_ciphertext(raw, 1),
         Err(BgvCiphertextBindingError::CorrectionFactor {
             factor: 3,
-            plaintext_modulus: 15,
+            plaintext_modulus: COMPOSITE_P,
         })
     ));
 }

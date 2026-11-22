@@ -52,9 +52,7 @@ fn reusable_material<Table: FftTable>() {
 
     let n = PolyLength::new(32);
     let table = Table::new(n);
-    let other_table = Table::new(PolyLength::new(64));
     let mut fft = FftEngine::new(&table);
-    let mut other_fft = FftEngine::new(&other_table);
     let basis = ApproxSignedBasis::<u64>::try_from((
         DecompositionConfig {
             log_basis: DecompositionBaseLog::new(4),
@@ -64,7 +62,6 @@ fn reusable_material<Table: FftTable>() {
     ))
     .unwrap();
     let mut ordinary = FourierNtruExternalProductWorkspace::new(n);
-    let mut wrong_workspace = FourierNtruExternalProductWorkspace::new(PolyLength::new(64));
     let mut split = FourierNtruSplitWorkspace::new(n);
     let digits: Vec<_> = (0..n.get())
         .map(|index| u64::from(index == 0 || index == n.get() - 1))
@@ -107,32 +104,6 @@ fn reusable_material<Table: FftTable>() {
                 );
                 assert_eq!(from_output, expected);
             }
-
-            // All public shape failures precede spectrum writes. A later valid
-            // product must still consume the complete previous material.
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    key.set_from_coefficients(&rows[..rows.len() - 1], &mut fft, &mut ordinary);
-                }))
-                .is_err()
-            );
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    key.set_from_coefficients(&rows, &mut other_fft, &mut ordinary);
-                }))
-                .is_err()
-            );
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    key.set_from_coefficients(&rows, &mut fft, &mut wrong_workspace);
-                }))
-                .is_err()
-            );
-            key.external_product_to(&digits, &mut output, &mut fft, &mut ordinary, &mut split);
-            assert_eq!(
-                output,
-                split_row_reference(&rows[..n.get()], &digits, bits, &mut fft)
-            );
         }
 
         // Small exact coefficients stay far inside the limb precision budget;
@@ -143,6 +114,46 @@ fn reusable_material<Table: FftTable>() {
         key.set_from_coefficients(&rows, &mut fft, &mut ordinary);
         key.external_product_to(&digits, &mut output, &mut fft, &mut ordinary, &mut split);
         assert_eq!(output, product(&rows[..n.get()], &digits));
+    }
+
+    // Refill checks the shape before splitting any coefficients, regardless of
+    // the limb width or previous refills. Try to erase the retained material
+    // with a distinct zero input, then probe all levels and both limbs.
+    let bits = 35;
+    let levels = basis.level_count().get();
+    let rows = vec![(1u64 << bits) + 1; n.get() * levels];
+    let mut key = FourierNtruSplitGadget::from_coefficients(&rows, &basis, bits, &mut fft);
+    let replacement = vec![0; rows.len()];
+    let other_n = PolyLength::new(64);
+    // Summing the place values selects digit one at every level.
+    let all_levels: u64 = basis.scalar_iter().sum();
+    let input: Vec<_> = digits.iter().map(|&digit| digit * all_levels).collect();
+    let expected: Vec<_> = product(&rows[..n.get()], &digits)
+        .into_iter()
+        .map(|coefficient| coefficient.wrapping_mul(levels as u64))
+        .collect();
+    for (case, coefficients, fft_length, workspace_length) in [
+        (
+            "coefficient length",
+            &replacement[..replacement.len() - 1],
+            n,
+            n,
+        ),
+        ("FFT length", &replacement, other_n, n),
+        ("workspace length", &replacement, n, other_n),
+    ] {
+        let table = Table::new(fft_length);
+        let mut attempt_fft = FftEngine::new(&table);
+        let mut attempt_workspace = FourierNtruExternalProductWorkspace::new(workspace_length);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                key.set_from_coefficients(coefficients, &mut attempt_fft, &mut attempt_workspace);
+            }))
+            .is_err(),
+            "{case}: malformed refill accepted"
+        );
+        key.external_product_to(&input, &mut output, &mut fft, &mut ordinary, &mut split);
+        assert_eq!(output, expected, "{case}: retained split material changed");
     }
 }
 

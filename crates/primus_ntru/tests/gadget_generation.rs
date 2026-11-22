@@ -22,6 +22,7 @@ use rand::{SeedableRng, rngs::StdRng};
 
 // Functional ring size; keep the original word widths, moduli and decomposition.
 const POLY_LENGTH: usize = 32;
+const LENGTH: PolyLength = PolyLength::new(POLY_LENGTH);
 const PLAINTEXT_MODULUS: u32 = 16;
 const EXPLICIT_MODULUS: u32 = 132_120_577;
 
@@ -79,9 +80,9 @@ fn decrypt_fourier_output(
 #[test]
 fn ntt_nlev_generation_and_ngsw_cmux() {
     let modulus = BarrettModulus::new(EXPLICIT_MODULUS);
-    let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
+    let ntt = UintNttTable::new(LENGTH, modulus).unwrap();
     let params = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
+        LENGTH,
         PLAINTEXT_MODULUS,
         modulus,
         SecretKeyDistr::SparseTernary,
@@ -98,7 +99,7 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
     let mut rng = StdRng::seed_from_u64(42);
     let secret_key =
         NttNtruSecretKey::generate(params.encryption_parameters(), &ntt, &mut rng).unwrap();
-    let mut gadget_workspace = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut gadget_workspace = NttNtruGadgetEncryptWorkspace::new(LENGTH);
 
     let mut nlev: NttNlevCiphertext<Vec<u32>> = NttNlevCiphertext::zero(gadget_params.nlev_len());
     secret_key.encrypt_nlev_constant_to(
@@ -110,8 +111,8 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
         &mut gadget_workspace,
     );
 
+    let mut phase = PolynomialOwned::zero(POLY_LENGTH);
     for (scalar, level) in basis.scalar_iter().zip(nlev.iter_ntt_ntru(POLY_LENGTH)) {
-        let mut phase = PolynomialOwned::zero(POLY_LENGTH);
         secret_key.decrypt_phase_to(&level, &mut phase, modulus, &ntt);
         assert!(explicit_distance(phase.as_ref()[0], scalar) <= 8);
         assert!(
@@ -132,23 +133,19 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
     );
 
     let messages = [plaintext(0), plaintext(2), plaintext(5)];
-    let candidates: Vec<Ntru<Vec<u32>>> = messages
-        .iter()
-        .map(|message| {
-            secret_key
-                .encrypt_message(
-                    &Polynomial::new(message.as_slice()),
-                    &params,
-                    PlaintextEmbedding::Unsigned,
-                    &ntt,
-                    &mut rng,
-                )
-                .into_coeff_form(&ntt)
-        })
-        .collect();
+    let candidates = messages.each_ref().map(|message| {
+        secret_key
+            .encrypt_message(
+                &Polynomial::new(message.as_slice()),
+                &params,
+                PlaintextEmbedding::Unsigned,
+                &ntt,
+                &mut rng,
+            )
+            .into_coeff_form(&ntt)
+    });
     let mut output: Ntru<Vec<u32>> = Ntru::zero(POLY_LENGTH);
-    let mut external_product_workspace =
-        NttNtruExternalProductWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut external_product_workspace = NttNtruExternalProductWorkspace::new(LENGTH);
 
     control.cmux_to(
         &candidates[0],
@@ -179,6 +176,8 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
     );
 
     let mut controls = vec![0; 2 * gadget_params.nlev_len()];
+    let mut difference = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
+    let mut product = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
     for (selected, expected) in messages.iter().enumerate() {
         let selectors = [i32::from(selected == 1), i32::from(selected == 2)];
         secret_key.encrypt_ngsw_signed_constant_batch_to(
@@ -192,8 +191,6 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
         // Reference: separately invert each product, always subtracting the
         // original default. Real encryptions of zero still contribute noise.
         let mut reference = candidates[0].clone();
-        let mut difference = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
-        let mut product = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
         for (selector, candidate) in
             NttNgswIter::new(&controls, gadget_params.nlev_len()).zip(&candidates[1..])
         {
@@ -229,10 +226,10 @@ fn ntt_nlev_generation_and_ngsw_cmux() {
 
 #[test]
 fn fourier_nlev_generation_and_ngsw_cmux() {
-    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
+    let table = RustFftTable::new(LENGTH);
     let mut fft = FftEngine::new(&table);
     let params = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
+        LENGTH,
         PLAINTEXT_MODULUS,
         NativeModulus::new(),
         SecretKeyDistr::SparseTernary,
@@ -249,8 +246,8 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
     let mut rng = StdRng::seed_from_u64(42);
     let secret_key =
         FourierNtruSecretKey::generate(params.encryption_parameters(), &mut fft, &mut rng).unwrap();
-    let mut gadget_workspace = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-    let mut decrypt_workspace = FourierNtruDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut gadget_workspace = FourierNtruGadgetEncryptWorkspace::new(LENGTH);
+    let mut decrypt_workspace = FourierNtruDecryptWorkspace::new(LENGTH);
 
     let mut nlev: FourierNlevCiphertext<Vec<Complex64>> =
         FourierNlevCiphertext::zero(gadget_params.fourier_nlev_len());
@@ -263,11 +260,11 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
         &mut gadget_workspace,
     );
 
+    let mut phase = PolynomialOwned::zero(POLY_LENGTH);
     for (scalar, level) in basis
         .scalar_iter()
         .zip(nlev.iter_ntru(fft.fourier_length()))
     {
-        let mut phase = PolynomialOwned::zero(POLY_LENGTH);
         secret_key.decrypt_phase_to(&level, &mut phase, &mut fft, &mut decrypt_workspace);
         assert!(native_distance(phase.as_ref()[0], scalar) <= 8);
         assert!(
@@ -289,9 +286,8 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
     );
 
     let messages = [plaintext(0), plaintext(2), plaintext(5)];
-    let mut encrypt_workspace = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-    let mut candidates = Vec::with_capacity(messages.len());
-    for message in &messages {
+    let mut encrypt_workspace = FourierNtruEncryptWorkspace::new(LENGTH);
+    let candidates = messages.each_ref().map(|message| {
         let input_fourier = secret_key.encrypt_message(
             &Polynomial::new(message.as_slice()),
             &params,
@@ -302,11 +298,10 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
         );
         let mut input: Ntru<Vec<u32>> = Ntru::zero(POLY_LENGTH);
         input_fourier.write_torus_form(&mut input, &mut fft);
-        candidates.push(input);
-    }
+        input
+    });
     let mut output: Ntru<Vec<u32>> = Ntru::zero(POLY_LENGTH);
-    let mut external_product_workspace =
-        FourierNtruExternalProductWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut external_product_workspace = FourierNtruExternalProductWorkspace::new(LENGTH);
 
     control.cmux_to(
         &candidates[0],
@@ -347,6 +342,8 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
     );
 
     let mut controls = vec![Complex64::default(); 2 * gadget_params.fourier_nlev_len()];
+    let mut difference = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
+    let mut product = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
     for (selected, expected) in messages.iter().enumerate() {
         let selectors = [i32::from(selected == 1), i32::from(selected == 2)];
         secret_key.encrypt_ngsw_signed_constant_batch_to(
@@ -361,8 +358,6 @@ fn fourier_nlev_generation_and_ngsw_cmux() {
         // Reference: separately invert each product, always subtracting the
         // original default. Real encryptions of zero still contribute noise.
         let mut reference = candidates[0].clone();
-        let mut difference = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
-        let mut product = Ntru::<Vec<u32>>::zero(POLY_LENGTH);
         for (selector, candidate) in
             FourierNgswIter::new(&controls, gadget_params.fourier_nlev_len()).zip(&candidates[1..])
         {

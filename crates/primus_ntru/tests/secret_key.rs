@@ -199,28 +199,6 @@ fn fourier_secret_key_encodings_reuse_ciphertext_storage() {
     }
 }
 
-#[test]
-fn transform_backends_reject_the_zero_key() {
-    let zero_key = NtruSecretKey::<u32>::new(
-        vec![i32::default(); POLY_LENGTH],
-        SecretKeyDistr::SparseTernary,
-    );
-
-    let modulus = BarrettModulus::new(132_120_577u32);
-    let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
-    assert!(matches!(
-        NttNtruSecretKey::try_from_coeff_secret_key(&zero_key, modulus, &ntt),
-        Err(NtruError::NonInvertibleSecretKey)
-    ));
-
-    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
-    let mut fft = FftEngine::new(&table);
-    assert!(matches!(
-        FourierNtruSecretKey::try_from_coeff_secret_key(&zero_key, &mut fft),
-        Err(NtruError::NonInvertibleSecretKey)
-    ));
-}
-
 fn assert_generated_fourier_pairs<Table: FftTable>(table: &Table) {
     let mut fft = FftEngine::new(table);
     let mut rng = StdRng::seed_from_u64(0xB701);
@@ -365,16 +343,6 @@ fn parameters_require_secret_support_below_explicit_modulus() {
                     },
                 ))
             );
-            assert!(
-                std::panic::catch_unwind(|| NtruParameters::new(
-                    PolyLength::new(POLY_LENGTH),
-                    2,
-                    BarrettModulus::new(q),
-                    distribution,
-                    0.7,
-                ))
-                .is_err()
-            );
         }
         assert!(
             NtruParameters::try_new(
@@ -397,6 +365,17 @@ fn parameters_require_secret_support_below_explicit_modulus() {
             .is_ok()
         );
     }
+    // The panicking constructor delegates all validation to try_new.
+    assert!(
+        std::panic::catch_unwind(|| NtruParameters::new(
+            PolyLength::new(POLY_LENGTH),
+            2,
+            BarrettModulus::new(36u32),
+            SecretKeyDistr::gaussian(3.0),
+            0.7,
+        ))
+        .is_err()
+    );
 }
 
 #[test]

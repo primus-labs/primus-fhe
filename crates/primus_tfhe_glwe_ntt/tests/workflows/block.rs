@@ -1,14 +1,24 @@
 //! Block blind-rotation arithmetic against independent phase oracles.
 
 use primus_encoding::phase_error_magnitude;
-use primus_glwe::{BlockOccupancy, GlweDimension, NttGlweSecretKey, SecretKeyDistr};
+use primus_glwe::{
+    BlockOccupancy, GlweCiphertext, GlweDimension, NttGlweSecretKey, SecretKeyDistr,
+};
 use primus_integer::FheUint;
-use primus_lwe::LweDimension;
+use primus_lwe::{LweCiphertext, LweDimension};
+use primus_modulus::BarrettModulus;
 use primus_ntt::{MonomialNttTable, U32NttTable, U64NttTable};
 use primus_poly::Polynomial;
 use primus_reduce::ReduceNeg;
 use primus_shape::PolyLength;
-use primus_tfhe_glwe_ntt::{BlindRotationMethod, ModulusConfig, PbsOrder, TfheContext};
+use primus_tfhe::rotation::RotationModulusSwitch;
+use primus_tfhe_glwe_ntt::{
+    BlindRotationMethod, ModulusConfig, PbsOrder, TfheContext,
+    block::{
+        BlockGlweBlindRotationBatchWorkspace, BlockGlweBlindRotationWorkspace,
+        BlockGlweBootstrappingKey,
+    },
+};
 use rand::{SeedableRng, rngs::StdRng};
 
 use super::parameters::{config, two_domain_config};
@@ -24,8 +34,7 @@ fn block_batch_matches_single_inputs() {
             (998_244_353, 5, 2),
             (67_104_769, 7, 3),
         ] {
-            check_block_batch::<u32, U32NttTable, 4>(q, width, blocks, occupancy);
-            check_block_batch::<u32, U32NttTable, 16>(q, width, blocks, occupancy);
+            check_block_batch::<u32, U32NttTable>(q, width, blocks, occupancy);
         }
         // rank=2 and full base-16 decomposition give 3,744/4,608 coefficients
         // for Q50/Q61: both exceed one u64 16 KiB tile (2,048 coefficients).
@@ -35,24 +44,18 @@ fn block_batch_matches_single_inputs() {
             (1_125_899_906_826_241, 5, 3),
             (2_305_843_009_213_692_737, 7, 2),
         ] {
-            check_block_batch::<u64, U64NttTable, 4>(q, width, blocks, occupancy);
-            check_block_batch::<u64, U64NttTable, 16>(q, width, blocks, occupancy);
+            check_block_batch::<u64, U64NttTable>(q, width, blocks, occupancy);
         }
     }
 }
 
-fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANES: usize>(
+fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     q: T,
     block_size: usize,
     block_count: usize,
     occupancy: BlockOccupancy,
 ) {
-    use primus_tfhe::rotation::RotationModulusSwitch;
-    use primus_tfhe_glwe_ntt::{
-        ClientKey, KeyGenerator,
-        block::{BlockGlweBlindRotationBatchWorkspace, BlockGlweBlindRotationWorkspace},
-        key::BlindRotationKey,
-    };
+    use primus_tfhe_glwe_ntt::{ClientKey, KeyGenerator, key::BlindRotationKey};
 
     let n = 32;
     let mut config = config::<T>(BlindRotationMethod::Block);
@@ -64,17 +67,20 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANE
     config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
     config.bsk_poly_length = PolyLength::new(n);
     config.ring_modulus = ModulusConfig::Explicit(q);
-    let context = TfheContext::<T, Table>::try_from_pbs_config(config).unwrap();
     let mut rng = StdRng::seed_from_u64(561 + block_size as u64);
-    let client = ClientKey::generate(context.parameters(), &mut rng);
-    let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
-        .try_generate_blind_rotation_key(&client, &mut rng)
-        .unwrap()
-    else {
-        panic!("expected direct block key");
+    let mut prepare_key = |config| {
+        let context = TfheContext::<T, Table>::try_from_pbs_config(config).unwrap();
+        let client = ClientKey::generate(context.parameters(), &mut rng);
+        let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
+            .try_generate_blind_rotation_key(&client, &mut rng)
+            .unwrap()
+        else {
+            panic!("expected direct block key");
+        };
+        (context, key)
     };
+    let (context, key) = prepare_key(config);
     let mut single = BlockGlweBlindRotationWorkspace::new(&key);
-    let mut batch = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&key);
     let rotation =
         RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
     let inputs: Vec<_> = (0..17)
@@ -91,41 +97,10 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANE
         .collect();
     let lut = Polynomial::new((0..n).map(|i| T::as_from(i * 37)).collect::<Vec<_>>());
     let mut expected = vec![context.allocate_accumulator_ciphertext(); inputs.len()];
-    let mut actual = expected.clone();
     for (input, output) in inputs.iter().zip(&mut expected) {
         single.blind_rotate_lookup_table_to(&key, input, &lut, &rotation, output, context.table());
     }
-    // Ascending and descending sizes reuse dirty lanes after full and partial
-    // batches, covering every 16/8/4/2/1 tail and no-write zero-length call.
-    for count in (0..=17).chain((0..=17).rev()) {
-        for output in &mut actual {
-            output.as_mut().fill(T::ONE);
-        }
-        batch.blind_rotate_lookup_table_many_to(
-            &key,
-            &inputs[..count],
-            &lut,
-            &rotation,
-            &mut actual[..count],
-            context.table(),
-        );
-        for (got, want) in actual[..count].iter().zip(&expected) {
-            assert_eq!(
-                got.as_ref(),
-                want.as_ref(),
-                "capacity={LANES}, block_size={block_size}, count={count}"
-            );
-        }
-        assert!(
-            actual[count..]
-                .iter()
-                .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
-        );
-    }
-    if T::BITS == 64 && block_size == 5 {
-        // Cache capacity is optional: a workspace allocated for narrower blocks
-        // has the same numerical layout, but no four-rotation descriptors. It
-        // must still evaluate this key correctly using on-demand addressing.
+    let narrow_key = (T::BITS == 64 && block_size == 5).then(|| {
         let mut narrow_config = config;
         narrow_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
             block_size: 3,
@@ -135,44 +110,98 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANE
                 BlockOccupancy::AtMostOne
             },
         };
-        let narrow_context = TfheContext::<T, Table>::try_from_pbs_config(narrow_config).unwrap();
-        let narrow_client = ClientKey::generate(narrow_context.parameters(), &mut rng);
-        let BlindRotationKey::Block(narrow_key) = KeyGenerator::new(&narrow_context)
-            .try_generate_blind_rotation_key(&narrow_client, &mut rng)
-            .unwrap()
-        else {
-            panic!("expected narrower block key");
-        };
-        let mut narrow = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&narrow_key);
+        prepare_key(narrow_config).1
+    });
+    let foreign_key = (T::BITS == 64 && block_size == 7).then(|| {
+        let mut foreign_config = config;
+        foreign_config.small_lwe.dimension = LweDimension::new(block_size * (block_count + 1));
+        prepare_key(foreign_config).1
+    });
+    // Evaluate both lane capacities against the same ciphertext fixture and reference.
+    check_batch_lanes::<T, Table, 4>(
+        &context,
+        &key,
+        &lut,
+        &inputs,
+        &expected,
+        narrow_key.as_ref(),
+        foreign_key.as_ref(),
+    );
+    check_batch_lanes::<T, Table, 16>(
+        &context,
+        &key,
+        &lut,
+        &inputs,
+        &expected,
+        narrow_key.as_ref(),
+        foreign_key.as_ref(),
+    );
+}
+
+fn check_batch_lanes<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANES: usize>(
+    context: &TfheContext<T, Table>,
+    key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
+    lut: &Polynomial<Vec<T>>,
+    inputs: &[LweCiphertext<T>],
+    expected: &[GlweCiphertext<Vec<T>>],
+    narrow_key: Option<&BlockGlweBootstrappingKey<T, BarrettModulus<T>>>,
+    foreign_key: Option<&BlockGlweBootstrappingKey<T, BarrettModulus<T>>>,
+) {
+    let n = key.size().glwe_size().poly_length().get();
+    let rotation =
+        RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
+    let mut batch = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(key);
+    let mut actual = expected.to_vec();
+    // Ascending and descending sizes reuse dirty lanes after full and partial
+    // batches, covering every 16/8/4/2/1 tail and no-write zero-length call.
+    for count in (0..=inputs.len()).chain((0..=inputs.len()).rev()) {
+        for output in &mut actual {
+            output.as_mut().fill(T::ONE);
+        }
+        batch.blind_rotate_lookup_table_many_to(
+            key,
+            &inputs[..count],
+            lut,
+            &rotation,
+            &mut actual[..count],
+            context.table(),
+        );
+        for (got, want) in actual[..count].iter().zip(expected) {
+            assert_eq!(
+                got.as_ref(),
+                want.as_ref(),
+                "capacity={LANES}, block_size={}, count={count}",
+                key.block_size()
+            );
+        }
+        assert!(
+            actual[count..]
+                .iter()
+                .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
+        );
+    }
+    if let Some(narrow_key) = narrow_key {
+        // Narrow-block scratch has the same numerical layout but lacks four-rotation
+        // descriptors. Both capacities must fall back to on-demand addressing.
+        let mut narrow = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(narrow_key);
         narrow.blind_rotate_lookup_table_many_to(
-            &key,
-            &inputs,
-            &lut,
+            key,
+            inputs,
+            lut,
             &rotation,
             &mut actual,
             context.table(),
         );
-        for (got, want) in actual.iter().zip(&expected) {
+        for (got, want) in actual.iter().zip(expected) {
             assert_eq!(got.as_ref(), want.as_ref());
         }
     }
-    // Check transactional layout rejection once, using a late malformed entry
-    // so validation cannot be interleaved with writes to preceding lanes.
-    if T::BITS == 64 && block_size == 7 {
-        let mut foreign_config = config;
-        foreign_config.small_lwe.dimension = LweDimension::new(block_size * (block_count + 1));
-        let foreign_context = TfheContext::<T, Table>::try_from_pbs_config(foreign_config).unwrap();
-        let foreign_client = ClientKey::generate(foreign_context.parameters(), &mut rng);
-        let BlindRotationKey::Block(foreign_key) = KeyGenerator::new(&foreign_context)
-            .try_generate_blind_rotation_key(&foreign_client, &mut rng)
-            .unwrap()
-        else {
-            panic!("expected foreign block key");
-        };
-        let mut foreign = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&foreign_key);
+    // A malformed entry in the last lane must be rejected before earlier writes.
+    if let Some(foreign_key) = foreign_key {
+        let mut foreign = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(foreign_key);
         for invalid in 0..4 {
-            let mut inputs = inputs.clone();
-            let mut outputs = expected.clone();
+            let mut inputs = inputs.to_vec();
+            let mut outputs = expected.to_vec();
             for output in &mut outputs {
                 output.as_mut().fill(T::ONE);
             }
@@ -191,15 +220,18 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANE
             };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 workspace.blind_rotate_lookup_table_many_to(
-                    &key,
+                    key,
                     &inputs,
-                    &lut,
+                    lut,
                     &rotation,
                     &mut outputs,
                     context.table(),
                 );
             }));
-            assert!(result.is_err(), "invalid boundary case {invalid}");
+            assert!(
+                result.is_err(),
+                "capacity={LANES}, invalid boundary case {invalid}"
+            );
             assert!(
                 outputs
                     .iter()

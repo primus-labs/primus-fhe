@@ -4,11 +4,9 @@ mod support;
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
     CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGlweCiphertext, DcrtGlweRevTraceEvaluator,
-    DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey,
-    GlweSecretKey,
+    DcrtGlweRevTraceKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey,
 };
 use primus_lattice::glwe::CrtGlwe;
-use primus_ntt::UintDcrtTable;
 use primus_reduce::ReduceInv;
 use primus_rns::Residues;
 use rand::{SeedableRng, rngs::StdRng};
@@ -19,14 +17,9 @@ fn trace_and_reverse_trace_match_raw_phase_projection() {
     let n = parameters.poly_length().get();
     let base = parameters.base_q();
     let moduli = base.moduli();
-    let table = UintDcrtTable::new(parameters.poly_length(), moduli).unwrap();
+    let table = parameters.ntt_table();
     let mut rng = StdRng::seed_from_u64(42);
-    let secret = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
-        &mut rng,
-    );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let (secret, key) = parameters.generate_key_pair(&table, &mut rng);
 
     let context = key
         .try_bind_raw(

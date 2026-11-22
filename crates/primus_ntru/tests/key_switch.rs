@@ -7,40 +7,30 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable};
 use primus_lattice::ntru::FourierNtruOwned;
-use primus_modulus::{BarrettModulus, NativeModulus};
+use primus_modulus::BarrettModulus;
 use primus_ntru::{
     FourierNtruDecryptWorkspace, FourierNtruEncryptWorkspace, FourierNtruExternalProductWorkspace,
     FourierNtruGadgetEncryptWorkspace, FourierNtruKeySwitchingKey, FourierNtruSecretKey,
-    NlevParameters, NtruCiphertext, NtruParameters, NtruSecretKey, NttNtruExternalProductWorkspace,
+    NlevParameters, NtruCiphertext, NtruSecretKey, NttNtruExternalProductWorkspace,
     NttNtruGadgetEncryptWorkspace, NttNtruKeySwitchingKey, NttNtruSecretKey, SecretKeyDistr,
 };
 use primus_ntt::{NttTable, UintNttTable};
 use primus_poly::Polynomial;
 use rand::{SeedableRng, rngs::StdRng};
 
-// Functional ring size; keep the original word widths, moduli and decomposition.
-const POLY_LENGTH: usize = 64;
-const PLAIN_MODULUS: u32 = 16;
-const EXPLICIT_MODULUS: u32 = 132_120_577;
+#[path = "support/u32_ring.rs"]
+mod test_ring;
+use test_ring::{LENGTH, N, P, native_parameters, ntt_parameters};
 
-fn message() -> Vec<u32> {
-    (0..POLY_LENGTH)
-        .map(|index| (3 * index as u32 + 1) % PLAIN_MODULUS)
-        .collect()
+fn message() -> Polynomial<Vec<u32>> {
+    Polynomial::new((0..N).map(|index| (3 * index as u32 + 1) % P).collect())
 }
 
 #[test]
 fn ntt_key_switch_preserves_plaintext() {
     let mut rng = StdRng::seed_from_u64(0x4e54_5452_554b_534b);
-    let modulus = BarrettModulus::new(EXPLICIT_MODULUS);
-    let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
-    let parameters = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
-        PLAIN_MODULUS,
-        modulus,
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let (parameters, ntt) = ntt_parameters(SecretKeyDistr::SparseTernary);
+    let modulus = parameters.cipher_modulus();
     let key_switching = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -59,7 +49,7 @@ fn ntt_key_switch_preserves_plaintext() {
         output_coefficient_key.as_slice()
     );
 
-    let mut gadget_workspace = NttNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut gadget_workspace = NttNtruGadgetEncryptWorkspace::new(LENGTH);
     let switching_key = NttNtruKeySwitchingKey::generate(
         &input_coefficient_key,
         &output_key,
@@ -72,17 +62,17 @@ fn ntt_key_switch_preserves_plaintext() {
     let message = message();
     let input = input_key
         .encrypt_message(
-            &Polynomial::new(message.as_slice()),
+            &message,
             &parameters,
             PlaintextEmbedding::Unsigned,
             &ntt,
             &mut rng,
         )
         .into_coeff_form(&ntt);
-    let mut external_product = NttNtruExternalProductWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut external_product = NttNtruExternalProductWorkspace::new(LENGTH);
     // The borrowed ciphertext occupies only the middle of the caller's buffer.
-    let mut storage = vec![7; POLY_LENGTH + 2];
-    let mut switched = NtruCiphertext::new(&mut storage[1..=POLY_LENGTH]);
+    let mut storage = vec![7; N + 2];
+    let mut switched = NtruCiphertext::new(&mut storage[1..=N]);
     switching_key.key_switch_to(
         &input.as_view(),
         &mut switched,
@@ -96,9 +86,9 @@ fn ntt_key_switch_preserves_plaintext() {
         output_key
             .decrypt_message(&switched, &parameters, &ntt)
             .as_ref(),
-        message
+        message.as_ref()
     );
-    assert_eq!((storage[0], storage[POLY_LENGTH + 1]), (7, 7));
+    assert_eq!((storage[0], storage[N + 1]), (7, 7));
 }
 
 #[test]
@@ -109,15 +99,9 @@ fn fourier_key_switch_preserves_plaintext() {
 
 fn check_fourier_key_switch<Table: FftTable>() {
     let mut rng = StdRng::seed_from_u64(0x464f_5552_4b53_574b);
-    let table = Table::new(PolyLength::new(POLY_LENGTH));
+    let table = Table::new(LENGTH);
     let mut fft = FftEngine::new(&table);
-    let parameters = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
-        PLAIN_MODULUS,
-        NativeModulus::new(),
-        SecretKeyDistr::SparseTernary,
-        0.7,
-    );
+    let parameters = native_parameters(SecretKeyDistr::SparseTernary);
     let key_switching = NlevParameters::with_ntru_params(
         &parameters,
         DecompositionConfig {
@@ -136,7 +120,7 @@ fn check_fourier_key_switch<Table: FftTable>() {
         output_coefficient_key.as_slice()
     );
 
-    let mut gadget_workspace = FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut gadget_workspace = FourierNtruGadgetEncryptWorkspace::new(LENGTH);
     let switching_key = FourierNtruKeySwitchingKey::generate(
         &input_coefficient_key,
         &output_key,
@@ -147,9 +131,9 @@ fn check_fourier_key_switch<Table: FftTable>() {
     );
 
     let message = message();
-    let mut encrypt_workspace = FourierNtruEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut encrypt_workspace = FourierNtruEncryptWorkspace::new(LENGTH);
     let input = input_key.encrypt_message(
-        &Polynomial::new(message.as_slice()),
+        &message,
         &parameters,
         PlaintextEmbedding::Unsigned,
         &mut fft,
@@ -157,13 +141,12 @@ fn check_fourier_key_switch<Table: FftTable>() {
         &mut encrypt_workspace,
     );
     let mut input_coefficients: primus_ntru::NtruCiphertext<Vec<u32>> =
-        primus_ntru::NtruCiphertext::zero(POLY_LENGTH);
+        primus_ntru::NtruCiphertext::zero(N);
     input.write_torus_form(&mut input_coefficients, &mut fft);
 
-    let mut external_product =
-        FourierNtruExternalProductWorkspace::new(PolyLength::new(POLY_LENGTH));
-    let mut storage = vec![7; POLY_LENGTH + 2];
-    let mut switched = NtruCiphertext::new(&mut storage[1..=POLY_LENGTH]);
+    let mut external_product = FourierNtruExternalProductWorkspace::new(LENGTH);
+    let mut storage = vec![7; N + 2];
+    let mut switched = NtruCiphertext::new(&mut storage[1..=N]);
     switching_key.key_switch_to(
         &input_coefficients.as_view(),
         &mut switched,
@@ -172,37 +155,30 @@ fn check_fourier_key_switch<Table: FftTable>() {
     );
     let mut transformed = FourierNtruOwned::zero(fft.fourier_length());
     switched.write_fourier_form(&mut transformed, &mut fft);
-    let mut decrypt_workspace = FourierNtruDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let mut decrypt_workspace = FourierNtruDecryptWorkspace::new(LENGTH);
 
     assert_eq!(
         output_key
             .decrypt_message(&transformed, &parameters, &mut fft, &mut decrypt_workspace,)
             .as_ref(),
-        message
+        message.as_ref()
     );
-    assert_eq!((storage[0], storage[POLY_LENGTH + 1]), (7, 7));
+    assert_eq!((storage[0], storage[N + 1]), (7, 7));
 }
 
 fn unit_key() -> NtruSecretKey<u32> {
-    let mut coefficients = vec![0; POLY_LENGTH];
+    let mut coefficients = vec![0; N];
     coefficients[0] = 1;
     NtruSecretKey::new(coefficients, SecretKeyDistr::UniformBinary)
 }
 
 #[test]
 fn ntt_key_switch_rejects_mismatched_resources_before_writing() {
-    let modulus = BarrettModulus::new(EXPLICIT_MODULUS);
+    let (params, ntt) = ntt_parameters(SecretKeyDistr::UniformBinary);
+    let modulus = params.cipher_modulus();
     let other_modulus = BarrettModulus::new(998_244_353);
-    let ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), modulus).unwrap();
-    let short_ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH / 2), modulus).unwrap();
-    let other_ntt = UintNttTable::new(PolyLength::new(POLY_LENGTH), other_modulus).unwrap();
-    let params = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
-        PLAIN_MODULUS,
-        modulus,
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let short_ntt = UintNttTable::new(PolyLength::new(N / 2), modulus).unwrap();
+    let other_ntt = UintNttTable::new(LENGTH, other_modulus).unwrap();
     let params = NlevParameters::with_ntru_params(
         &params,
         DecompositionConfig {
@@ -219,58 +195,16 @@ fn ntt_key_switch_rejects_mismatched_resources_before_writing() {
         &params,
         &ntt,
         &mut rng,
-        &mut NttNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH)),
+        &mut NttNtruGadgetEncryptWorkspace::new(LENGTH),
     );
 
     for (name, input_len, output_len, scratch_len, modulus, table) in [
-        (
-            "input",
-            POLY_LENGTH / 2,
-            POLY_LENGTH,
-            POLY_LENGTH,
-            modulus,
-            &ntt,
-        ),
-        (
-            "output",
-            POLY_LENGTH,
-            POLY_LENGTH / 2,
-            POLY_LENGTH,
-            modulus,
-            &ntt,
-        ),
-        (
-            "scratch",
-            POLY_LENGTH,
-            POLY_LENGTH,
-            POLY_LENGTH / 2,
-            modulus,
-            &ntt,
-        ),
-        (
-            "table length",
-            POLY_LENGTH,
-            POLY_LENGTH,
-            POLY_LENGTH,
-            modulus,
-            &short_ntt,
-        ),
-        (
-            "arithmetic modulus",
-            POLY_LENGTH,
-            POLY_LENGTH,
-            POLY_LENGTH,
-            other_modulus,
-            &ntt,
-        ),
-        (
-            "table modulus",
-            POLY_LENGTH,
-            POLY_LENGTH,
-            POLY_LENGTH,
-            modulus,
-            &other_ntt,
-        ),
+        ("input", N / 2, N, N, modulus, &ntt),
+        ("output", N, N / 2, N, modulus, &ntt),
+        ("scratch", N, N, N / 2, modulus, &ntt),
+        ("table length", N, N, N, modulus, &short_ntt),
+        ("arithmetic modulus", N, N, N, other_modulus, &ntt),
+        ("table modulus", N, N, N, modulus, &other_ntt),
     ] {
         let input = NtruCiphertext::<Vec<u32>>::zero(input_len);
         let mut output = NtruCiphertext::new(vec![7; output_len]);
@@ -289,16 +223,10 @@ fn ntt_key_switch_rejects_mismatched_resources_before_writing() {
 #[test]
 fn fourier_key_switch_rejects_mismatched_resources_before_writing() {
     // Shape validation precedes FFT dispatch; numerical tests above cover both backends.
-    let table = RustFftTable::new(PolyLength::new(POLY_LENGTH));
-    let short_table = RustFftTable::new(PolyLength::new(POLY_LENGTH / 2));
+    let table = RustFftTable::new(LENGTH);
+    let short_table = RustFftTable::new(PolyLength::new(N / 2));
     let mut fft = FftEngine::new(&table);
-    let params = NtruParameters::new(
-        PolyLength::new(POLY_LENGTH),
-        PLAIN_MODULUS,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
+    let params = native_parameters(SecretKeyDistr::UniformBinary);
     let params = NlevParameters::with_ntru_params(
         &params,
         DecompositionConfig {
@@ -315,20 +243,14 @@ fn fourier_key_switch_rejects_mismatched_resources_before_writing() {
         &params,
         &mut fft,
         &mut rng,
-        &mut FourierNtruGadgetEncryptWorkspace::new(PolyLength::new(POLY_LENGTH)),
+        &mut FourierNtruGadgetEncryptWorkspace::new(LENGTH),
     );
 
     for (name, input_len, output_len, scratch_len, table) in [
-        ("input", POLY_LENGTH / 2, POLY_LENGTH, POLY_LENGTH, &table),
-        ("output", POLY_LENGTH, POLY_LENGTH / 2, POLY_LENGTH, &table),
-        ("scratch", POLY_LENGTH, POLY_LENGTH, POLY_LENGTH / 2, &table),
-        (
-            "FFT length",
-            POLY_LENGTH,
-            POLY_LENGTH,
-            POLY_LENGTH,
-            &short_table,
-        ),
+        ("input", N / 2, N, N, &table),
+        ("output", N, N / 2, N, &table),
+        ("scratch", N, N, N / 2, &table),
+        ("FFT length", N, N, N, &short_table),
     ] {
         let input = NtruCiphertext::<Vec<u32>>::zero(input_len);
         let mut output = NtruCiphertext::new(vec![7; output_len]);

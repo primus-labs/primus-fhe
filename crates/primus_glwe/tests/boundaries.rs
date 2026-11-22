@@ -115,6 +115,28 @@ fn fallible_parameters_check_layout_codec_and_samplers() {
             primus_encoding::CodecError::InsufficientScaleRecovery
         ))
     ));
+
+    // At q=13 the Gaussian support can include magnitudes up to 12.
+    let gaussian = |sigma| {
+        GlweParameters::try_new(
+            GlweDimension::new(1),
+            PolyLength::new(N),
+            2u32,
+            BarrettModulus::new(13),
+            SecretKeyDistr::gaussian(sigma),
+            0.7,
+        )
+    };
+    assert!(gaussian(1.0).is_ok());
+    assert!(matches!(
+        gaussian(1.1),
+        Err(Error::SecretKey(
+            primus_distr::SecretKeySamplerError::ModulusTooSmall {
+                maximum_magnitude: 13,
+                modulus_minus_one: 12,
+            }
+        ))
+    ));
 }
 
 #[test]
@@ -315,23 +337,6 @@ fn fourier_evaluation_key_generation_rejects_before_sampling() {
 }
 
 #[test]
-fn secret_support_is_checked_at_parameter_construction() {
-    for (sigma, valid) in [(1.0, true), (1.1, false)] {
-        let result = catch_unwind(|| {
-            GlweParameters::new(
-                GlweDimension::new(1),
-                PolyLength::new(N),
-                2u32,
-                BarrettModulus::new(13),
-                SecretKeyDistr::gaussian(sigma),
-                0.7,
-            )
-        });
-        assert_eq!(result.is_ok(), valid);
-    }
-}
-
-#[test]
 fn fourier_encryption_rejects_incomplete_and_excess_masks_before_writes() {
     let params = GlweParameters::new(
         GlweDimension::new(1),
@@ -376,89 +381,106 @@ fn fourier_encryption_rejects_incomplete_and_excess_masks_before_writes() {
     }
 }
 
-#[test]
-fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
-    let modulus = BarrettModulus::new(257u32);
-    let params = GlweParameters::new(
-        GlweDimension::new(1),
-        PolyLength::new(N),
-        16,
-        modulus,
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
-    let table = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
-    let wrong_table = UintNttTable::new(PolyLength::new(N), BarrettModulus::new(769u32)).unwrap();
-    let wrong_length_table = UintNttTable::new(PolyLength::new(N * 2), modulus).unwrap();
-    let gadget = GlevParameters::with_glwe_params(
-        &params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(4),
-            level_count: None,
-        },
-    );
-    let mut rng = StdRng::seed_from_u64(42);
-    let (coeff_key, key) = NttGlweSecretKey::generate_pair(
-        params.size(),
-        params.encryption_parameters(),
-        &table,
-        &mut rng,
-    );
-    // Equal layouts and matching parameters/table do not establish the secret's domain.
-    let foreign_key = NttGlweSecretKey::from_coeff_secret_key(&coeff_key, &wrong_table);
-    let public_key =
-        NttGlwePublicKey::generate(&key, params.encryption_parameters(), &table, &mut rng);
-    let message = Polynomial::new(vec![3u32; N]);
-    let ephemeral = params
-        .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
-        .unwrap();
-    let mut workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(N));
+struct NttBoundaryKey {
+    params: GlweParameters<u32, BarrettModulus<u32>>,
+    table: UintNttTable<u32>,
+    coefficient_key: GlweSecretKey<u32>,
+    key: NttGlweSecretKey<u32>,
+}
 
-    let mut gadget_workspace = NttGlweGadgetEncryptWorkspace::new(gadget.size());
-    for (key, wrong_ntt) in [
-        (&key, &wrong_table),
-        (&key, &wrong_length_table),
-        (&foreign_key, &table),
-    ] {
-        for ggsw in [false, true] {
-            let len = if ggsw {
-                gadget.ggsw_len()
-            } else {
-                gadget.glev_len()
-            };
-            let mut output = vec![7u32; len];
-            let mut rng = StdRng::seed_from_u64(43);
-            let mut expected_rng = StdRng::seed_from_u64(43);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    if ggsw {
-                        key.encrypt_ggsw_to(
-                            &message,
-                            &mut NttGgswCiphertext::new(output.as_mut_slice()),
-                            &gadget,
-                            wrong_ntt,
-                            &mut rng,
-                            &mut gadget_workspace,
-                        );
-                    } else {
-                        key.encrypt_glev_to(
-                            &message,
-                            &mut NttGlevCiphertext::new(output.as_mut_slice()),
-                            &gadget,
-                            wrong_ntt,
-                            &mut rng,
-                            &mut gadget_workspace,
-                        );
-                    }
-                }))
-                .is_err()
-            );
-            assert_eq!(output, vec![7; len]);
-            assert_eq!(rng.next_u64(), expected_rng.next_u64());
+impl NttBoundaryKey {
+    fn new() -> Self {
+        let modulus = BarrettModulus::new(257);
+        let params = GlweParameters::new(
+            GlweDimension::new(1),
+            PolyLength::new(N),
+            16,
+            modulus,
+            SecretKeyDistr::UniformBinary,
+            0.7,
+        );
+        let table = UintNttTable::new(params.poly_length(), modulus).unwrap();
+        let (coefficient_key, key) = NttGlweSecretKey::generate_pair(
+            params.size(),
+            params.encryption_parameters(),
+            &table,
+            &mut StdRng::seed_from_u64(42),
+        );
+        Self {
+            params,
+            table,
+            coefficient_key,
+            key,
         }
     }
-    let key_switching = GlweKeySwitchingParameters::new(params.dimension(), gadget);
-    // The declared input layout binds both rank and polynomial length.
+
+    fn gadget(&self) -> GlevParameters<u32, BarrettModulus<u32>> {
+        GlevParameters::with_glwe_params(
+            &self.params,
+            DecompositionConfig {
+                log_basis: DecompositionBaseLog::new(4),
+                level_count: None,
+            },
+        )
+    }
+}
+
+#[track_caller]
+fn rejects_before_sampling(attempt: impl FnOnce(&mut StdRng)) {
+    let mut rng = StdRng::seed_from_u64(43);
+    let mut untouched = StdRng::seed_from_u64(43);
+    assert!(catch_unwind(AssertUnwindSafe(|| attempt(&mut rng))).is_err());
+    assert_eq!(rng.next_u64(), untouched.next_u64());
+}
+
+#[test]
+fn ntt_gadget_encryption_rejects_incompatible_domains_before_sampling() {
+    let fixture = NttBoundaryKey::new();
+    let params = fixture.gadget();
+    let wrong_modulus = BarrettModulus::new(769);
+    let wrong_table = UintNttTable::new(PolyLength::new(N), wrong_modulus).unwrap();
+    let longer_table =
+        UintNttTable::new(PolyLength::new(2 * N), fixture.params.cipher_modulus()).unwrap();
+    let foreign_key =
+        NttGlweSecretKey::from_coeff_secret_key(&fixture.coefficient_key, &wrong_table);
+    let message = Polynomial::new(vec![3u32; N]);
+    let mut workspace = NttGlweGadgetEncryptWorkspace::new(params.size());
+
+    for (key, table) in [
+        (&fixture.key, &wrong_table),
+        (&fixture.key, &longer_table),
+        (&foreign_key, &fixture.table),
+    ] {
+        let mut output = NttGlevCiphertext::new(vec![7u32; params.glev_len()]);
+        rejects_before_sampling(|rng| {
+            key.encrypt_glev_to(&message, &mut output, &params, table, rng, &mut workspace);
+        });
+        assert!(output.as_ref().iter().all(|&value| value == 7));
+    }
+
+    // GGSW shares the domain checks. One case verifies the entry calls them.
+    let mut output = NttGgswCiphertext::new(vec![7u32; params.ggsw_len()]);
+    rejects_before_sampling(|rng| {
+        fixture.key.encrypt_ggsw_to(
+            &message,
+            &mut output,
+            &params,
+            &wrong_table,
+            rng,
+            &mut workspace,
+        );
+    });
+    assert!(output.as_ref().iter().all(|&value| value == 7));
+}
+
+#[test]
+fn ntt_key_switch_rejects_wrong_input_layout_and_evaluation_domain() {
+    let fixture = NttBoundaryKey::new();
+    let params = &fixture.params;
+    let key_switching = GlweKeySwitchingParameters::new(params.dimension(), fixture.gadget());
+    let mut gadget_workspace = NttGlweGadgetEncryptWorkspace::new(key_switching.output().size());
+
+    // The declared source layout binds rank and polynomial length independently.
     for size in [
         GlweSize::new(GlweDimension::new(2), PolyLength::new(N)),
         GlweSize::new(GlweDimension::new(1), PolyLength::new(2 * N)),
@@ -468,192 +490,172 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
             size,
             SecretKeyDistr::UniformBinary,
         );
-        let mut rejected_rng = StdRng::seed_from_u64(43);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                let _ = NttGlweKeySwitchingKey::generate(
-                    &input,
-                    &key,
-                    &key_switching,
-                    &table,
-                    &mut rejected_rng,
-                    &mut gadget_workspace,
-                );
-            }))
-            .is_err()
-        );
-        assert_eq!(
-            rejected_rng.next_u64(),
-            StdRng::seed_from_u64(43).next_u64()
-        );
+        rejects_before_sampling(|rng| {
+            let _ = NttGlweKeySwitchingKey::generate(
+                &input,
+                &fixture.key,
+                &key_switching,
+                &fixture.table,
+                rng,
+                &mut gadget_workspace,
+            );
+        });
     }
+
     let switching_key = NttGlweKeySwitchingKey::generate(
-        &coeff_key,
-        &key,
+        &fixture.coefficient_key,
+        &fixture.key,
         &key_switching,
-        &table,
-        &mut rng,
+        &fixture.table,
+        &mut StdRng::seed_from_u64(44),
         &mut gadget_workspace,
     );
     let input = GlweCiphertext::new(vec![0u32; params.glwe_len()]);
-    let mut switching_workspace = NttGlweKeySwitchingWorkspace::new(params.size());
-    // Also reject a mutually compatible modulus/table pair belonging to a different key.
-    for (modulus, ntt) in [
+    let mut workspace = NttGlweKeySwitchingWorkspace::new(params.size());
+    let modulus = params.cipher_modulus();
+    let foreign_modulus = BarrettModulus::new(769);
+    let wrong_table = UintNttTable::new(params.poly_length(), foreign_modulus).unwrap();
+    let longer_table = UintNttTable::new(PolyLength::new(2 * N), modulus).unwrap();
+    // Even a modulus and table that agree with one another can belong to the wrong key.
+    for (modulus, table) in [
         (modulus, &wrong_table),
-        (modulus, &wrong_length_table),
-        (BarrettModulus::new(769), &wrong_table),
+        (modulus, &longer_table),
+        (foreign_modulus, &wrong_table),
     ] {
         let mut output = GlweCiphertext::new(vec![7u32; params.glwe_len()]);
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
-                switching_key.key_switch_to(
-                    &input,
-                    &mut output,
-                    modulus,
-                    ntt,
-                    &mut switching_workspace,
-                );
+                switching_key.key_switch_to(&input, &mut output, modulus, table, &mut workspace);
             }))
             .is_err()
         );
-        assert_eq!(output.as_ref(), vec![7u32; params.glwe_len()]);
+        assert!(output.as_ref().iter().all(|&value| value == 7));
     }
+}
 
-    for public in [false, true] {
+#[test]
+fn ntt_public_encryption_rejects_incompatible_resources_before_writes() {
+    let fixture = NttBoundaryKey::new();
+    let params = &fixture.params;
+    let public_key = NttGlwePublicKey::generate(
+        &fixture.key,
+        params.encryption_parameters(),
+        &fixture.table,
+        &mut StdRng::seed_from_u64(45),
+    );
+    let wrong_table = UintNttTable::new(params.poly_length(), BarrettModulus::new(769)).unwrap();
+    let message = Polynomial::new(vec![3u32; N]);
+    let ephemeral = params
+        .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
+        .unwrap();
+
+    // Extra workspace capacity must fail the same exact-size check as a short buffer.
+    for (table, workspace_length) in [(&wrong_table, N), (&fixture.table, 2 * N)] {
+        let mut workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(workspace_length));
         let mut output = NttGlweCiphertext::new(vec![7u32; params.glwe_len()]);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                if public {
-                    public_key.encrypt_message_to(
-                        &message,
-                        &mut output,
-                        &params,
-                        &ephemeral,
-                        PlaintextEmbedding::Unsigned,
-                        &wrong_table,
-                        &mut rng,
-                        &mut workspace,
-                    );
-                } else {
-                    key.encrypt_message_to(
-                        &message,
-                        &mut output,
-                        &params,
-                        PlaintextEmbedding::Unsigned,
-                        &wrong_table,
-                        &mut rng,
-                    );
-                }
-            }))
-            .is_err()
-        );
-        assert_eq!(output.as_ref(), vec![7u32; params.glwe_len()]);
-    }
-    // Ordinary NTT encryption must reject a foreign owner before the first draw.
-    let mut output = NttGlweCiphertext::new(vec![7u32; params.glwe_len()]);
-    let mut rejected_rng = StdRng::seed_from_u64(43);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            foreign_key.encrypt_message_to(
+        rejects_before_sampling(|rng| {
+            public_key.encrypt_message_to(
                 &message,
                 &mut output,
-                &params,
+                params,
+                &ephemeral,
                 PlaintextEmbedding::Unsigned,
-                &table,
-                &mut rejected_rng,
+                table,
+                rng,
+                &mut workspace,
             );
-        }))
-        .is_err()
-    );
-    assert_eq!(output.as_ref(), vec![7u32; params.glwe_len()]);
-    assert_eq!(
-        rejected_rng.next_u64(),
-        StdRng::seed_from_u64(43).next_u64()
-    );
-
-    for length in [N / 2, N * 2] {
-        let mut wrong_workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(length));
-        let mut output = NttGlweCiphertext::new(vec![7u32; params.glwe_len()]);
-        let mut rng = StdRng::seed_from_u64(43);
-        let mut expected_rng = StdRng::seed_from_u64(43);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                public_key.encrypt_message_to(
-                    &message,
-                    &mut output,
-                    &params,
-                    &ephemeral,
-                    PlaintextEmbedding::Unsigned,
-                    &table,
-                    &mut rng,
-                    &mut wrong_workspace,
-                );
-            }))
-            .is_err()
-        );
-        assert_eq!(output.as_ref(), vec![7u32; params.glwe_len()]);
-        assert_eq!(rng.next_u64(), expected_rng.next_u64());
+        });
+        assert!(output.as_ref().iter().all(|&value| value == 7));
     }
+}
+
+#[test]
+fn ntt_secret_operations_reject_incompatible_domains_before_writes() {
+    let fixture = NttBoundaryKey::new();
+    let params = &fixture.params;
+    let wrong_table = UintNttTable::new(params.poly_length(), BarrettModulus::new(769)).unwrap();
+    let foreign_key =
+        NttGlweSecretKey::from_coeff_secret_key(&fixture.coefficient_key, &wrong_table);
+    let message = Polynomial::new(vec![3u32; N]);
     let input = NttGlweCiphertext::new(vec![0u32; params.glwe_len()]);
     let mut phase = Polynomial::new(vec![7u32; N]);
-    for (key, ntt) in [(&key, &wrong_table), (&foreign_key, &table)] {
+
+    // Matching parameters and table do not establish the owning key's domain.
+    for (key, table) in [(&fixture.key, &wrong_table), (&foreign_key, &fixture.table)] {
+        let mut output = NttGlweCiphertext::new(vec![7u32; params.glwe_len()]);
+        rejects_before_sampling(|rng| {
+            key.encrypt_message_to(
+                &message,
+                &mut output,
+                params,
+                PlaintextEmbedding::Unsigned,
+                table,
+                rng,
+            );
+        });
+        assert!(output.as_ref().iter().all(|&value| value == 7));
+
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
-                key.decrypt_phase_to(&input, &mut phase, modulus, ntt);
+                key.decrypt_phase_to(&input, &mut phase, params.cipher_modulus(), table);
             }))
             .is_err()
         );
-        assert_eq!(phase.as_ref(), vec![7u32; N]);
+        assert!(phase.as_ref().iter().all(|&value| value == 7));
     }
+}
 
-    // Coefficient entry points share these checks; no RNG, output or scratch
-    // change is allowed for a bad layout or transform domain.
-    for (key, polynomial_len, ciphertext_len, scratch_len, ntt) in [
-        (&key, N - 1, 2 * N, N, &table),
-        (&key, N, 2 * N - 1, N, &table),
-        (&key, N, 3 * N, N, &table),
-        (&key, N, 2 * N, N - 1, &table),
-        (&key, N, 2 * N, N + 1, &table),
-        (&key, N, 2 * N, N, &wrong_table),
-        (&key, N, 2 * N, N, &wrong_length_table),
-        (&foreign_key, N, 2 * N, N, &table),
+#[test]
+fn coefficient_secret_operations_reject_invalid_layouts_without_touching_scratch() {
+    let fixture = NttBoundaryKey::new();
+    let params = &fixture.params;
+    let wrong_table = UintNttTable::new(params.poly_length(), BarrettModulus::new(769)).unwrap();
+    let longer_table = UintNttTable::new(PolyLength::new(2 * N), params.cipher_modulus()).unwrap();
+    let foreign_key =
+        NttGlweSecretKey::from_coeff_secret_key(&fixture.coefficient_key, &wrong_table);
+
+    // Each case changes one of the polynomial, ciphertext, scratch, table or key domains.
+    for (key, polynomial_len, ciphertext_len, scratch_len, table) in [
+        (&fixture.key, N - 1, 2 * N, N, &fixture.table),
+        (&fixture.key, N, 2 * N - 1, N, &fixture.table),
+        (&fixture.key, N, 3 * N, N, &fixture.table),
+        (&fixture.key, N, 2 * N, N - 1, &fixture.table),
+        (&fixture.key, N, 2 * N, N + 1, &fixture.table),
+        (&fixture.key, N, 2 * N, N, &wrong_table),
+        (&fixture.key, N, 2 * N, N, &longer_table),
+        (&foreign_key, N, 2 * N, N, &fixture.table),
     ] {
         let mut polynomial = Polynomial::new(vec![7; polynomial_len]);
         let mut ciphertext = GlweCiphertext::new(vec![7; ciphertext_len]);
         let mut scratch = vec![7; scratch_len];
-        let mut rng = StdRng::seed_from_u64(43);
-        let mut expected_rng = StdRng::seed_from_u64(43);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                key.encrypt_message_coeff_to(
-                    &polynomial,
-                    &mut ciphertext,
-                    &params,
-                    PlaintextEmbedding::Unsigned,
-                    ntt,
-                    &mut rng,
-                    &mut scratch,
-                );
-            }))
-            .is_err()
-        );
-        assert_eq!(ciphertext.as_ref(), vec![7; ciphertext_len]);
-        assert_eq!(scratch, vec![7; scratch_len]);
-        assert_eq!(rng.next_u64(), expected_rng.next_u64());
+        rejects_before_sampling(|rng| {
+            key.encrypt_message_coeff_to(
+                &polynomial,
+                &mut ciphertext,
+                params,
+                PlaintextEmbedding::Unsigned,
+                table,
+                rng,
+                &mut scratch,
+            );
+        });
+        assert!(ciphertext.as_ref().iter().all(|&value| value == 7));
+        assert!(scratch.iter().all(|&value| value == 7));
+
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
                 key.decrypt_message_coeff_to(
                     &ciphertext,
                     &mut polynomial,
-                    &params,
-                    ntt,
+                    params,
+                    table,
                     &mut scratch,
                 );
             }))
             .is_err()
         );
-        assert_eq!(polynomial.as_ref(), vec![7; polynomial_len]);
-        assert_eq!(scratch, vec![7; scratch_len]);
+        assert!(polynomial.as_ref().iter().all(|&value| value == 7));
+        assert!(scratch.iter().all(|&value| value == 7));
     }
 }
 

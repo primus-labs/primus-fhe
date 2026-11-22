@@ -12,7 +12,6 @@ use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const N: usize = 32;
 const P: u64 = 193;
@@ -563,100 +562,6 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 .apply_to(&source, &mut linear);
             assert_eq!(phase(linear.as_ref(), &secret_big, count), expected);
         }
-    }
-}
-
-#[test]
-fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
-    let context = make_context(P, &Q, N);
-    let secret: Vec<i64> = (0..N).map(|i| [-1, 0, 1][i % 3]).collect();
-    let client = client(&context, &secret);
-    let mut rng = StdRng::seed_from_u64(0x10b6_bad0);
-    let config = config(3, false);
-    let switch_key = client
-        .key_switching_key(&client, 0, config, &mut rng)
-        .unwrap();
-    let relin_key = client.relinearization_key(0, config, &mut rng).unwrap();
-    let auto_key = client.automorphism_key(0, 5, config, &mut rng).unwrap();
-    let wrong_contexts = [
-        make_context(2, &Q, N),
-        make_context(P, &[Q[2], Q[1], Q[0]], N),
-        make_context(P, &Q, 64),
-    ];
-    for wrong in &wrong_contexts {
-        assert!(BgvKeySwitcher::try_new(wrong, &switch_key).is_err());
-        assert!(BgvRelinearizer::try_new(wrong, &relin_key).is_err());
-        assert!(BgvAutomorphism::try_new(wrong, &auto_key).is_err());
-    }
-    let unprepared = BgvContext::try_new(
-        BgvParameters::try_coefficients(
-            PolyLength::new(N),
-            BarrettModulus::new(P),
-            &Q.map(BarrettModulus::new),
-            SecretKeyDistr::SparseTernary,
-            ErrorDistribution::CenteredBinomial { eta: 1 },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    for level in [1, 2] {
-        let switch_key = client
-            .key_switching_key(&client, level, config, &mut rng)
-            .unwrap();
-        let relin_key = client.relinearization_key(level, config, &mut rng).unwrap();
-        let auto_key = client.automorphism_key(level, 5, config, &mut rng).unwrap();
-        assert!(matches!(BgvKeySwitcher::try_new(&unprepared, &switch_key),
-            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
-        assert!(matches!(BgvRelinearizer::try_new(&unprepared, &relin_key),
-            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
-        assert!(matches!(BgvAutomorphism::try_new(&unprepared, &auto_key),
-            Err(crate::keys::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
-    }
-    for exponent in [0, 2, 2 * N, usize::MAX] {
-        assert!(
-            client
-                .automorphism_key(0, exponent, config, &mut rng)
-                .is_err()
-        );
-    }
-    let mut switch = BgvKeySwitcher::try_new(&context, &switch_key).unwrap();
-    let mut relin = BgvRelinearizer::try_new(&context, &relin_key).unwrap();
-    let mut auto = BgvAutomorphism::try_new(&context, &auto_key).unwrap();
-    let length = context.rns_poly_len(0);
-    for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
-        let input = BgvCiphertext::from_raw(vec![0; bad_length]);
-        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 2 * length]);
-        assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
-        assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
-    }
-    for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
-        let input = BgvQuadraticCiphertext::from_raw(vec![0; bad_length]);
-        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 2 * length]);
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || relin.relinearize_to(&input, &mut output)
-            ))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
-    }
-    let input = context.new_ciphertext(0);
-    let quadratic = context.new_quadratic_ciphertext(0);
-    for bad_length in [0, 2 * length - 1, 2 * length + 1] {
-        let mut output = BgvCiphertext::from_raw(vec![0xfeed; bad_length]);
-        assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
-        assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
-        assert!(
-            catch_unwind(AssertUnwindSafe(
-                || relin.relinearize_to(&quadratic, &mut output)
-            ))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
 }
 

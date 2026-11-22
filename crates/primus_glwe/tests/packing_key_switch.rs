@@ -1,7 +1,7 @@
 #![cfg(any(feature = "ntt", feature = "rustfft", feature = "tfhe-fft"))]
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
-use primus_glwe::{GlevParameters, GlweParameters, GlweSecretKey, GlweSize, SecretKeyDistr};
+use primus_glwe::{GlevParameters, GlweSize, SecretKeyDistr};
 use primus_lattice::GlweDimension;
 use primus_lattice::{glwe::Glwe, lwe::Lwe};
 use primus_lwe::LweSecretKeyRef;
@@ -10,7 +10,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 #[allow(dead_code)]
 mod common;
-use common::{K, N, assert_phase, message, secret};
+use common::{K, N, assert_phase, fixed_ternary_glwe, message};
 
 const INPUT_SECRET: [i64; 7] = [-1, 0, 1, 2, -2, 1, 0];
 #[cfg(feature = "ntt")]
@@ -48,7 +48,12 @@ fn inputs(q: u128, digit_unit: u64, rng: &mut StdRng) -> Vec<u64> {
     batch
 }
 
-fn check_packing(q: u128, batch: &[u64], mut pack: impl FnMut(&[u64], &mut Glwe<Vec<u64>>)) {
+fn check_packing(
+    q: u128,
+    batch: &[u64],
+    output_secret: &[i64],
+    mut pack: impl FnMut(&[u64], &mut Glwe<Vec<u64>>),
+) {
     let size = GlweSize::new(GlweDimension::new(K), PolyLength::new(N));
     let mut output = Glwe::new(vec![7; size.glwe_len()]);
     // Reuse the same scratch with shrinking/growing batches; stale tails must not leak.
@@ -56,7 +61,7 @@ fn check_packing(q: u128, batch: &[u64], mut pack: impl FnMut(&[u64], &mut Glwe<
         let mut expected = message(q);
         expected[count..].fill(0);
         pack(&batch[..count * (INPUT_SECRET.len() + 1)], &mut output);
-        assert_phase(output.as_ref(), &expected, &secret(), q);
+        assert_phase(output.as_ref(), &expected, output_secret, q);
     }
 }
 
@@ -91,15 +96,7 @@ fn ntt_packing_switches_an_independent_signed_lwe_secret() {
 
     let modulus = BarrettModulus::new(Q);
     let ntt = U64NttTable::new(PolyLength::new(N), modulus).unwrap();
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64,
-        modulus,
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
-    let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
+    let (params, coeff) = fixed_ternary_glwe(modulus, 64, SecretKeyDistr::UniformTernary);
     let sk = NttGlweSecretKey::from_coeff_secret_key(&coeff, &ntt);
     let mut workspace = NttGlweKeySwitchingWorkspace::new(params.size());
 
@@ -133,7 +130,7 @@ fn ntt_packing_switches_an_independent_signed_lwe_secret() {
                 key.pack_lwes_to(input, output, modulus, &ntt, &mut workspace);
             }
         };
-        check_packing(u128::from(Q), &batch, &mut pack);
+        check_packing(u128::from(Q), &batch, coeff.as_slice(), &mut pack);
         // Preflight is independent of the digit kernel.
         if log_basis != 3 {
             continue;
@@ -181,15 +178,8 @@ fn fourier_packing<Table: primus_fft::FftTable>() {
     let table = Table::new(PolyLength::new(N));
     let wrong_table = Table::new(PolyLength::new(2 * N));
     let mut fft = FftEngine::new(&table);
-    let params = GlweParameters::new(
-        GlweDimension::new(K),
-        PolyLength::new(N),
-        64u64,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformTernary,
-        0.7,
-    );
-    let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
+    let (params, coeff) =
+        fixed_ternary_glwe(NativeModulus::new(), 64, SecretKeyDistr::UniformTernary);
     let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let encoded = INPUT_SECRET.map(|x| x as u64);
     let mut workspace = FourierGlweKeySwitchingWorkspace::new(params.size());
@@ -222,7 +212,7 @@ fn fourier_packing<Table: primus_fft::FftTable>() {
                 key.pack_lwes_to(input, output, &mut fft, &mut workspace);
             }
         };
-        check_packing(1u128 << 64, &batch, &mut pack);
+        check_packing(1u128 << 64, &batch, coeff.as_slice(), &mut pack);
         if log_basis != 3 {
             continue;
         }
