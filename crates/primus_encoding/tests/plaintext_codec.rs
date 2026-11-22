@@ -51,15 +51,10 @@ fn messages(t: u128) -> Vec<u128> {
     }
 }
 
-// Select one appropriate modulus representation per numeric case. The codec
-// strategy depends on q/t; repeating every case under each wrapper adds no strategy.
+// Exercise each numeric strategy with Native or Uint at all three word sizes.
 fn check_encoding<T: FheUint + Into<u128> + TryFrom<u128>>(t: u128, q: u128) {
     if q == 1u128 << T::BITS {
         check_encoding_with::<T, _>(t, q, NativeModulus::new());
-    } else if q.is_power_of_two() {
-        check_encoding_with::<T, _>(t, q, PowOf2Modulus::new(to_value(q)));
-    } else if q < 1u128 << (T::BITS - 2) {
-        check_encoding_with::<T, _>(t, q, BarrettModulus::new(to_value(q)));
     } else {
         check_encoding_with::<T, _>(t, q, UintModulus::new(to_value(q)));
     }
@@ -154,6 +149,9 @@ fn encoding_matches_integer_oracle() {
     check::<u16>();
     check::<u32>();
     check::<u64>();
+    // Keep a masked accumulator and a compact modulus with a cached reciprocal.
+    check_encoding_with(7, 128, PowOf2Modulus::new(128u64));
+    check_encoding_with(16, 131, BarrettModulus::new(131u64));
 }
 
 #[test]
@@ -188,16 +186,13 @@ fn decoding_matches_integer_oracle() {
             (9, 45),              // Exact division.
             (7, native),          // Native high-word rounding.
             (16, 131),
-            (11, (native - 1) / 11), // Adjacent q*t bounds select narrow/wide division.
-            (11, (native - 1) / 11 + 1),
+            (11, (native - 1) / 11), // Compact modulus with a wide biased product.
+            (2, native / 2 - 1),     // Noncompact odd q; q*t fits in one word.
+            (2, native / 2 + 1),     // Same strategy except q*t requires two words.
             (7, native - 1),
         ] {
             if q == native {
                 check_decode::<T, _>(t, q, NativeModulus::new());
-            } else if q.is_power_of_two() {
-                check_decode::<T, _>(t, q, PowOf2Modulus::new(to_value(q)));
-            } else if q < native / 4 {
-                check_decode::<T, _>(t, q, BarrettModulus::new(to_value(q)));
             } else {
                 check_decode::<T, _>(t, q, UintModulus::new(to_value(q)));
             }
@@ -206,21 +201,24 @@ fn decoding_matches_integer_oracle() {
     check::<u16>();
     check::<u32>();
     check::<u64>();
+    check_decode(7, 128, PowOf2Modulus::new(128u64));
+    check_decode(16, 131, BarrettModulus::new(131u64));
+    let wide_barrett_q = u64::MAX / 11;
+    check_decode(
+        11,
+        wide_barrett_q.into(),
+        BarrettModulus::new(wide_barrett_q),
+    );
+
+    check_decoder_binding(7, 1u128 << u64::BITS, NativeModulus::new());
+    check_decoder_binding(16, 131, BarrettModulus::new(131));
 }
 
 // Decoder cells are tested at their integer boundaries; exact encode/decode
 // round-trips alone would miss the tie direction and wrap from t-1 to zero.
-fn check_decode<
-    T: FheUint + Into<u128> + TryFrom<u128>,
-    M: ReduceAdd<T, Output = T> + PrepareModulusSwitch<ValueT = T>,
->(
-    t: u128,
-    q: u128,
-    modulus: M,
-) {
-    let codec = RoundedCodec::<T, _>::new(to_value(t), modulus);
-    let phases = if q <= 256 {
-        (0..q).collect::<Vec<_>>()
+fn decoding_phases(t: u128, q: u128) -> Vec<u128> {
+    if q <= 256 {
+        (0..q).collect()
     } else {
         // The first integer phase rounding up from m to m+1 is
         // ceil((2m+1)*q/(2t)); test both sides, including the last cell.
@@ -235,39 +233,66 @@ fn check_decode<
         phases.sort_unstable();
         phases.dedup();
         phases
-    };
+    }
+}
+
+fn decode_reference<T: TryFrom<u128>>(t: u128, q: u128) -> (Vec<T>, Vec<T>) {
+    let phases = decoding_phases(t, q);
     let expected: Vec<T> = phases
         .iter()
         .map(|&c| to_value(round_half_up(c * t, q) % t))
         .collect();
-    let phases: Vec<T> = phases.into_iter().map(to_value).collect();
+    (phases.into_iter().map(to_value).collect(), expected)
+}
+
+fn check_decode<
+    T: FheUint + Into<u128> + TryFrom<u128>,
+    M: ReduceAdd<T, Output = T> + PrepareModulusSwitch<ValueT = T>,
+>(
+    t: u128,
+    q: u128,
+    modulus: M,
+) {
+    let codec = RoundedCodec::<T, _>::new(to_value(t), modulus);
+    let (phases, expected) = decode_reference(t, q);
     let mut output = vec![T::MAX; phases.len()];
     codec.decode_slice_to(&phases, &mut output);
     assert_eq!(output, expected, "t={t}, q={q}");
     for (&phase, &decoded) in phases.iter().zip(&expected) {
         assert_eq!(codec.decode_value(phase), decoded);
     }
-    // Both owners expose the same decoder. Check their binding in representative
-    // native and explicit domains, including phases between centers.
-    if (t, q) == (7, 1u128 << T::BITS) || (t, q) == (16, 131) {
-        let scaled = ScaledCodec::new(to_value(t), modulus);
-        for decoder in [MessageDecoder::from(&codec), MessageDecoder::from(&scaled)] {
-            assert_eq!(decoder.plaintext_modulus(), to_value(t));
-            assert_eq!(decoder.ciphertext_modulus(), modulus);
-            output.fill(T::MAX);
-            decoder.decode_slice_to(&phases, &mut output);
-            assert_eq!(output, expected);
-            for (&phase, &decoded) in phases.iter().zip(&expected) {
-                assert_eq!(decoder.decode_value(phase), decoded);
-            }
-            output.copy_from_slice(&phases);
-            decoder.decode_slice_assign(&mut output);
-            assert_eq!(output, expected);
-        }
-    }
     let mut inplace = phases;
     codec.decode_slice_assign(&mut inplace);
     assert_eq!(inplace, expected);
+}
+
+// Both owners expose the same decoder. Check representative native and
+// explicit bindings separately from the full arithmetic matrix.
+fn check_decoder_binding<M: ReduceAdd<u64, Output = u64> + PrepareModulusSwitch<ValueT = u64>>(
+    t: u64,
+    q: u128,
+    modulus: M,
+) {
+    let rounded = RoundedCodec::new(t, modulus);
+    let scaled = ScaledCodec::new(t, modulus);
+    let (phases, expected) = decode_reference(t.into(), q);
+    let mut output = vec![u64::MAX; phases.len()];
+    for decoder in [
+        MessageDecoder::from(&rounded),
+        MessageDecoder::from(&scaled),
+    ] {
+        assert_eq!(decoder.plaintext_modulus(), t);
+        assert_eq!(decoder.ciphertext_modulus(), modulus);
+        output.fill(u64::MAX);
+        decoder.decode_slice_to(&phases, &mut output);
+        assert_eq!(output, expected);
+        for (&phase, &decoded) in phases.iter().zip(&expected) {
+            assert_eq!(decoder.decode_value(phase), decoded);
+        }
+        output.copy_from_slice(&phases);
+        decoder.decode_slice_assign(&mut output);
+        assert_eq!(output, expected);
+    }
 }
 
 #[test]
