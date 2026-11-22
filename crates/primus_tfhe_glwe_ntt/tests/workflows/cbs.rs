@@ -113,7 +113,7 @@ fn msb_boolean_cbs() {
     circuit_selection::<u32, U32NttTable, _>(
         config(BlindRotationMethod::Classic),
         CbsInputEncoding::MsbBoolean,
-        CbsCoverage::Selection,
+        CbsCoverage::MsbBindings,
     );
     for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
         for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {

@@ -11,7 +11,8 @@ use primus_reduce::{EncodeSigned, ReduceMul, ReduceNeg};
 use primus_tfhe::DecompositionBaseLog;
 use primus_tfhe_glwe_fourier::circuit_bootstrap::{CbsGadgetParameters, CircuitBootstrapEvaluator};
 use primus_tfhe_glwe_fourier::{
-    CbsConfig, CbsInputEncoding, ClientKey, ModulusConfig, PbsConfig, TfheContext,
+    CbsConfig, CbsInputEncoding, ClientError, ClientKey, ModulusConfig, PbsConfig, PbsOrder,
+    TfheContext, TfheEvaluationError,
 };
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -71,6 +72,7 @@ pub(super) fn circuit_selection<T: TorusFftValue, Table: FftTable, LM>(
 pub(super) enum CbsCoverage {
     Selection,
     Bindings,
+    MsbBindings,
 }
 
 /// Inspect and consume every gadget row/level before the ordinary encrypted CMux.
@@ -183,46 +185,47 @@ where
         let encryptor = context
             .cbs_encryptor(client.external_lwe_secret_key())
             .unwrap();
-        if input_encoding == CbsInputEncoding::MsbBoolean {
+        if coverage == CbsCoverage::MsbBindings {
             let parameters = context.cbs_parameters().unwrap();
             // Same t=2, q/Q and basis, but padded t=2 has a different domain/geometry.
             let wrong = parameters
                 .gadget()
                 .compile_lookup_table(parameters.br_control_codec(), CbsInputEncoding::Padded)
                 .unwrap();
-            assert!(
-                context
-                    .circuit_bootstrap_evaluator_with_lookup_table(server, wrong)
-                    .is_err()
-            );
+            assert!(matches!(
+                context.circuit_bootstrap_evaluator_with_lookup_table(server, wrong),
+                Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
+            ));
             self.input.as_mut().fill(T::ONE);
-            assert!(
-                encryptor
-                    .encrypt_to(T::as_from(2), self.input.as_mut_view(), &mut self.rng)
-                    .is_err()
-            );
+            let mut rejected_rng = StdRng::seed_from_u64(104);
+            assert!(matches!(
+                encryptor.encrypt_to(T::as_from(2), self.input.as_mut_view(), &mut rejected_rng),
+                Err(ClientError::MessageOutOfRange)
+            ));
             assert!(self.input.as_ref().iter().all(|v| *v == T::ONE));
+            assert_eq!(rejected_rng, StdRng::seed_from_u64(104));
         }
 
+        // Both orders check the BR input modulus before preparing input KS resources.
+        if coverage == CbsCoverage::Bindings && config.pbs.order == PbsOrder::BootstrapKeyswitch {
+            let parameters = context.cbs_parameters().unwrap();
+            let wrong_input = primus_encoding::RoundedCodec::new(
+                parameters.br_control_codec().plaintext_modulus(),
+                primus_modulus::PowOf2Modulus::new(T::as_from(512)),
+            );
+            let wrong_program = parameters
+                .gadget()
+                .compile_lookup_table(&wrong_input, input_encoding)
+                .unwrap();
+            assert!(matches!(
+                context.circuit_bootstrap_evaluator_with_lookup_table(server, wrong_program),
+                Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
+            ));
+        }
         // Server: compile the predicate, then choose the encrypted branch.
         let program = context
             .compile_cbs_fn(|m| T::as_from(selector(input_encoding, m)))
             .unwrap();
-        // A valid gadget program compiled at the wrong BR input q must fail binding.
-        let wrong_input = primus_encoding::RoundedCodec::new(
-            T::as_from(8),
-            primus_modulus::PowOf2Modulus::new(T::as_from(512)),
-        );
-        let wrong_program = context
-            .cbs_parameters()
-            .unwrap()
-            .gadget()
-            .compile_lookup_table(&wrong_input, primus_tfhe::CbsInputEncoding::Padded)
-            .unwrap();
-        assert!(matches!(
-            context.circuit_bootstrap_evaluator_with_lookup_table(server, wrong_program),
-            Err(primus_tfhe::TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable)
-        ));
         let mut cbs = context
             .circuit_bootstrap_evaluator_with_lookup_table(server, program)
             .unwrap();

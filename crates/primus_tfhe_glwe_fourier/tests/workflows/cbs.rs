@@ -173,7 +173,7 @@ fn msb_boolean_cbs() {
             config(BlindRotationMethod::Classic),
             CbsInputEncoding::MsbBoolean,
             FourierTracePrecision::Ordinary,
-            CbsCoverage::Selection,
+            CbsCoverage::MsbBindings,
         );
         for (method, precision) in [
             (
