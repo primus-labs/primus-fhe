@@ -4,9 +4,11 @@ These configurations are experimental examples and benchmark fixtures, not certi
 
 The current sources below own the numerical choices. Operation contracts belong to the [bootstrapping guide](bootstrapping-contracts.md); execution commands belong to the [testing guide](testing.md). This directory does not prescribe ordinary-test sizes.
 
-## Scope of paired parameter entries
+<a id="scope-of-paired-parameter-entries"></a>
 
-Start from the concrete backend's `experimental` operation config. Examples fix `Word=u64`; the config supplies key domains and default messages, while the example supplies the function and its consumers.
+## Default experimental presets
+
+Start from the concrete backend's `experimental` operation config. The preset supplies key domains and default messages. The u64 examples supply the function and its consumers, with explicit overrides in the [Block examples](#block-examples). See [current backend benchmarks](#current-backend-benchmarks) for timed workloads.
 
 | Backend | Config source | Complete workflows |
 | --- | --- | --- |
@@ -17,32 +19,33 @@ Start from the concrete backend's `experimental` operation config. Examples fix 
 
 Here t is the message modulus, not the number of padded inputs: a front-half input at t=32 has 16 values. Input and output message moduli may differ. PBS/ManyLUT outputs are Rounded, MVB outputs are Scaled, and CBS outputs use gadget scaling rather than an ordinary output codec.
 
-| Config | Teaching workload and message domains |
+| Base config | Example workload and message domains |
 | --- | --- |
 | `CLASSIC_PBS_U64` | All four backends: Rounded 32→32, classic binary. Form z=2x+y, apply score=min(z,6), then price=2*score+[score>=4]. |
 | `CLASSIC_PBS_U64` with `messages=PbsMessageConfig::new(4)` | Boolean access rule: admin OR (member AND NOT revoked), Rounded 4→4. |
-| `CLASSIC_MANY_LUT_U64` | Rounded 16→8, inputs 0..8, two lanes/stride two: grade=x/2 and flag=[x>=5], then code=2*grade+flag. |
+| `CLASSIC_MANY_LUT_U64` | Rounded 16→8, inputs 0..8, two lanes with stride two. Compute grade=x/2 and flag=[x>=5], then code=2*grade+flag. |
 | `CLASSIC_THRESHOLD_MVB_U64` | Rounded t_in=128, inputs 0..64; 17 threshold flags with Scaled t_out=2. |
 | `CLASSIC_CBS_U64` | Rounded t_in=8, inputs 0..4; predicate F=[m>=2] selects an encrypted fee vector, then encrypted extras are added. Candidates use Scaled t_ring=8. |
 | GLWE `CLASSIC_CBS_U64` with `input_encoding=MsbBoolean` | CBS input t=2, bits at 0/round(q_external/2); NOT selects encrypted service limits. Ordinary PBS messages remain unchanged. |
 | `CLASSIC_ONE_HOT_U64` | NTRU only: t_in=8/M=4; generate the three nonzero NGSW selectors and perform four-way CMux over encrypted records at t_ring=8, with C0 as default. |
 
-All teaching entries use Classic. See the [backend support guide](../../crates/primus_tfhe/README.md#selecting-blind-rotation) for Block.
+The exported `CLASSIC_*` presets use Classic blind rotation. The geometry below describes the presets before example overrides.
 
 ## Moduli, geometry and secret domains
 
 | Symbol | Representation and value | Current use |
 | --- | --- | --- |
-| Q50 | `BarrettModulus<u64>`, 1125899906826241 | u64 NTT examples and benchmarks |
+| Q50 | `BarrettModulus<u64>`, 1125899906826241 | Default u64 NTT presets |
+| Q54 | `BarrettModulus<u64>`, 18014398509404161 | GLWE NTT dual-modulus example and comparison fixtures |
 | Q27 | `BarrettModulus<u32>`, 132120577 | u32 NTT dense PBS benchmark |
 | Native32 / Native64 | `NativeModulus<u32/u64>`, implicit 2^32 / 2^64 | Fourier accumulator; also GLWE external modulus |
-| q24 | `PowOf2Modulus<u32/u64>`, 2^24 | NTRU backend teaching configs |
+| q24 | `PowOf2Modulus<u32/u64>`, 2^24 | NTRU presets and Block ManyLUT examples |
 
 These Barrett values fit `Q<2^(BITS-2)` and support the NTT lengths used here. Explicit powers of two use `PowOf2Modulus`; native moduli are implicit. Fourier TFHE uses Native accumulator moduli, including when NTRU's external LWE uses q24.
 
-For the u64 configs, n denotes the small BR-control dimension in GLWE and the independent external dimension in NTRU. The GLWE teaching constants below have k=1 and q=Q; their contexts also support independent q/Q, demonstrated by `ntt_two_moduli`. NTRU uses independent external q and ring Q secrets; its backend teaching configs use q24.
+For the u64 configs, n denotes the small BR-control dimension in GLWE and the independent external dimension in NTRU. The GLWE presets below have rank k=1 and q=Q. The NTRU presets use q24 for the external LWE and a separate ring secret at Q.
 
-| Family / configs | n / N | Small or external secret | Ring secret |
+| Family / presets | n / N | Small or external secret | Ring secret |
 | --- | --- | --- | --- |
 | GLWE classic PBS / Boolean | 866 / 2048 | Uniform binary | Uniform binary |
 | GLWE ManyLUT / MVB | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
@@ -53,9 +56,23 @@ For the u64 configs, n denotes the small BR-control dimension in GLWE and the in
 | NTRU classic CBS | 800 / 1024 | Uniform binary | Sparse ternary |
 | NTRU one-hot | 800 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
 
-GLWE teaching configs use `BootstrapKeyswitch` (BR→KS), except MVB, which uses `KeyswitchBootstrap` (KS→BR). The external LWE dimension is n in BR→KS and kN in KS→BR. Both orders return under their external secret. NTRU returns by coefficient Q→q switching, phase extraction and LWE KS. See [domain and return contracts](bootstrapping-contracts.md#ciphertext-domains-and-return).
+GLWE presets use `BootstrapKeyswitch` (BR→KS), except MVB, which uses `KeyswitchBootstrap` (KS→BR). The external LWE dimension is n in BR→KS and kN in KS→BR. Both orders return under their external secret. NTRU returns by coefficient Q→q switching, phase extraction and LWE KS. See [domain and return contracts](bootstrapping-contracts.md#ciphertext-domains-and-return).
 
-`SparseTernary` has probabilities (-1,0,+1)=(1/4,1/2,1/4), not an exact Hamming weight. NTRU teaching configs sample f from this signed distribution and screen for backend invertibility/stability; it is not a `1+2F` distribution. The independent external fixed-weight secret and the conditioned ring secret have different roles.
+`SparseTernary` samples (-1,0,+1) with probabilities (1/4,1/2,1/4). NTRU presets sample the ring secret f directly from this distribution and screen for backend invertibility and stability. The external LWE secret uses its own distribution.
+
+## Block examples
+
+These u64 examples set `BlindRotationMethod::Block` and use a contiguous `BlockBinary` secret for the BR controls.
+
+| Example | n / N | Small or external q / ring Q | Block secret |
+| --- | --- | --- | --- |
+| [GLWE NTT `ntt_two_moduli`](../../crates/primus_tfhe_glwe_ntt/examples/ntt_two_moduli.rs) | 576 / 2048 | 1024 / Q54 | Small LWE, width 4, `AtMostOne` |
+| [NTRU NTT ManyLUT](../../crates/primus_tfhe_ntru_ntt/examples/ntru_ntt_many_lut.rs) | 728 / 1024 | q24 / Q50 | External LWE, width 8, `ExactlyOne` |
+| [NTRU Fourier ManyLUT](../../crates/primus_tfhe_ntru_fourier/examples/ntru_fourier_many_lut.rs) | 728 / 1024 | q24 / Native64 | External LWE, width 8, `ExactlyOne` |
+
+The GLWE example defines its own rank-one config with a uniform binary ring secret. It chains two PBS calls at Rounded 4→4 in both PBS orders. The external LWE domain is (n,q) for BR→KS and (kN,Q) for KS→BR.
+
+The NTRU examples override the method and external secret in `CLASSIC_MANY_LUT_U64`. Each of the 91 blocks contains one selected position, giving Hamming weight 91. See the [blind rotation support guide](../../crates/primus_tfhe/README.md#selecting-blind-rotation).
 
 ## Noise by key role
 
@@ -72,11 +89,11 @@ is centered and truncated at inclusive magnitude `max(1,floor(12σ))`; σ is its
 sampler parameter, not the measured noise of an evaluated ciphertext. Models must
 also account for accepted-key conditioning and shared evaluation-key errors.
 
-The NTT `CLASSIC_CBS_U64` uses q=Q50, rank one and independently sampled
+The GLWE NTT `CLASSIC_CBS_U64` uses q=Q50, rank one and independently sampled
 binary secrets. Its padded t8 predicate `[m>=2]` was checked with a Scaled t8
 CMux consumer and an LWE return. Other consumers need their own noise analysis.
 
-| NTT classic CBS role | Coefficient-unit σ | `(log₂B,L)` |
+| GLWE NTT Classic CBS role | Coefficient-unit σ | `(log₂B,L)` |
 | --- | ---: | --- |
 | Fresh small LWE | 2303762004.9811506 | — |
 | BSK | 6.4 | (15,2) |
@@ -111,16 +128,16 @@ also explains GLWE's separate trace-only Split35 context setting.
 
 ## Current backend benchmarks
 
-The crate-local benchmarks consume the operation configs but measure the following specific work. They are not timings of every step in a teaching example.
+The crate-local benchmarks use the exported presets or their own fixtures. Each row describes the timed request.
 
 | Target | Configuration and timed request |
 | --- | --- |
 | `pbs` | Dense Classic u32/u64, one PBS of `F(x)=(3x+1) mod 16` at Rounded 32→32. |
-| `many_lut` | `CLASSIC_MANY_LUT_U64`: one two-output PBS returning grade and flag; no subsequent code-combining addition. |
+| `many_lut` | All four backends use the unmodified `CLASSIC_MANY_LUT_U64` with Classic BR and h=32. Timing ends after one two-output PBS returns grade and flag. |
 | `mvb` | `CLASSIC_THRESHOLD_MVB_U64`: one factorized request returning all 17 threshold flags. |
-| `cbs` | `CLASSIC_CBS_U64`: predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE; no extra ring addition. NTT names include `n866_N2048` to separate the revised config from old n800/N1024 results. The `predicate_cmux_return` workload includes return cost and is not the former `predicate_cmux` measurement. |
+| `cbs` | `CLASSIC_CBS_U64` with predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE. The GLWE NTT ID includes `n866_N2048` to separate the revised config from old n800/N1024 results. The `predicate_cmux_return` workload includes return cost. |
 | GLWE `cbs_identity` | Benchmark-local G1 NTT and G2 Fourier comparison configs. Each padded or MSB bit is bootstrapped to a transform-domain GGSW. CMux validates the result before timing. Fourier ordinary/Split35 select the trace representation. |
-| GLWE `modulus_domains` | Benchmark-local q=Q/q1024, both PBS orders; NTT and TFHE-FFT. |
+| GLWE `modulus_domains` | Benchmark-local Classic BR with q=Q or q=1024, in both PBS orders, on NTT and TFHE-FFT. |
 | `one_hot` | NTRU `CLASSIC_ONE_HOT_U64`: three nonzero NGSWs and four-way CMux at t_ring=8. |
 
 Fourier benches select RustFFT, TFHE-FFT or both, using the same numerical config but engine-compatible material. Sources and commands: [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md#benchmarks), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md#benchmarks), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md#benchmarks), [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md#benchmarks).
