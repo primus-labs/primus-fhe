@@ -14,7 +14,6 @@ primus_lattice = { path = "../primus_lattice" }
 primus_modulus = { path = "../primus_modulus" }
 primus_reduce = { path = "../primus_reduce" }
 
-num-traits = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
 

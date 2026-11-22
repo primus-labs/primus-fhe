@@ -12,7 +12,6 @@ primus_glwe = { path = "../primus_glwe" }
 primus_integer = { path = "../primus_integer" }
 primus_lattice = { path = "../primus_lattice" }
 primus_lwe = { path = "../primus_lwe" }
-primus_poly = { path = "../primus_poly" }
 primus_reduce = { path = "../primus_reduce" }
 primus_tfhe = { path = "../primus_tfhe" }
 

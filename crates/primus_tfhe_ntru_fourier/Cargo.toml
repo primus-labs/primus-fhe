@@ -10,7 +10,6 @@ primus_encoding = { path = "../primus_encoding" }
 primus_decompose = { path = "../primus_decompose" }
 primus_data = { path = "../primus_data" }
 primus_fft = { path = "../primus_fft" }
-primus_integer = { path = "../primus_integer" }
 primus_lattice = { path = "../primus_lattice", features = ["fourier"] }
 primus_modulus = { path = "../primus_modulus" }
 primus_ntru = { path = "../primus_ntru", features = ["fourier"] }
@@ -51,6 +50,7 @@ required-features = ["rustfft"]
 
 [dev-dependencies]
 criterion = { workspace = true }
+primus_integer = { path = "../primus_integer" }
 
 [[bench]]
 name = "pbs"
@@ -77,7 +77,6 @@ default = ["rustfft"]
 rustfft = ["primus_fft/rustfft"]
 tfhe-fft = ["primus_fft/tfhe-fft"]
 simd = [
-    "primus_integer/simd",
     "primus_lattice/simd",
     "primus_ntru/simd",
     "primus_tfhe_ntru/simd",
