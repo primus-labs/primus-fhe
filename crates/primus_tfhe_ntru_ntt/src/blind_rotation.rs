@@ -5,9 +5,8 @@ use primus_ntt::MonomialNttTable;
 use primus_poly::Polynomial;
 
 use crate::{
-    block::{BlockNtruBootstrappingKey, rotate_blocks},
+    block::{AggregationWorkspace, BlockNtruBootstrappingKey, rotate_blocks},
     context::EvaluationContext,
-    grouped_rotation::AggregationWorkspace,
     key::{BlindRotationKey, BootstrappingControls, ClassicControls},
 };
 
@@ -35,7 +34,7 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
             rotation: match blind_rotation_key.bootstrapping_controls() {
                 BootstrappingControls::Block(key) => RotationState::Block {
                     key,
-                    scratch: AggregationWorkspace::new(parameters.blind_rotation(), key.controls()),
+                    scratch: AggregationWorkspace::new(parameters.blind_rotation(), key),
                 },
                 BootstrappingControls::Classic(controls) => {
                     let scratch = NttNtruCmuxWorkspace::new(
@@ -54,7 +53,7 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
 }
 
 /// Borrowed BR material and owned scratch selected for one control layout.
-/// The variant keeps grouped keys or classic control views paired with their buffers.
+/// The variant keeps Block keys or classic control views paired with their buffers.
 pub(crate) enum RotationState<'a, T: FheUint> {
     Block {
         key: &'a BlockNtruBootstrappingKey<T>,

@@ -2,7 +2,7 @@
 
 use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
-use primus_reduce::RingContext;
+use primus_reduce::ReduceNeg;
 
 use super::Lwe;
 use crate::glwe::Glwe;
@@ -40,7 +40,7 @@ where
         poly_length: usize,
         modulus: M,
     ) where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
         B: DataMut<Elem = T>,
     {
         let output_mask_len = output.as_ref().len() - poly_length;
@@ -65,7 +65,7 @@ impl<T: FheUint> Lwe<&[T]> {
         poly_length: usize,
         modulus: M,
     ) where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
     {
         output.as_mut().fill(T::ZERO);
 

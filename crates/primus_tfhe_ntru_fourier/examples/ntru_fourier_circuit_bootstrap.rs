@@ -1,8 +1,6 @@
 //! Use CBS to choose an encrypted fee vector, add encrypted extra fees, and return one fee as LWE.
 //!
 //! Run: `cargo run --release -p primus_tfhe_ntru_fourier --example ntru_fourier_circuit_bootstrap`
-//! To use TfheFftTable alone, switch the Table import and this target's
-//! required-features to tfhe-fft, then add `--no-default-features --features tfhe-fft`.
 //! Arithmetic profiles: guides/development/tfhe-parameters.md (not security presets).
 
 use primus_fft::RustFftTable as Table;

@@ -3,12 +3,13 @@
 //! cargo bench -p primus_tfhe_glwe_ntt --bench modulus_domains
 //! G1-inspired padded t4, not MSB encoding or a certified parameter set.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe::{GlweDimension, SecretKeyDistr};
 use primus_lwe::LweDimension;
-use primus_modulus::BarrettModulus;
-use primus_modulus::PowOf2Modulus;
+use primus_modulus::{BarrettModulus, PowOf2Modulus};
 use primus_ntt::U64NttTable as Table;
 use primus_reduce::RingContext;
 use primus_shape::PolyLength;
@@ -17,7 +18,8 @@ use primus_tfhe_glwe_ntt::{
     PbsConfig, PbsMessageConfig, PbsOrder, TfheContext,
 };
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
+
+const Q54: u64 = 18_014_398_509_404_161;
 
 /// Hold Q, geometry and ring gadgets fixed; express fresh input noise in q units.
 fn config<LM: RingContext<u64>>(
@@ -32,7 +34,7 @@ fn config<LM: RingContext<u64>>(
             secret_key_distr: SecretKeyDistr::UniformBinary,
             noise_standard_deviation: input_noise,
         },
-        ring_modulus: ModulusConfig::Explicit(18_014_398_509_404_161),
+        ring_modulus: ModulusConfig::Explicit(Q54),
         bsk_dimension: GlweDimension::new(1),
         bsk_poly_length: PolyLength::new(2048),
         bsk_secret_distr: SecretKeyDistr::UniformBinary,
@@ -77,21 +79,15 @@ where
     let mut evaluator = context.evaluator(&server).unwrap();
     let mut output = context.allocate_lwe_ciphertext();
     let mut input = context.allocate_lwe_ciphertext();
-    let mut input_rng = StdRng::seed_from_u64(1042);
-    for message in [0, 1, 0, 1] {
+    // Each bit starts at the same seed so the timed bit retains its original fixture.
+    for message in [0, 1] {
+        let mut input_rng = StdRng::seed_from_u64(1042);
         encryptor
             .encrypt_padded_to(message, input.as_mut_view(), &mut input_rng)
             .unwrap();
         evaluator.apply_lookup_table_to(input.as_view(), &table, output.as_mut_view());
         assert_eq!(decryptor.decrypt(output.as_view()).unwrap(), 1 - message);
     }
-    // Keep the timed fixture independent of the untimed validation loop.
-    input_rng = StdRng::seed_from_u64(1042);
-    encryptor
-        .encrypt_padded_to(1, input.as_mut_view(), &mut input_rng)
-        .unwrap();
-    evaluator.apply_lookup_table_to(input.as_view(), &table, output.as_mut_view());
-    assert_eq!(decryptor.decrypt(output.as_view()).unwrap(), 0);
     let mut group = c.benchmark_group("pbs/domains/ntt");
     group.throughput(Throughput::Elements(1));
     group.sampling_mode(criterion::SamplingMode::Flat);
@@ -123,8 +119,8 @@ fn benchmarks(c: &mut Criterion) {
             c,
             &case,
             config(
-                ModulusConfig::Explicit(18_014_398_509_404_161),
-                3.2 * 18_014_398_509_404_161f64 / 1024.0,
+                ModulusConfig::Explicit(Q54),
+                3.2 * Q54 as f64 / 1024.0,
                 order,
             ),
         ),

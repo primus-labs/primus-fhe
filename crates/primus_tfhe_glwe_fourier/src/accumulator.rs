@@ -15,18 +15,16 @@ use crate::{TfheClientError, TfheContext};
 
 /// Prepared private-key client for the accumulator GLWE domain.
 ///
-/// Borrows the context and coefficient secret, owning exact encryption setup,
+/// Borrows the FFT table and coefficient secret, owning exact encryption setup,
 /// a Fourier decryption cache and independently bound message parameters.
 /// Ciphertexts use coefficient representation and the accumulator secret, which
 /// differs from the external LWE domain used by [`crate::Encryptor`].
 /// Construction prepares all buffers; `encrypt_to` and `decrypt_to` do not allocate.
-pub struct AccumulatorClient<'a, T, Table, LM = primus_modulus::NativeModulus<T>>
+pub struct AccumulatorClient<'a, T, Table>
 where
     T: TorusFftValue,
-    LM: RingContext<T>,
     Table: FftTable,
 {
-    context: &'a TfheContext<T, Table, LM>,
     parameters: GlweParameters<T, NativeModulus<T>>,
     secret: FourierGlweSecretKey,
     transformed: FourierGlweCiphertext<Vec<Complex64>>,
@@ -35,15 +33,14 @@ where
     decrypt: FourierGlweDecryptWorkspace,
 }
 
-impl<'a, T, Table, LM> AccumulatorClient<'a, T, Table, LM>
+impl<'a, T, Table> AccumulatorClient<'a, T, Table>
 where
     T: TorusFftValue,
-    LM: RingContext<T>,
     Table: FftTable,
 {
     /// Binds only the accumulator secret and a Scaled message codec to the accumulator domain.
     /// Rejects an incompatible key or codec modulus before preparing the secret.
-    pub fn try_new(
+    pub fn try_new<LM: RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         secret_key: &'a GlweSecretKey<T>,
         codec: ScaledCodec<T, NativeModulus<T>>,
@@ -59,7 +56,6 @@ where
         let mut fft = context.new_fft_engine();
         let secret = FourierGlweSecretKey::from_coeff_secret_key(secret_key, &mut fft);
         Ok(Self {
-            context,
             secret,
             transformed: FourierGlweCiphertext::zero(parameters.size().fourier_glwe_len()),
             fft,
@@ -77,7 +73,7 @@ where
         message: &[T],
         rng: &mut R,
     ) -> GlweCiphertext<Vec<T>> {
-        let mut output = self.context.allocate_accumulator_ciphertext();
+        let mut output = GlweCiphertext::zero(self.parameters.glwe_len());
         self.encrypt_to(message, &mut output, rng);
         output
     }
@@ -108,13 +104,7 @@ where
     /// Allocates and decodes all N coefficients. Inherits [`Self::decrypt_to`]'s contracts.
     #[must_use]
     pub fn decrypt<S: Data<Elem = T>>(&mut self, input: &GlweCiphertext<S>) -> Vec<T> {
-        let n = self
-            .context
-            .parameters()
-            .blind_rotation_params()
-            .poly_length()
-            .get();
-        let mut output = vec![T::ZERO; n];
+        let mut output = vec![T::ZERO; self.parameters.poly_length().get()];
         self.decrypt_to(input, &mut output);
         output
     }
@@ -159,7 +149,7 @@ where
         &'a self,
         secret_key: &'a GlweSecretKey<T>,
         t_ring: T,
-    ) -> Result<crate::AccumulatorClient<'a, T, Table, LM>, crate::TfheClientError> {
+    ) -> Result<crate::AccumulatorClient<'a, T, Table>, crate::TfheClientError> {
         let codec = ScaledCodec::try_new(t_ring, self.parameters().ring_modulus())
             .map_err(crate::ClientError::from)?;
         crate::AccumulatorClient::try_new(self, secret_key, codec)

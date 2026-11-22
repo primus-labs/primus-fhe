@@ -5,107 +5,44 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Parameters and external LWE clients for NTRU-TFHE. Choose [NTT](../primus_tfhe_ntru_ntt/README.md) or [Fourier](../primus_tfhe_ntru_fourier/README.md) for contexts, evaluation keys, evaluators and complete examples. Operation and encoding choices are in the [shared guide](../primus_tfhe/README.md).
+Shared NTRU-TFHE parameters and external LWE clients. Choose [NTT](../primus_tfhe_ntru_ntt/README.md) or [Fourier](../primus_tfhe_ntru_fourier/README.md) for evaluation and complete examples.
 
 ## Experimental paired parameters
 
-Start with the concrete backend's `experimental::*_U64` operation config. These teaching fixtures have no assessed security or failure probability; see [parameter conditions](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries).
-
-| Config | Purpose |
-| --- | --- |
-| `PbsConfig` | PBS, ManyLUT and MVB: external LWE, accumulator/BSK, BR algorithm, required return KS and message domains |
-| `CbsConfig { pbs, gadget, projection }` | The same PBS domain plus CBS output, trace and scheme-switch decompositions; also serves one-hot |
-
-Use backend `TfheContext::try_from_pbs_config` / `try_from_cbs_config`. Explicit preparation uses `PbsParameters::try_from_config` or `CbsParameters::try_from_config(cbs_config)`; `CbsParameters::try_with_config(pbs, gadget, projection)` reuses existing PBS parameters. `try_with_circuit_bootstrap(gadget)` adds CBS with `Separate` projection to an existing context.
-
-PBS and CBS both require `key_switching`; CBS outputs ring/gadget ciphertexts, while the complete bundle retains KS for subsequent LWE returns. `PbsMessageConfig::new(t_in)` defaults to equal input/output message moduli; `.with_output_modulus(t_out)` changes only the output. Messages do not change the key domain.
+Start with a backend's `experimental::*_U64` config. Use `TfheContext::try_from_pbs_config` for PBS, ManyLUT and MVB, and `try_from_cbs_config` for CBS and one-hot. Both configs include return `key_switching`. Use `PbsMessageConfig::new(t_in).with_output_modulus(t_out)` to choose independent input and output message moduli. Teaching configurations have unassessed security and failure probability. [Parameter conditions](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries)
 
 ## Parameters and key domains
 
-`PbsParameters<T, M, LM=M>` separates ring modulus Q from external LWE modulus q while retaining coefficient type T. `external_lwe` selects dimension n, q and the external secret; `ring_modulus`, `bsk_poly_length` and `bsk_secret_distr` select the ring. n and N are independent; `2N` must fit T. Dimensions and ring length use `LweDimension` and `PolyLength`.
+`external_lwe` selects the external secret s, dimension n and modulus q. `ring_modulus`, `bsk_poly_length` and `bsk_secret_distr` select the accumulator ring and secret f at Q. n and N are independent, and `2N` must fit the coefficient word. Only f needs NTRU invertibility and Fourier inverse-stability screening. Complete key generation also requires the signed magnitudes of f's coefficients to fit below explicit q.
 
-| Noise setting | Uses |
-| --- | --- |
-| `external_lwe` noise | Fresh input encryption at q |
-| `bsk_gadget` noise | BR key rows, ring-candidate encryption and CBS trace/scheme-switch rows at Q |
-| `key_switching` noise | Return-key rows at q |
-
-BR and KS use separate `GadgetEncryptionConfig { decomposition, noise_standard_deviation }` values, with coefficient-unit noise at their respective moduli. CBS `output`, `trace` and `scheme_switch` each select a `DecompositionConfig`. Decomposition bases and random draws remain independent; `level_count: None` selects maximum supported levels, not necessarily zero truncation error (see [decomposition precision](../primus_decompose/README.md)).
-
-`ClientKey` contains independently sampled external secret s and ring secret f. Only f requires NTRU invertibility and, for Fourier, inverse stability. External secrets may be binary/ternary and need neither padding nor odd weight. `client.external_lwe_secret_key()` returns s at q; family client factories check its recorded modulus. Complete PBS/CBS generation also requires f's signed coefficient magnitudes to fit below explicit return q. See [parameter](src/parameters.rs) and [NTRU secret-generation](../primus_ntru/README.md#parameters-and-keys) contracts.
-
-Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q rounding → phase extraction → LWE KS at q to s. ManyLUT shares BR and returns each output separately; `context.allocate_lwe_ciphertext()` uses n. The LUT itself is public, but NTRU lifting and BR controls contribute encryption noise. Parameter construction does not establish security or a complete noise budget.
+The external, BSK and return KS noises use coefficient units at their respective moduli. BSK noise also sets ring-candidate, trace and scheme-switch encryption noise. Configure BR and return KS independently. [Parameter API](src/parameters.rs) · [Noise by key role](../../guides/development/tfhe-parameters.md#noise-by-key-role)
 
 ## Blind-rotation methods
 
-Classic accepts binary and ternary external secrets, including fixed-weight binary. Classic and Block support PBS, ManyLUT, Boolean gates, MVB, CBS and one-hot through the same factories.
-
-Set `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Each block stores all bit controls and an independently encrypted dummy for `AtMostOne`. `ExactlyOne` requires one `1` per block. The first block uses NLEV to lift the public LUT, including when its rotation is zero. Later blocks use NGSW. Fourier Block requires u64 and supports ordinary and split BR with exact native coefficient key generation. Trace and SS precision are independent. See the [block material contract](src/block.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
+Classic supports binary and ternary external secrets, including fixed-weight binary. For direct block aggregation, set `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. The first block uses NLEV to lift the public LUT, including when the first block is empty or its rotation is zero. Later blocks use NGSW. Fourier Block requires u64 and supports ordinary and split BR. [Block material](src/block.rs) · [First lift](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)
 
 ## Clients and LUTs
 
-Ordinary PBS uses `context.try_generate_keys(rng)` for paired client/server keys. The external secret supplies `context.encryptor`, `pbs_decryptor` and `mvb_decryptor`; public input uses `public_encryptor`. They derive encodings from `config.messages` without a LUT or manual codec. `pbs_lookup_table_compiler()` and `compile_mvb_fn` use the same defaults. Family `PbsParameters` provide client factories without a transform table.
-
-Input uses Rounded encoding at q. PBS/ManyLUT compiles Rounded output at Q and decodes at q; MVB uses Scaled at both output moduli. Return rescales an existing phase rather than freshly encoding at q, so budget scale differences, Q→q rounding and KS errors. Even equal message moduli do not guarantee feedback compatibility. Same-key message overrides are in [choosing the output encoding](../primus_tfhe/README.md#choosing-the-output-encoding); bounded bivariate lookup currently requires q=Q.
-
-Use `encrypt_padded` for front-half programs and `encrypt` for odd full-domain programs. Reuse output through `as_mut_view()` and read through `as_view()`; `decrypt_phase` remains available for diagnostics. `parameters.try_generate_public_key(external_secret, rng)` creates an external LWE public key, not an NTRU ring public key; account for its [additional noise](../primus_lwe/README.md#public-key-encryption).
-
-## Boolean clients and gates
-
-Use `PbsMessageConfig::new(4)` with the context's Boolean client/evaluator factories. Both message domains must be four for chained gates, using ordinary PBS material. See the [shared Boolean contract](../primus_tfhe/README.md#boolean-gates).
+Generate paired keys with `context.try_generate_keys(rng)` and pass `client.external_lwe_secret_key()` to the client factories. PBS/ManyLUT use Rounded output and `pbs_decryptor`. MVB uses Scaled output and `mvb_decryptor`. Use `encrypt_padded` for front-half programs and `encrypt` for odd full-domain programs. A client that needs only LWE encryption or decryption can call the same factories on `PbsParameters` without loading transform tables. `public_encryptor` uses a public LWE key at q and requires a public-key input noise budget. [Output encoding and overrides](../primus_tfhe/README.md#choosing-the-output-encoding) · [Public-key encryption](../primus_lwe/README.md#public-key-encryption)
 
 ## CBS and examples
 
-Create a CBS context and call `context.try_generate_circuit_bootstrap_keys(rng)` for `(ClientKey, CircuitBootstrapServerKey)`. This includes BR, return KS and CBS material; `server.server_key()` also supports ordinary PBS. After adding CBS through `try_with_circuit_bootstrap`, use this CBS generator, not `try_generate_keys`.
+Generate CBS material with `try_generate_circuit_bootstrap_keys`. Its bundle also supports ordinary PBS through `server.server_key()`. Use a padded input, compile the function with `compile_cbs_fn` and bind it with `circuit_bootstrap_evaluator_with_lookup_table`. Output NGSW uses gadget scaling under f. For CMux, choose a bit-valued function and encrypt the candidates with `accumulator_client(client.accumulator_ntru_secret_key(), t_ring)` at an independent Scaled message modulus. [CBS workflow](../primus_tfhe/README.md#cbs-output-and-consumption)
 
-Compile identity or a custom function with `compile_cbs_identity`, `compile_cbs_fn` or `compile_cbs_slice`. Bind a program through `circuit_bootstrap_evaluator_with_lookup_table`; `circuit_bootstrap_evaluator` is the identity shortcut. Input uses `context.encryptor`; output is NGSW under f at gadget scales, without ordinary LWE return. CMux requires F to be bit-valued throughout the input domain.
-
-`accumulator_client(client.accumulator_ntru_secret_key(), t_ring)` prepares Scaled candidates at Q. t_ring is independent of external input t; candidates must share f, Q and encoding. CBS binds the complete output basis, and BR decomposition must resolve the LUT and smallest output gadget scale. Layout checks do not prove actual secret identity or sufficient noise margin. See [CBS consumption and examples](../primus_tfhe/README.md#cbs-output-and-consumption).
-
-NTT reverse trace uses modular inverses; Fourier uses native integer halving with additional FFT error. Scheme switching multiplies input error by f and decomposition error by f². Publishing `NGSW_f[f]` needs a justified key-dependent-message/circular-security assumption; see the [NTRU contract](../primus_ntru/README.md#same-secret-scheme-switching).
-
-`CbsConfig.projection` selects the NGSW-only algorithm: `Separate` (the enum default), `FusedLastStage`, `FusedLastThreeStages`, or `PairedTrace`. NTRU NTT performance presets explicitly use `PairedTrace`; Fourier supports `Separate` and, with split trace and SS, `FusedLastStage` or `PairedTrace`; other choices are rejected before constructing its FFT table. NLEV-only and dual outputs retain separate trace/SS with their configured precision. Changing strategy requires reassessing the noise budget; see [`NtruProjectionMethod`](../primus_ntru/src/scheme_switch/mod.rs). Choose before preparing parameters/keys; see the [NTT configuration example](../primus_tfhe_ntru_ntt/README.md#parameters-and-representation).
+Choose projection and Fourier precision before preparing the context and keys. Fused strategies affect NGSW output, and NLEV and dual outputs use separate trace and scheme switching at their configured precision. Same-secret scheme switching requires a justified key-dependent-message assumption. [Projection and precision matrix](../../guides/development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support) · [Same-secret scheme switching](../primus_ntru/README.md#same-secret-scheme-switching)
 
 ## One-hot CBS
 
-`context.one_hot_evaluator(&server)?` uses the same CBS bundle with Classic binary/ternary or Block BR. Require t=2M, M=2^tau with tau>=1; encrypt `0..M` with `encrypt_padded`. For L output levels, let `W=next_power_of_two(L)` and require `2MW<=N`.
+Use `context.one_hot_evaluator(&server)` with the same CBS bundle. For M a power of two with M≥2, select input modulus t=2M and encrypt a value in `0..M` with `encrypt_padded`. With L output levels and W=next_power_of_two(L), require 2MW≤N and a sufficient phase margin. [Selection geometry](../../guides/development/bootstrapping-contracts.md#one-hot-cbs)
 
-| Output | Allocation / evaluation |
-| --- | --- |
-| All NLev selectors | `allocate_nlev_output` / `one_hot_nlev_to` |
-| All NGSW selectors | `allocate_ngsw_output` / `one_hot_ngsw_to` |
-| Nonzero NGSW branches only | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
-| Both representations | `one_hot_to`, or `one_hot_nlev_and_nonzero_ngsw_to` for full NLev plus nonzero NGSW |
+Use `allocate_nonzero_ngsw_output` and `one_hot_nonzero_ngsw_to` for `cmux_k_to`. It consumes selectors 1 through M−1 and defaults to candidate C0. The NLEV-only and dual APIs return coefficient-form NLEV, which must be transformed before a public-polynomial product. `selector(r)` uses the mathematical branch number. [Selector layouts](src/one_hot/selectors.rs)
 
-For Block BR, split an owning one-hot evaluator with `into_parts`,
-then call `new_pair_workspace(&resources)` and `with_pair`. The additional
-`bootstrap::BlindRotationPairWorkspace` owns only the second input's exponents,
-coefficient aggregate and accumulator; transforms, product scratch and selector
-buffers are reused serially. The callback consumes input 0 then 1 before those
-buffers are reused. NLEV-only, nonzero NGSW-only and dual projection are supported.
-Classic returns `None`; consume every input through the single-input methods,
-which also handle an odd final input. Paired inputs still share key errors.
-
-Public lookup lifting needs `NLEV[1]` when no CMux selection layer performs the
-first lift (`c=d`). Block BR has no independent classic initializer: request
-`KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` or
-`try_generate_public_lift_key`. Do not derive this material by summing the
-first group's bit/dummy controls. The lift retains its own generation parameters
-and adds its own decomposition/encryption error; Fourier split BR still uses
-ordinary Fourier material for this public lift.
-
-Full output covers δ_r(m), r=0..M-1. Compact NGSW slot r-1 represents r=1..M-1; m=0 makes all those target bits zero. `cmux_k_to` consumes these nonzero controls with C0 as default. NLev output is in coefficient form at Q and must be transformed before public lifting; NGSW is in the backend's transform representation for CMux.
-
-Borrow branch views with `nlev_selectors`, `ngsw_selectors` or `nonzero_ngsw_selectors`. `selector(r)` takes the mathematical branch number; `iter()` yields `(r, ciphertext)`. Views allocate nothing. Full layout, basis and representation requirements are on the [selector types](src/one_hot/selectors.rs) and backend evaluators.
-
-Let S=N/M and A=N/(2MW). Correct selection requires quantized phase `u_bar=S*m+W*e mod 2N` with `-A<=e<A`: the window is left-closed/right-open. e includes input noise, encoding rounding and per-coordinate quantization; shape checks prove neither this guard nor output decryptability. See the [one-hot derivation](../../guides/development/bootstrapping-contracts.md#one-hot-cbs).
+Block supports pairing through `new_pair_workspace` and `with_pair`. Consume each selector view inside the callback. Classic and an odd final input use the single-input methods. For public lifting without a preceding CMux layer (c=d), call `try_generate_public_lift_key` for independent `NLEV[1]` when using Block or split BR. Fourier uses ordinary lift material for this product. [Block key contract](src/block.rs) · [NTT key generator](../primus_tfhe_ntru_ntt/src/key.rs) · [Fourier key generator](../primus_tfhe_ntru_fourier/src/key.rs)
 
 ## NTRU→LWE returns
 
-Ordinary PBS/MVB evaluators handle returns. For independent coefficient-domain results, this family re-exports `primus_ntru::LweReturnEvaluator` and `LweReturnBatchWorkspace`. Bind the server's return key and target q with `LweReturnEvaluator::new(server.key_switching_key(), q_modulus)`; prepare scalar or batch scratch as needed. See the [NTRU return workflow and numerical contract](../primus_ntru/README.md#independent-lwe-return) for single coefficients, shared-input prefixes and different-input streams.
+PBS evaluators return under s at q after coefficient-wise Q→q rounding, phase extraction and LWE KS. Return rescales the existing phase, so budget any mismatch in encoding scales. Use the re-exported `LweReturnEvaluator` for independent coefficient-domain ring results and `LweReturnBatchWorkspace` for batches. [Return API and numerical contract](../primus_ntru/README.md#independent-lwe-return) · [Ciphertext domains](../../guides/development/bootstrapping-contracts.md#ciphertext-domains-and-return)
 
 ## Features and further reading
 
-Default features are empty; this family does not enable NTT/FFT. `simd` forwards to arithmetic dependencies. Select a concrete backend for evaluation.
-
-[API sources](src/lib.rs) · [Shared operations and encoding](../primus_tfhe/README.md) · [Numerical contracts](../../guides/development/bootstrapping-contracts.md)
+Default features are empty. `simd` forwards to arithmetic dependencies. Evaluation uses a concrete NTT or Fourier backend. [API sources](src/lib.rs) · [Shared operations and encoding](../primus_tfhe/README.md)

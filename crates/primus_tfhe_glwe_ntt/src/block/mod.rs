@@ -8,5 +8,5 @@ mod blind_rotation;
 mod key;
 
 pub use blind_rotation::{BlockGlweBlindRotationBatchWorkspace, BlockGlweBlindRotationWorkspace};
-pub(crate) use key::{BlockKeyLayout, generate_validated_with_layout, generate_with_layout};
+pub(crate) use key::{generate_with_layout, validate_secret};
 pub use primus_tfhe_glwe::BlockGlweBootstrappingKey;

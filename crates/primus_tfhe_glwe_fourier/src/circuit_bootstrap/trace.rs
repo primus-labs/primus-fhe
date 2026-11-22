@@ -10,7 +10,7 @@ use primus_lattice::{GlweSize, glwe::Glwe};
 /// Selected by [`crate::CbsConfig::fourier_trace_precision`]. Evaluators allocate
 /// matching scratch from this material when composing standalone GLWE operations.
 pub enum CbsTraceKey<T: TorusFftValue> {
-    /// Original direct Fourier trace material.
+    /// One spectrum per polynomial from the exact native coefficient-domain key rows.
     Ordinary(FourierGlweTraceKey<T>),
     /// Split(35) trace material generated from exact coefficient keys.
     #[cfg(feature = "split-trace")]

@@ -1,7 +1,6 @@
 //! Direct contiguous-block aggregation and NTT blind rotation.
 
 use primus_data::{Data, DataMut};
-use primus_glwe::BlockOccupancy;
 use primus_integer::FheUint;
 use primus_lattice::{
     ggsw::Ggsw, glwe::Glwe, lwe::Lwe, workspace::NttGlweExternalProductWorkspace,
@@ -31,7 +30,7 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
     #[must_use]
     pub fn new(key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
         Self {
-            inner: ControlAggregationWorkspace::new(key.controls(), key.block_size()),
+            inner: ControlAggregationWorkspace::new(key),
         }
     }
 
@@ -75,18 +74,11 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
         B: Data<Elem = T>,
         C: DataMut<Elem = T>,
     {
-        let controls = key.controls();
-        let size = controls.size();
-        let n = size.glwe_size().poly_length().get();
         check_lookup_table(key, lookup_table.as_view(), modulus_switch, ntt);
         assert_eq!(
-            (
-                input.dimension(),
-                lookup_table.as_ref().len(),
-                output.as_ref().len()
-            ),
-            (controls.input_dimension().get(), n, size.glwe_len()),
-            "block blind-rotation input, LUT or output layout mismatch"
+            (input.dimension(), output.as_ref().len()),
+            (key.input_dimension().get(), key.size().glwe_len()),
+            "block blind-rotation input or output layout mismatch"
         );
         self.check_layout(key);
         self.blind_rotate_interleaved_lookup_table_kernel_to(
@@ -107,10 +99,7 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
                 self.inner.input_exponents.len(),
                 self.inner.external_product.size()
             ),
-            (
-                key.controls().input_dimension().get(),
-                key.controls().size()
-            ),
+            (key.input_dimension().get(), key.size()),
             "block blind-rotation workspace layout mismatch"
         );
     }
@@ -129,10 +118,9 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
     ) where
         Table: NttTable<ValueT = T>,
     {
-        let controls = key.controls();
-        let size = controls.size();
+        let size = key.size();
         let n = size.glwe_size().poly_length().get();
-        let modulus = controls.ring_modulus();
+        let modulus = key.ring_modulus();
         let ControlAggregationWorkspace {
             input_exponents,
             rotation_groups,
@@ -146,15 +134,11 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(initial_exponent, &mut Polynomial(body), modulus);
 
-        let controls_per_block =
-            key.block_size() + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
         let mut output_is_current = true;
-        for (exponents, ciphertexts) in input_exponents.chunks_exact(key.block_size()).zip(
-            controls
-                .as_slice()
-                .chunks_exact(controls_per_block * size.ggsw_len()),
-        ) {
-            let (selections, dummy) = ciphertexts.split_at(key.block_size() * size.ggsw_len());
+        for ((_, selections, dummy), exponents) in key
+            .blocks()
+            .zip(input_exponents.chunks_exact(key.block_size()))
+        {
             // Always overwrite the previous block's NTT representation. The
             // validated layout has either one full dummy or no dummy at all.
             if dummy.is_empty() {
@@ -175,7 +159,7 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
                 aggregate_ntt.external_product_to(
                     &output,
                     scratch,
-                    controls.basis(),
+                    key.basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -184,7 +168,7 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
                 aggregate_ntt.external_product_to(
                     scratch,
                     &mut output,
-                    controls.basis(),
+                    key.basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -268,13 +252,13 @@ impl<T: FheUint, const LANES: usize> BlockGlweBlindRotationBatchWorkspace<T, LAN
         assert!(
             inputs
                 .iter()
-                .all(|input| input.dimension() == key.controls().input_dimension().get()),
+                .all(|input| input.dimension() == key.input_dimension().get()),
             "block blind-rotation input layout mismatch"
         );
         assert!(
             outputs
                 .iter()
-                .all(|output| output.as_ref().len() == key.controls().size().glwe_len()),
+                .all(|output| output.as_ref().len() == key.size().glwe_len()),
             "block blind-rotation output layout mismatch"
         );
         let (inputs, outputs) = if LANES == 16 {
@@ -339,8 +323,7 @@ impl<T: FheUint, const LANES: usize> BlockGlweBlindRotationBatchWorkspace<T, LAN
             .expect("block batch group exceeds its allocated lanes");
         blind_rotate_groups_batch_kernel(
             lanes.each_mut().map(|lane| &mut lane.inner),
-            key.controls(),
-            blocks(key),
+            key,
             inputs.each_ref().map(Lwe::as_view),
             lookup_table.as_view(),
             modulus_switch,
@@ -350,20 +333,6 @@ impl<T: FheUint, const LANES: usize> BlockGlweBlindRotationBatchWorkspace<T, LAN
     }
 }
 
-/// Consecutive logical blocks directly describe the control order. Every group
-/// includes a final independently encrypted dummy only for AtMostOne.
-fn blocks<T: FheUint>(
-    key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
-) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
-    let width = key.block_size();
-    let count = width + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
-    key.controls()
-        .as_slice()
-        .chunks_exact(count * key.controls().size().ggsw_len())
-        .enumerate()
-        .map(move |(block, controls)| (block * width..(block + 1) * width, controls))
-}
-
 /// Shared raw boundary for the key's ordinary step-one LUT and transform domain.
 fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
@@ -371,15 +340,14 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     modulus_switch: &RotationModulusSwitch<T>,
     ntt: &Table,
 ) {
-    let controls = key.controls();
-    let n = controls.size().glwe_size().poly_length().get();
+    let n = key.size().glwe_size().poly_length().get();
     assert_eq!(
         modulus_switch.rotation_step(),
         1,
         "ordinary blind rotation requires step one"
     );
     assert!(
-        modulus_switch.is_compatible(controls.input_modulus_value(), 2 * n),
+        modulus_switch.is_compatible(key.input_modulus_value(), 2 * n),
         "block blind-rotation quantizer domain mismatch"
     );
     assert_eq!(
@@ -389,7 +357,7 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     );
     assert_eq!(
         (ntt.poly_length().get(), ntt.modulus()),
-        (n, controls.ring_modulus().value()),
+        (n, key.ring_modulus().value()),
         "block blind-rotation NTT layout mismatch"
     );
 }

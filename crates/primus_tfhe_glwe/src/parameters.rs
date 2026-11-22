@@ -109,7 +109,6 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
             evaluation: PbsEvaluationParameters {
                 small_dimension: small_lwe.dimension(),
                 small_modulus: small_lwe.cipher_modulus_value(),
-                small_secret_distr: small_lwe.secret_key_distr(),
                 ring_to_small,
                 rotation_modulus_switch,
                 pbs_order: config.order,

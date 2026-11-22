@@ -65,7 +65,8 @@ pub struct CbsConfig<T: FheUint, M: RingContext<T>, LM: RingContext<T> = M> {
 /// NTT accepts Ordinary and keeps its existing NTT representation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FourierTracePrecision {
-    /// Direct Fourier encryption and one spectrum per key polynomial.
+    /// Fourier stores one spectrum per polynomial after exact encryption in the
+    /// native coefficient ring.
     #[default]
     Ordinary,
     /// Exact coefficient keys split into unsigned low35/high29 spectra.

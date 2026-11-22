@@ -11,17 +11,21 @@ use blind_rotation::Controls;
 use num_traits::{ConstOne, ConstZero};
 use primus_integer::FheUint;
 use primus_lattice::nlev::NttNlev;
-use primus_ntru::{NtruLweKeySwitchingKey, NttNtruGadgetEncryptWorkspace, NttNtruSecretKey};
+use primus_ntru::{
+    NtruError, NtruLweKeySwitchingKey, NtruSecretKey, NttNtruGadgetEncryptWorkspace,
+    NttNtruSecretKey,
+};
 use primus_ntt::MonomialNttTable;
+use primus_tfhe_ntru::BlockNtruKeyLayout;
 use zeroize::Zeroizing;
 
 use crate::{BlindRotationMethod, ClientKey, KeyGenerationError, TfheContext};
 pub use classic::ClassicControls;
 
 /// Public setup geometry checked before sampling or key allocation.
-enum BlindRotationLayout {
+enum BlindRotationLayout<T: FheUint> {
     Classic,
-    Block(crate::block::BlockKeyLayout),
+    Block(BlockNtruKeyLayout<T>),
 }
 
 /// Owning PBS bundle: blind rotation and required LWE return material.
@@ -155,7 +159,7 @@ where
         let layout = self.prepare_blind_rotation()?;
         let (client_key, transformed) = self.generate_client_key_with_main(rng)?;
         let server_key =
-            self.generate_server_key_from_transformed(&client_key, transformed, layout, rng)?;
+            self.generate_server_key_from_transformed(&client_key, transformed, layout, rng);
         Ok((client_key, server_key))
     }
 
@@ -172,15 +176,23 @@ where
     ) -> Result<ServerKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let transformed = NttNtruSecretKey::try_from_coeff_secret_key(
-            client_key.accumulator_ntru_secret_key(),
-            self.context
-                .parameters()
-                .accumulator_ntru()
-                .cipher_modulus(),
+        let transformed =
+            self.transform_accumulator_secret(client_key.accumulator_ntru_secret_key())?;
+        Ok(self.generate_server_key_from_transformed(client_key, transformed, layout, rng))
+    }
+
+    /// Prepares the transform and inverse of an imported secret after its caller checks
+    /// compatibility with the accumulator. Paired generation already has this representation.
+    fn transform_accumulator_secret(
+        &self,
+        secret: &NtruSecretKey<T>,
+    ) -> Result<NttNtruSecretKey<T>, NtruError> {
+        let accumulator = self.context.parameters().accumulator_ntru();
+        NttNtruSecretKey::try_from_coeff_secret_key(
+            secret,
+            accumulator.cipher_modulus(),
             self.context.table(),
-        )?;
-        self.generate_server_key_from_transformed(client_key, transformed, layout, rng)
+        )
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
@@ -189,24 +201,23 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         accumulator_ntt: &NttNtruSecretKey<T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
-        Ok(match layout {
+    ) -> BlindRotationKey<T> {
+        match layout {
             BlindRotationLayout::Classic => self
                 .generate_classic_blind_rotation_key_from_transformed(
                     client_key,
                     accumulator_ntt,
                     rng,
                 ),
-            BlindRotationLayout::Block(layout) => self
-                .generate_block_blind_rotation_key_with_main(
-                    client_key,
-                    accumulator_ntt,
-                    layout,
-                    rng,
-                )?,
-        })
+            BlindRotationLayout::Block(layout) => self.generate_block_blind_rotation_key_with_main(
+                client_key,
+                accumulator_ntt,
+                layout,
+                rng,
+            ),
+        }
     }
 
     /// Consumes the accepted accumulator transform for BR, then releases it before
@@ -216,24 +227,34 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         accumulator_ntt: NttNtruSecretKey<T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<ServerKey<T>, KeyGenerationError>
+    ) -> ServerKey<T>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let parameters = self.context.parameters();
         let blind_rotation =
-            self.generate_blind_rotation_key_with_main(client_key, &accumulator_ntt, layout, rng)?;
+            self.generate_blind_rotation_key_with_main(client_key, &accumulator_ntt, layout, rng);
         drop(accumulator_ntt);
-        let key_switching_key = NtruLweKeySwitchingKey::generate(
+        let key_switching_key = self.generate_lwe_return_key(client_key, rng);
+        ServerKey::new(blind_rotation, key_switching_key)
+    }
+
+    /// Generates the configured return rows after the secret pair is sampled or validated,
+    /// including the magnitude of the accumulator secret at external q.
+    fn generate_lwe_return_key<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        client_key: &ClientKey<T>,
+        rng: &mut R,
+    ) -> NtruLweKeySwitchingKey<T> {
+        let parameters = self.context.parameters();
+        NtruLweKeySwitchingKey::generate(
             client_key.accumulator_ntru_secret_key(),
             parameters.accumulator_ntru().cipher_modulus(),
             client_key.external_lwe_secret_key(),
             parameters.key_switching(),
             rng,
-        );
-        Ok(ServerKey::new(blind_rotation, key_switching_key))
+        )
     }
 
     /// Generates only BR material using this context's configured method and gadgets.
@@ -259,15 +280,9 @@ where
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
         client_key.check_blind_rotation_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let transformed = NttNtruSecretKey::try_from_coeff_secret_key(
-            client_key.accumulator_ntru_secret_key(),
-            self.context
-                .parameters()
-                .accumulator_ntru()
-                .cipher_modulus(),
-            self.context.table(),
-        )?;
-        self.generate_blind_rotation_key_with_main(client_key, &transformed, layout, rng)
+        let transformed =
+            self.transform_accumulator_secret(client_key.accumulator_ntru_secret_key())?;
+        Ok(self.generate_blind_rotation_key_with_main(client_key, &transformed, layout, rng))
     }
 
     /// Generates independent `NLEV_f[1]` for public polynomial lifting.
@@ -286,7 +301,7 @@ where
     /// polynomial products; compatible parameters do not prove a decoding margin.
     pub fn try_generate_public_lift_key<R: rand::Rng + rand::CryptoRng>(
         &mut self,
-        secret: &primus_ntru::NtruSecretKey<T>,
+        secret: &NtruSecretKey<T>,
         parameters: &primus_ntru::NlevParameters<T, primus_modulus::BarrettModulus<T>>,
         rng: &mut R,
     ) -> Result<NttNlev<Vec<T>>, KeyGenerationError> {
@@ -294,11 +309,7 @@ where
         self.context
             .parameters()
             .check_accumulator_secret_key(secret)?;
-        let transformed = NttNtruSecretKey::try_from_coeff_secret_key(
-            secret,
-            parameters.encryption_parameters().cipher_modulus(),
-            self.context.table(),
-        )?;
+        let transformed = self.transform_accumulator_secret(secret)?;
         Ok(self.generate_public_lift_from_transformed(&transformed, parameters, rng))
     }
 
@@ -445,16 +456,12 @@ where
     }
 
     /// Checks public grouping geometry before secrets or rows are sampled.
-    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
+    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout<T>, KeyGenerationError> {
         let parameters = self.context.parameters();
         Ok(match parameters.blind_rotation_method() {
             BlindRotationMethod::Classic => BlindRotationLayout::Classic,
             BlindRotationMethod::Block => {
-                BlindRotationLayout::Block(crate::block::BlockKeyLayout::try_new(
-                    parameters.external_lwe_dimension().get(),
-                    parameters.external_lwe().secret_key_distr(),
-                    parameters.blind_rotation(),
-                )?)
+                BlindRotationLayout::Block(BlockNtruKeyLayout::try_from_parameters(parameters)?)
             }
         })
     }

@@ -8,8 +8,8 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::Polynomial;
 use primus_tfhe::rotation::RotationModulusSwitch;
-use primus_tfhe_glwe::GlweBlindRotationControls;
 
+use super::BlockGlweBootstrappingKey;
 mod arithmetic;
 
 pub(super) use arithmetic::aggregate_controls_assign;
@@ -32,20 +32,16 @@ impl<T: FheUint> ControlAggregationWorkspace<T> {
         self.external_product.with_rebound(size, operation)
     }
 
-    /// The typed wrapper supplies its largest group, not the full input dimension.
     /// Descriptors exist only for u64 layouts whose controls span multiple tiles.
-    pub(crate) fn new(
-        controls: &GlweBlindRotationControls<T, BarrettModulus<T>>,
-        max_group_len: usize,
-    ) -> Self {
-        let size = controls.size();
+    pub(crate) fn new(key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
+        let size = key.size();
         let tile_len = arithmetic::tile_len::<T>(size.glwe_size().poly_length().get());
         Self {
-            input_exponents: vec![0; controls.input_dimension().get()],
+            input_exponents: vec![0; key.input_dimension().get()],
             rotation_groups: vec![
                 arithmetic::FourRotations::default();
                 if T::BITS == 64 && size.ggsw_len() > tile_len {
-                    max_group_len / 4
+                    key.block_size() / 4
                 } else {
                     0
                 }
@@ -64,29 +60,22 @@ impl<T: FheUint> ControlAggregationWorkspace<T> {
 /// Only source-group traversal is interleaved; each input's dependent group chain,
 /// 16 KiB tile schedule and arithmetic/reduction boundaries remain unchanged.
 /// Single-input evaluation retains its original kernel.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "keep control geometry, group traversal and per-lane resources explicit"
-)]
 pub(crate) fn blind_rotate_groups_batch_kernel<
-    'a,
     T: FheUint,
     Table: NttTable<ValueT = T>,
-    I: ExactSizeIterator<Item = usize> + Clone,
     const LANES: usize,
 >(
     mut lanes: [&mut ControlAggregationWorkspace<T>; LANES],
-    controls: &GlweBlindRotationControls<T, BarrettModulus<T>>,
-    groups: impl Iterator<Item = (I, &'a [T])>,
+    key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
     inputs: [Lwe<&[T]>; LANES],
     lookup_table: Polynomial<&[T]>,
     modulus_switch: &RotationModulusSwitch<T>,
     mut outputs: [Glwe<&mut [T]>; LANES],
     ntt: &Table,
 ) {
-    let size = controls.size();
+    let size = key.size();
     let n = size.glwe_size().poly_length().get();
-    let modulus = controls.ring_modulus();
+    let modulus = key.ring_modulus();
     for ((lane, input), output) in lanes.iter_mut().zip(inputs).zip(&mut outputs) {
         modulus_switch.exponent_slice_to(input.a(), &mut lane.input_exponents);
         let exponent = modulus_switch.exponent(input.b()).wrapping_neg() & (2 * n - 1);
@@ -95,9 +84,8 @@ pub(crate) fn blind_rotate_groups_batch_kernel<
         lookup_table.mul_monomial_to(exponent, &mut Polynomial(body), modulus);
     }
     let mut output_is_current = true;
-    for (indices, ciphertexts) in groups {
+    for (indices, selections, dummy) in key.blocks() {
         let count = indices.len();
-        let (selections, dummy) = ciphertexts.split_at(count * size.ggsw_len());
         for lane in lanes.iter_mut() {
             // The public group layout determines initialization, never secret
             // occupancy. No-dummy groups must erase the previous NTT values too.
@@ -143,7 +131,7 @@ pub(crate) fn blind_rotate_groups_batch_kernel<
                 aggregate_ntt.external_product_to(
                     output,
                     &mut lane.scratch,
-                    controls.basis(),
+                    key.basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,
@@ -152,7 +140,7 @@ pub(crate) fn blind_rotate_groups_batch_kernel<
                 aggregate_ntt.external_product_to(
                     &lane.scratch,
                     output,
-                    controls.basis(),
+                    key.basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,

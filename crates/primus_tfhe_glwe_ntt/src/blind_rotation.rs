@@ -8,7 +8,7 @@ use primus_lattice::{
     lwe::Lwe,
     workspace::{NttGlweExternalProductWorkspace, NttGlweTernaryCmuxWorkspace},
 };
-use primus_ntt::MonomialNttTable;
+use primus_ntt::{MonomialNttTable, NttTable};
 use primus_poly::Polynomial;
 use primus_reduce::FieldContext;
 use primus_tfhe::rotation::RotationModulusSwitch;
@@ -164,7 +164,7 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
             ),
             "PBSManyLUT input, table, or output layout mismatch"
         );
-        self.assert_compatible(modulus, ntt, workspace);
+        self.assert_compatible(modulus.value(), ntt, workspace);
         self.ntt_blind_rotate_interleaved_lookup_table_kernel_to(
             input.as_view(),
             lookup_table.as_view(),
@@ -296,37 +296,30 @@ impl<T: FheUint> NttGlweBootstrappingKey<T> {
             "blind-rotation input, accumulator or output layout mismatch"
         );
 
-        self.assert_compatible(modulus, ntt, workspace);
+        self.assert_compatible(modulus.value(), ntt, workspace);
         let initial_exponent = exponent_of(input.b()).wrapping_neg() & (two_n - 1);
         accumulator.mul_monomial_to(initial_exponent, &mut output, poly_length, modulus);
         self.blind_rotate_initialized(input, output, modulus, ntt, workspace, exponent_of);
     }
 
     /// Checks evaluation resources before initializing the output accumulator.
-    fn assert_compatible<M, Table>(
+    fn assert_compatible(
         &self,
-        modulus: M,
-        ntt: &Table,
+        modulus: T,
+        ntt: &impl NttTable<ValueT = T>,
         workspace: &NttGlweBlindRotationWorkspace<T>,
-    ) where
-        M: FieldContext<T>,
-        Table: MonomialNttTable<ValueT = T>,
-    {
+    ) {
         assert_eq!(
             ntt.poly_length().get(),
             self.size().glwe_size().poly_length().get(),
             "blind-rotation NTT polynomial length mismatch"
         );
         assert_eq!(
-            Some(modulus.value()),
+            Some(modulus),
             self.cipher_modulus(),
             "blind-rotation ciphertext modulus mismatch"
         );
-        assert_eq!(
-            ntt.modulus(),
-            modulus.value(),
-            "NTT ciphertext modulus mismatch"
-        );
+        assert_eq!(ntt.modulus(), modulus, "NTT ciphertext modulus mismatch");
         assert_eq!(
             workspace.size(),
             self.size(),

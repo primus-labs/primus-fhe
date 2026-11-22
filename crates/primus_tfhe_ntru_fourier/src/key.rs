@@ -14,15 +14,16 @@ use primus_lattice::nlev::FourierNlev;
 use primus_ntru::{
     FourierNtruGadgetEncryptWorkspace, FourierNtruSecretKey, NtruLweKeySwitchingKey,
 };
+use primus_tfhe_ntru::BlockNtruKeyLayout;
 use zeroize::Zeroizing;
 
 use crate::{BlindRotationMethod, ClientKey, KeyGenerationError, TfheContext};
 pub use classic::ClassicControls;
 
 /// Public setup geometry checked before sampling or key allocation.
-enum BlindRotationLayout {
+enum BlindRotationLayout<T: TorusFftValue> {
     Classic,
-    Block(crate::block::BlockKeyLayout),
+    Block(BlockNtruKeyLayout<T>),
 }
 
 /// Owning PBS bundle: blind rotation and required LWE return material.
@@ -185,7 +186,7 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         accumulator_fourier: &FourierNtruSecretKey,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         exact: Option<&primus_ntru::split::NativeNtruGadgetGenerator<T>>,
         rng: &mut R,
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
@@ -211,13 +212,12 @@ where
                     accumulator_fourier,
                     rng,
                 ),
-            BlindRotationLayout::Block(layout) => self
-                .generate_block_blind_rotation_key_with_main(
-                    client_key,
-                    accumulator_fourier,
-                    layout,
-                    rng,
-                )?,
+            BlindRotationLayout::Block(layout) => self.generate_block_blind_rotation_key_with_main(
+                client_key,
+                accumulator_fourier,
+                layout,
+                rng,
+            ),
         })
     }
 
@@ -257,7 +257,7 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         accumulator_fourier: FourierNtruSecretKey,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
     ) -> Result<ServerKey<T>, KeyGenerationError>
     where
@@ -475,16 +475,12 @@ where
     }
 
     /// Checks public grouping geometry and backend capability before sampling.
-    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
+    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout<T>, KeyGenerationError> {
         Ok(match self.context.parameters().blind_rotation_method() {
             BlindRotationMethod::Classic => BlindRotationLayout::Classic,
-            BlindRotationMethod::Block => {
-                BlindRotationLayout::Block(crate::block::BlockKeyLayout::try_new(
-                    self.context.parameters().external_lwe_dimension().get(),
-                    self.context.parameters().external_lwe().secret_key_distr(),
-                    self.context.parameters().blind_rotation(),
-                )?)
-            }
+            BlindRotationMethod::Block => BlindRotationLayout::Block(
+                BlockNtruKeyLayout::try_from_parameters(self.context.parameters())?,
+            ),
         })
     }
 }

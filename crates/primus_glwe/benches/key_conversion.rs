@@ -167,8 +167,8 @@ fn ntt_conversion(c: &mut Criterion) {
         group.bench_function("scheme_switch", |b| {
             b.iter(|| {
                 key.apply_to(
-                    black_box(&input),
-                    &mut output,
+                    black_box(input.as_view()),
+                    output.as_mut_view(),
                     modulus,
                     &table,
                     &mut workspace,

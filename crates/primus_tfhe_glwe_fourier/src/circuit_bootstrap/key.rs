@@ -121,14 +121,7 @@ where
         }
         tfhe.check_accumulator_secret_key(accumulator_secret)?;
 
-        let mut encryptor = FourierGlweEncryptor::try_new(
-            accumulator_secret,
-            self.context
-                .parameters()
-                .blind_rotation_params()
-                .encryption_parameters(),
-        )
-        .map_err(crate::error::glwe_encryption_error)?;
+        let mut encryptor = self.prepare_accumulator(accumulator_secret)?;
 
         Ok(self.generate_circuit_bootstrap_key_with_accumulator(&mut encryptor, parameters, rng))
     }

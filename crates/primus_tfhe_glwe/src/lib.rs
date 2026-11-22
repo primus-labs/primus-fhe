@@ -59,7 +59,6 @@ mod block;
 mod circuit_bootstrap;
 mod client;
 mod config;
-mod controls;
 mod error;
 mod key;
 mod lookup_table;
@@ -68,10 +67,9 @@ mod parameters;
 use primus_glwe::{GgswParameters, GlevParameters, GlweKeySwitchingParameters, GlweSecretKey};
 use primus_lwe::LweSecretKey;
 
-pub use block::BlockGlweBootstrappingKey;
+pub use block::{BlockGlweBootstrappingKey, BlockGlweKeyLayout};
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, FourierTracePrecision, PbsConfig};
-pub use controls::GlweBlindRotationControls;
 pub use error::{
     BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
     TfheClientError, TfheKeyError, TfheParameterError,

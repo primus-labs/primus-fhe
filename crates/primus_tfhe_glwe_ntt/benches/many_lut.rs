@@ -2,16 +2,16 @@
 //! Parameters and comparison limits: guides/development/testing.md#tfhe-benchmarks
 //! One iteration is one server request. Setup and correctness checks are untimed.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
 use primus_ntt::U64NttTable as Table;
 use primus_tfhe_glwe_ntt::{TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 type Word = u64;
 
 fn benchmark(c: &mut Criterion) {
-    let engine = "ntt";
     let config = experimental::CLASSIC_MANY_LUT_U64;
     let context = TfheContext::<Word, Table>::try_from_pbs_config(config).unwrap();
     // Client: keys, inputs and candidate ciphertexts are all prepared outside timing.
@@ -50,7 +50,7 @@ fn benchmark(c: &mut Criterion) {
             );
         }
     }
-    let mut group = c.benchmark_group(format!("many_lut/glwe/{engine}"));
+    let mut group = c.benchmark_group("many_lut/glwe/ntt");
     group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
     group.bench_function("grade_flag/u64", |b| {
         b.iter(|| {
@@ -68,15 +68,11 @@ fn benchmark(c: &mut Criterion) {
     }
 }
 
-fn benchmarks(c: &mut Criterion) {
-    benchmark(c);
-}
-
 criterion::criterion_group! {
     name = benches;
     config = criterion::Criterion::default().sample_size(20)
         .warm_up_time(std::time::Duration::from_secs(1))
         .measurement_time(std::time::Duration::from_secs(3));
-    targets = benchmarks
+    targets = benchmark
 }
 criterion::criterion_main!(benches);

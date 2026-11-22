@@ -12,14 +12,14 @@ use crate::{PbsParameters, block::BlockNtruBootstrappingKey};
 /// The classic initializer and controls share the stored blind-rotation basis.
 /// Classic coordinate zero holds NLEV bit controls for fused lifting; later
 /// coordinates hold NGSW controls (positive/negative pairs for ternary).
-/// Block keys lift with their first group and carry no initializer.
+/// Block keys lift with their first block and carry no initializer.
 pub struct BlindRotationKey<T: TorusFftValue> {
     pub(super) blind_rotation_basis: ApproxSignedBasis<T>,
     pub(super) controls: Controls<T>,
     pub(super) input_distribution: SecretKeyDistr,
 }
 
-/// Owning algorithm alternatives; grouped lifting is encoded in the first group.
+/// Owning algorithm alternatives; Block lifting is encoded in the first block.
 pub(super) enum Controls<T: TorusFftValue> {
     // First coordinate: NLEV bit(s); remaining coordinates: NGSW bit(s).
     Classic {
@@ -149,8 +149,8 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                                 block_size: key.block_size(),
                                 occupancy: key.occupancy(),
                             }
-                        && key.controls().input_dimension() == parameters.external_lwe_dimension()
-                        && key.controls().control_len() == parameters.blind_rotation().nlev_len()
+                        && key.input_dimension() == parameters.external_lwe_dimension()
+                        && key.control_len() == parameters.blind_rotation().nlev_len()
                 }
             }
     }

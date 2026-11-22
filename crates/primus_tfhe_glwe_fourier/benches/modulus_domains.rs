@@ -3,13 +3,14 @@
 //! cargo bench -p primus_tfhe_glwe_fourier --bench modulus_domains --no-default-features --features tfhe-fft
 //! G1-inspired padded t4, not MSB encoding or a certified parameter set.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_fft::TfheFftTable as Table;
 use primus_glwe::{GlweDimension, SecretKeyDistr};
 use primus_lwe::LweDimension;
-use primus_modulus::NativeModulus;
-use primus_modulus::PowOf2Modulus;
+use primus_modulus::{NativeModulus, PowOf2Modulus};
 use primus_reduce::RingContext;
 use primus_shape::PolyLength;
 use primus_tfhe_glwe_fourier::{
@@ -17,7 +18,6 @@ use primus_tfhe_glwe_fourier::{
     PbsConfig, PbsMessageConfig, PbsOrder, TfheContext,
 };
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 /// Hold Q, geometry and ring gadgets fixed; express fresh input noise in q units.
 fn config<LM: RingContext<u64>>(
@@ -77,21 +77,15 @@ where
     let mut evaluator = context.evaluator(&server).unwrap();
     let mut output = context.allocate_lwe_ciphertext();
     let mut input = context.allocate_lwe_ciphertext();
-    let mut input_rng = StdRng::seed_from_u64(1042);
-    for message in [0, 1, 0, 1] {
+    // Each bit starts at the same seed so the timed bit retains its original fixture.
+    for message in [0, 1] {
+        let mut input_rng = StdRng::seed_from_u64(1042);
         encryptor
             .encrypt_padded_to(message, input.as_mut_view(), &mut input_rng)
             .unwrap();
         evaluator.apply_lookup_table_to(input.as_view(), &table, output.as_mut_view());
         assert_eq!(decryptor.decrypt(output.as_view()).unwrap(), 1 - message);
     }
-    // Keep the timed fixture independent of the untimed validation loop.
-    input_rng = StdRng::seed_from_u64(1042);
-    encryptor
-        .encrypt_padded_to(1, input.as_mut_view(), &mut input_rng)
-        .unwrap();
-    evaluator.apply_lookup_table_to(input.as_view(), &table, output.as_mut_view());
-    assert_eq!(decryptor.decrypt(output.as_view()).unwrap(), 0);
     let mut group = c.benchmark_group("pbs/domains/tfhe-fft");
     group.throughput(Throughput::Elements(1));
     group.sampling_mode(criterion::SamplingMode::Flat);

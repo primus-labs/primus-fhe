@@ -231,7 +231,7 @@ where
     ///
     /// Checks key compatibility once through [`Self::evaluator`]. Context and
     /// key material remain borrowed; online evaluation reuses every buffer.
-    /// Inherits [`Evaluator::try_new`]'s material requirements.
+    /// Inherits [`TfheContext::evaluator`]'s material requirements.
     pub fn mvb_evaluator<'a>(
         &'a self,
         server_key: &'a ServerKey<T>,

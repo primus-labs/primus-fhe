@@ -2,9 +2,12 @@
 //! PRIMUS_CBS_DOMAIN=same or split selects the explicit q=Q/q1024 comparison.
 //! LightFHE CMUX2 (G1) derived identity CBS; setup and real CMux validation are untimed.
 //! PRIMUS_CBS_ENCODING=padded|msb compares input encodings without changing gadgets.
-//! bit*_cmux includes both CBS and its encrypted CMux consumer.
+//! bit0/bit1 end at NTT GGSW. CMux is exercised only during validation.
+//! Former bit*_cmux ring-output timings can be reproduced at dc3a663e.
 //! Parameters differ from the author's input/KS protocol and are not certified presets.
 //! Comparison scope: guides/performance/README.md#tfhe-comparisons
+
+use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput};
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
@@ -22,7 +25,6 @@ use primus_tfhe_glwe_ntt::{
     LweConfig, ModulusConfig, PbsConfig, PbsMessageConfig, PbsOrder, TfheContext,
 };
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 type Word = u64;
 const Q54: Word = 18_014_398_509_404_161;
@@ -105,31 +107,26 @@ where
         .cbs_encryptor(client.external_lwe_secret_key())
         .unwrap();
     let mut input_rng = StdRng::seed_from_u64(1042);
-    let inputs: Vec<_> = (0..2)
-        .map(|bit| {
-            let mut input = context.allocate_lwe_ciphertext();
-            encryptor
-                .encrypt_to(bit, input.as_mut_view(), &mut input_rng)
-                .unwrap();
-            input
-        })
-        .collect();
+    let inputs = [0, 1].map(|bit| {
+        let mut input = context.allocate_lwe_ciphertext();
+        encryptor
+            .encrypt_to(bit, input.as_mut_view(), &mut input_rng)
+            .unwrap();
+        input
+    });
     let n = config.pbs.bsk_poly_length.get();
     let mut ring_client = context
         .accumulator_client(client.glwe_secret_key(), 8)
         .unwrap();
-    let messages: Vec<Vec<Word>> = (0..2)
-        .map(|r| {
-            (0..n)
-                .map(|i| (((i >> r) + i / 7 + r) & 3) as Word)
-                .collect()
-        })
-        .collect();
+    let messages = [0, 1].map(|r| {
+        (0..n)
+            .map(|i| (((i >> r) + i / 7 + r) & 3) as Word)
+            .collect::<Vec<_>>()
+    });
     let mut candidate_rng = StdRng::seed_from_u64(2042);
-    let candidates: Vec<_> = messages
-        .iter()
-        .map(|m| ring_client.encrypt(m, &mut candidate_rng))
-        .collect();
+    let candidates = messages
+        .each_ref()
+        .map(|m| ring_client.encrypt(m, &mut candidate_rng));
     let mut decoded = vec![0; n];
 
     // Server: each Boolean control must select a real encrypted polynomial.
@@ -159,8 +156,8 @@ where
                     modulus,
                     context.table(),
                 );
+                let weight = modulus.reduce_mul(bit as u64, scalar);
                 for (i, &actual) in phase.as_ref().iter().enumerate() {
-                    let weight = modulus.reduce_mul(bit as u64, scalar);
                     let expected = match secret {
                         Some(secret) => modulus.reduce_neg(
                             modulus.reduce_mul(weight, modulus.encode_signed(secret[i])),
@@ -197,38 +194,12 @@ where
     group.throughput(Throughput::Elements(1));
     group.sampling_mode(criterion::SamplingMode::Flat);
     for (bit, input) in inputs.iter().enumerate() {
-        // Seed this bit even when Criterion filters out its CBS-only measurement.
-        evaluator.circuit_bootstrap_to(input.as_view(), control.as_mut_view());
         group.bench_function(BenchmarkId::new(format!("bit{bit}"), "u64"), |b| {
             b.iter(|| {
                 evaluator.circuit_bootstrap_to(black_box(input.as_view()), control.as_mut_view());
                 black_box(control.as_view());
             })
         });
-        evaluator.cmux_to(
-            control.as_view(),
-            candidates[0].as_view(),
-            candidates[1].as_view(),
-            selected.as_mut_view(),
-        );
-        ring_client.decrypt_to(&selected, &mut decoded);
-        assert_eq!(decoded, messages[bit], "timed CBS bit{bit} consumer failed");
-        // A separate complete request includes actual use of the generated control.
-        group.bench_function(BenchmarkId::new(format!("bit{bit}_cmux"), "u64"), |b| {
-            b.iter(|| {
-                evaluator.circuit_bootstrap_to(black_box(input.as_view()), control.as_mut_view());
-                evaluator.cmux_to(
-                    control.as_view(),
-                    candidates[0].as_view(),
-                    candidates[1].as_view(),
-                    selected.as_mut_view(),
-                );
-                black_box(selected.as_view());
-            })
-        });
-        // Check the actual complete-request output without rerunning the server.
-        ring_client.decrypt_to(&selected, &mut decoded);
-        assert_eq!(decoded, messages[bit], "timed CBS bit{bit} consumer failed");
     }
     group.finish();
 }

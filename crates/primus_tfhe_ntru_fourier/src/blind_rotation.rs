@@ -4,8 +4,8 @@ use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 
 use crate::{
+    block::{AggregationWorkspace, SplitAggregationWorkspace},
     context::EvaluationContext,
-    grouped_rotation::{AggregationWorkspace, SplitAggregationWorkspace},
     key::{BlindRotationKey, BootstrappingControls, ClassicControls},
 };
 
@@ -43,16 +43,13 @@ impl<'a, T: TorusFftValue> BlindRotationResources<'a, T> {
                 BootstrappingControls::Block { key, precision } => match precision {
                     crate::FourierPrecision::Ordinary => RotationState::Block {
                         key,
-                        scratch: AggregationWorkspace::new(
-                            parameters.blind_rotation(),
-                            key.controls(),
-                        ),
+                        scratch: AggregationWorkspace::new(parameters.blind_rotation(), key),
                     },
                     crate::FourierPrecision::Split { low_bits } => RotationState::BlockSplit {
                         key,
                         scratch: AggregationWorkspace::new_split(
                             parameters.blind_rotation(),
-                            key.controls(),
+                            key,
                             low_bits,
                         ),
                     },
@@ -74,7 +71,7 @@ impl<'a, T: TorusFftValue> BlindRotationResources<'a, T> {
 }
 
 /// Borrowed BR material and owned scratch selected for one control layout.
-/// The variant keeps grouped keys or classic control views paired with their buffers.
+/// The variant keeps Block keys or classic control views paired with their buffers.
 pub(crate) enum RotationState<'a, T: TorusFftValue> {
     Split {
         controls: &'a crate::key::SplitControls<T>,

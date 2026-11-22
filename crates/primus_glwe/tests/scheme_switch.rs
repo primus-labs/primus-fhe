@@ -88,8 +88,8 @@ fn ntt_scheme_switch_produces_an_external_product_control() {
     let mut control: NttGgsw<Vec<u64>> = NttGgsw::zero(output_parameters.ggsw_len());
     let mut scheme_workspace = NttGlweExternalProductWorkspace::new(scheme_parameters.size());
     scheme_key.apply_to(
-        &input_glev,
-        &mut control,
+        input_glev.as_view(),
+        control.as_mut_view(),
         modulus,
         &ntt,
         &mut scheme_workspace,
@@ -137,8 +137,8 @@ fn ntt_scheme_switch_produces_an_external_product_control() {
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 scheme_key.apply_to(
-                    &input_glev,
-                    &mut output,
+                    input_glev.as_view(),
+                    output.as_mut_view(),
                     modulus,
                     table,
                     &mut scheme_workspace,

@@ -8,8 +8,8 @@ use primus_lattice::{
 };
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
-use primus_tfhe_glwe::GlweBlindRotationControls;
 
+use super::BlockGlweBootstrappingKey;
 /// Single-input scratch reused across all blocks, including both occupancy modes.
 pub(crate) struct ControlAggregationWorkspace<T: TorusFftValue> {
     pub(crate) input_exponents: Vec<usize>,
@@ -20,10 +20,10 @@ pub(crate) struct ControlAggregationWorkspace<T: TorusFftValue> {
 }
 
 impl<T: TorusFftValue> ControlAggregationWorkspace<T> {
-    pub(crate) fn new(controls: &GlweBlindRotationControls<T, NativeModulus<T>>) -> Self {
-        let size = controls.size();
+    pub(crate) fn new(key: &BlockGlweBootstrappingKey<T, NativeModulus<T>>) -> Self {
+        let size = key.size();
         Self {
-            input_exponents: vec![0; controls.input_dimension().get()],
+            input_exponents: vec![0; key.input_dimension().get()],
             aggregate: Ggsw::zero(size.ggsw_len()),
             transformed: FourierGgsw::zero(size.fourier_ggsw_len()),
             scratch: TorusGlwe::zero(size.glwe_len()),

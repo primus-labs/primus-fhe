@@ -7,7 +7,7 @@ use primus_reduce::RingContext;
 use primus_tfhe::CircuitBootstrapLookupTable;
 
 use crate::{
-    CircuitBootstrapServerKey, Lwe, TfheContext, TfheEvaluationError,
+    CircuitBootstrapServerKey, Lwe, PbsOrder, TfheContext, TfheEvaluationError,
     bootstrap::BootstrapResources, circuit_bootstrap::CircuitBootstrapEvaluator,
 };
 
@@ -51,10 +51,10 @@ where
     pub fn circuit_bootstrap_to(
         &mut self,
         input: Lwe<&[T]>,
-        mut output: FourierGgsw<&mut [Complex64]>,
+        output: FourierGgsw<&mut [Complex64]>,
     ) {
         self.operation
-            .circuit_bootstrap_to(input, &mut output, &mut self.resources);
+            .circuit_bootstrap_to(input, output, &mut self.resources);
     }
 
     /// Selects a coefficient-ring candidate with a bit control.
@@ -66,10 +66,10 @@ where
         control: FourierGgsw<&[Complex64]>,
         lhs: GlweCiphertext<&[T]>,
         rhs: GlweCiphertext<&[T]>,
-        mut output: GlweCiphertext<&mut [T]>,
+        output: GlweCiphertext<&mut [T]>,
     ) {
         self.operation
-            .cmux_to(&control, &lhs, &rhs, &mut output, &mut self.resources);
+            .cmux_to(control, lhs, rhs, output, &mut self.resources);
     }
 
     /// Multiplies a coefficient-ring ciphertext by a canonical integer control.
@@ -78,10 +78,10 @@ where
         &mut self,
         control: FourierGgsw<&[Complex64]>,
         input: GlweCiphertext<&[T]>,
-        mut output: GlweCiphertext<&mut [T]>,
+        output: GlweCiphertext<&mut [T]>,
     ) {
         self.operation
-            .external_product_to(&control, &input, &mut output, &mut self.resources);
+            .external_product_to(control, input, output, &mut self.resources);
     }
 
     /// Moves out operation state and resources for serial composition with PBS
@@ -175,19 +175,27 @@ where
         {
             return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
-        let circuit_key = server_key.circuit_bootstrap_key();
+        let context = self.evaluation_context();
+        let pbs = context.parameters();
         let circuit = super::key::CircuitBootstrapBinding::try_new(
-            self.parameters().evaluation(),
+            pbs,
             parameters.gadget(),
-            circuit_key,
+            server_key.circuit_bootstrap_key(),
             &lookup_table,
         )?;
-        let resources = server_key.bootstrap_resources(self)?;
-        let operation = CircuitBootstrapEvaluator::from_binding(
-            self.evaluation_context(),
-            circuit,
-            lookup_table,
-        );
+        let server_key = server_key.server_key();
+        let input_key_switching = (pbs.pbs_order() == PbsOrder::KeyswitchBootstrap).then(|| {
+            (
+                pbs.glwe_key_switching(),
+                server_key.glwe_key_switching_key(),
+            )
+        });
+        let resources = BootstrapResources::try_from_bound_keys(
+            context,
+            server_key.blind_rotation_key(),
+            input_key_switching,
+        )?;
+        let operation = CircuitBootstrapEvaluator::from_binding(context, circuit, lookup_table);
         Ok(CbsEvaluator {
             operation,
             resources,

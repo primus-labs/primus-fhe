@@ -42,15 +42,15 @@ fn block_control_storage_binds_complete_logical_groups() {
         )
         .unwrap();
         assert_eq!(key.occupancy(), occupancy);
-        assert_eq!(key.block_count(), 2);
-        assert_eq!(key.controls().input_dimension(), LweDimension::new(6));
-        for block_index in 0..2 {
-            let (range, controls) = key.block_data(block_index);
+        assert_eq!(key.blocks().len(), 2);
+        assert_eq!(key.input_dimension(), LweDimension::new(6));
+        assert_eq!(key.as_slice(), data);
+        for (block_index, (range, controls, dummy)) in key.blocks().enumerate() {
+            let start = count * block_index * ggsw_len;
+            let split = start + 3 * ggsw_len;
             assert_eq!(range, 3 * block_index..3 * (block_index + 1));
-            assert_eq!(
-                controls,
-                &data[count * block_index * ggsw_len..count * (block_index + 1) * ggsw_len]
-            );
+            assert_eq!(controls, &data[start..split]);
+            assert_eq!(dummy, &data[split..start + count * ggsw_len]);
         }
         for block_size in [0, 4] {
             assert!(matches!(

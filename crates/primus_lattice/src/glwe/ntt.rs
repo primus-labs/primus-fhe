@@ -2,7 +2,7 @@ use primus_data::{Data, DataMut, DataOwned, RawData};
 use primus_integer::FheUint;
 use primus_ntt::NttTable;
 use primus_poly::{NttPolynomial, NttPolynomialIter, NttPolynomialIterMut};
-use primus_reduce::FieldContext;
+use primus_reduce::ReduceMulSlice;
 
 use super::Glwe;
 
@@ -162,7 +162,7 @@ where
         modulus: M,
         ntt_table: &Table,
     ) where
-        M: FieldContext<T>,
+        M: Copy + ReduceMulSlice<T>,
         Table: NttTable<ValueT = T>,
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,

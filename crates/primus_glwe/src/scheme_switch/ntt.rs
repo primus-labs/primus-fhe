@@ -1,6 +1,5 @@
 //! Scheme switching from GLev to NTT GGSW ciphertexts.
 
-use primus_data::{Data, DataMut};
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
 use primus_lattice::{
@@ -157,7 +156,7 @@ impl<T: FheUint> NttGlweSchemeSwitchKey<T> {
         &self.key_basis
     }
 
-    /// Converts a coefficient-domain GLev into an NTT-domain GGSW.
+    /// Converts a coefficient-domain GLev into an NTT-domain GGSW using borrowed storage.
     ///
     /// Uses the stored layout and key decomposition basis. The output preserves
     /// the input GLev's gadget scaling; the key basis only decomposes products.
@@ -180,18 +179,18 @@ impl<T: FheUint> NttGlweSchemeSwitchKey<T> {
     ///
     /// Panics if input/output or workspace layouts, the modulus, or the NTT
     /// length/modulus do not match the key. Checks precede output writes.
-    pub fn apply_to<M, Table, A, B>(
+    // Inlining the scheme-switch dispatch regressed the complete GLWE NTT CBS workload.
+    #[inline(never)]
+    pub fn apply_to<M, Table>(
         &self,
-        input: &Glev<A>,
-        output: &mut NttGgsw<B>,
+        input: Glev<&[T]>,
+        mut output: NttGgsw<&mut [T]>,
         modulus: M,
         ntt: &Table,
         workspace: &mut NttGlweExternalProductWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
-        A: Data<Elem = T>,
-        B: DataMut<Elem = T>,
     {
         assert_eq!(
             input.as_ref().len(),
@@ -231,13 +230,7 @@ impl<T: FheUint> NttGlweSchemeSwitchKey<T> {
         let key_basis = &self.key_basis;
 
         if glwe_size.dimension().get() == 1 {
-            self.apply_square_to(
-                input.as_view(),
-                output.as_mut_view(),
-                modulus,
-                ntt,
-                workspace,
-            );
+            self.apply_square_to(input, output, modulus, ntt, workspace);
             return;
         }
 

@@ -1,4 +1,3 @@
-use primus_data::{Data, DataMut};
 use primus_fft::{Complex64, FftTable, TorusFftValue};
 use primus_glwe::{GlevCiphertext, GlweCiphertext};
 use primus_lattice::ggsw::FourierGgsw;
@@ -104,7 +103,7 @@ where
         resources: &mut BootstrapResources<'a, T, Table>,
     ) -> FourierGgsw<Vec<Complex64>> {
         let mut output = self.allocate_output();
-        self.circuit_bootstrap_to(input, &mut output, resources);
+        self.circuit_bootstrap_to(input, output.as_mut_view(), resources);
         output
     }
 
@@ -129,10 +128,10 @@ where
     /// Panics before output writes if the input dimension or output Fourier
     /// GGSW length is wrong, or resources belong to a different context.
     /// LUT parameters are fixed during construction.
-    pub fn circuit_bootstrap_to<S: DataMut<Elem = Complex64>>(
+    pub fn circuit_bootstrap_to(
         &mut self,
         input: Lwe<&[T]>,
-        output: &mut FourierGgsw<S>,
+        mut output: FourierGgsw<&mut [Complex64]>,
         resources: &mut BootstrapResources<'a, T, Table>,
     ) {
         resources.check_context(self.context);
@@ -184,7 +183,7 @@ where
         resources.with_external_product(parameters.scheme_switch().size(), |scratch, fft| {
             circuit_key
                 .scheme_switch_key()
-                .apply_to(&self.projected, output, fft, scratch);
+                .apply_to(&self.projected, &mut output, fft, scratch);
         });
     }
 }
@@ -207,19 +206,14 @@ where
     ///
     /// # Panics
     /// Panics before output writes on a different resource context or a wrong ciphertext length.
-    pub fn cmux_to<A, B, C, D>(
+    pub fn cmux_to(
         &mut self,
-        control: &FourierGgsw<A>,
-        lhs: &GlweCiphertext<B>,
-        rhs: &GlweCiphertext<C>,
-        output: &mut GlweCiphertext<D>,
+        control: FourierGgsw<&[Complex64]>,
+        lhs: GlweCiphertext<&[T]>,
+        rhs: GlweCiphertext<&[T]>,
+        mut output: GlweCiphertext<&mut [T]>,
         resources: &mut BootstrapResources<'a, T, Table>,
-    ) where
-        A: Data<Elem = Complex64>,
-        B: Data<Elem = T>,
-        C: Data<Elem = T>,
-        D: DataMut<Elem = T>,
-    {
+    ) {
         resources.check_context(self.context);
         let parameters = self.circuit.parameters;
         let ring_len = parameters.output_size().glwe_size().glwe_len();
@@ -239,7 +233,14 @@ where
             "CMUX ciphertext layout mismatch"
         );
         resources.with_external_product(parameters.output_size(), |scratch, fft| {
-            control.cmux_to(lhs, rhs, output, parameters.output_basis(), fft, scratch);
+            control.cmux_to(
+                &lhs,
+                &rhs,
+                &mut output,
+                parameters.output_basis(),
+                fft,
+                scratch,
+            );
         });
     }
 
@@ -253,17 +254,13 @@ where
     ///
     /// # Panics
     /// Panics before output writes on a different resource context or a wrong ciphertext length.
-    pub fn external_product_to<A, B, C>(
+    pub fn external_product_to(
         &mut self,
-        control: &FourierGgsw<A>,
-        input: &GlweCiphertext<B>,
-        output: &mut GlweCiphertext<C>,
+        control: FourierGgsw<&[Complex64]>,
+        input: GlweCiphertext<&[T]>,
+        mut output: GlweCiphertext<&mut [T]>,
         resources: &mut BootstrapResources<'a, T, Table>,
-    ) where
-        A: Data<Elem = Complex64>,
-        B: Data<Elem = T>,
-        C: DataMut<Elem = T>,
-    {
+    ) {
         resources.check_context(self.context);
         let parameters = self.circuit.parameters;
         let ring_len = parameters.output_size().glwe_size().glwe_len();
@@ -281,7 +278,13 @@ where
             "external-product ciphertext layout mismatch"
         );
         resources.with_external_product(parameters.output_size(), |scratch, fft| {
-            control.external_product_to(input, output, parameters.output_basis(), fft, scratch);
+            control.external_product_to(
+                &input,
+                &mut output,
+                parameters.output_basis(),
+                fft,
+                scratch,
+            );
         });
     }
 }

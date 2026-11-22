@@ -10,13 +10,13 @@ use primus_glwe::{
 use primus_integer::FheUint;
 use primus_lwe::LweSecretKey;
 use primus_modulus::BarrettModulus;
-use primus_ntt::MonomialNttTable;
+use primus_ntt::{MonomialNttTable, NttTable};
 use primus_reduce::{Modulus, RingContext};
-use primus_tfhe_glwe::ClientKey;
+use primus_tfhe_glwe::{BlockGlweKeyLayout, ClientKey, PbsEvaluationParameters};
 
 use crate::{
-    BlindRotationMethod, KeyGenerationError, PbsParameters, TfheContext,
-    block::BlockGlweBootstrappingKey, bootstrapping_key::NttGlweBootstrappingKey,
+    BlindRotationMethod, KeyGenerationError, TfheContext, block::BlockGlweBootstrappingKey,
+    bootstrapping_key::NttGlweBootstrappingKey,
 };
 
 /// Blind-rotation key selected when generating a server key.
@@ -33,24 +33,26 @@ pub enum BlindRotationKey<T: FheUint> {
 
 /// Checked setup geometry, before client sampling or row allocation.
 /// This temporary choice carries no control ciphertexts or private assignments.
-enum BlindRotationLayout {
+enum BlindRotationLayout<T: FheUint> {
     Classic,
-    Block(crate::block::BlockKeyLayout),
+    Block(BlockGlweKeyLayout<T, BarrettModulus<T>>),
 }
 
-impl BlindRotationLayout {
-    fn try_new<T: FheUint>(
+impl<T: FheUint> BlindRotationLayout<T> {
+    fn try_new(
         dimension: usize,
         distribution: SecretKeyDistr,
         parameters: &GgswParameters<T, BarrettModulus<T>>,
+        input_modulus: Option<T>,
         method: BlindRotationMethod,
     ) -> Result<Self, KeyGenerationError> {
         Ok(match method {
             BlindRotationMethod::Classic => Self::Classic,
-            BlindRotationMethod::Block => Self::Block(crate::block::BlockKeyLayout::try_new(
+            BlindRotationMethod::Block => Self::Block(BlockGlweKeyLayout::try_new(
                 dimension,
                 distribution,
                 parameters,
+                input_modulus,
             )?),
         })
     }
@@ -83,21 +85,28 @@ impl<T: FheUint> BlindRotationKey<T> {
         workspace: &mut NttGlweGadgetEncryptWorkspace<T>,
     ) -> Result<Self, KeyGenerationError>
     where
-        Table: MonomialNttTable<ValueT = T>,
+        Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
-        let layout =
-            BlindRotationLayout::try_new(input.dimension(), input.distr(), parameters, method)?;
-        // A raw owning secret has not passed the context's ClientKey boundary.
-        // Only this Block branch scans it here; prepared context generation uses
-        // the already validated path below, avoiding a second full secret scan.
-        if let BlindRotationLayout::Block(layout) = layout {
-            workspace.resize(parameters.size());
-            return Ok(Self::Block(crate::block::generate_with_layout(
-                input, layout, output, parameters, table, rng, workspace,
-            )?));
+        let modulus_minus_one = input.cipher_modulus_minus_one();
+        let input_modulus = (modulus_minus_one != T::MAX).then(|| modulus_minus_one + T::ONE);
+        let layout = BlindRotationLayout::try_new(
+            input.dimension(),
+            input.distr(),
+            parameters,
+            input_modulus,
+            method,
+        )?;
+        // Raw input has not passed the context's ClientKey boundary.
+        match &layout {
+            BlindRotationLayout::Classic => {
+                NttGlweBootstrappingKey::assert_input_supported(input, parameters.poly_length());
+            }
+            BlindRotationLayout::Block(layout) => crate::block::validate_secret(input, layout)?,
         }
-        Self::generate_with_layout(input, output, parameters, layout, table, rng, workspace)
+        Ok(Self::generate_with_layout(
+            input, output, parameters, layout, table, rng, workspace,
+        ))
     }
 
     /// Shares component generation with context-based keygen after public geometry checks.
@@ -105,36 +114,35 @@ impl<T: FheUint> BlindRotationKey<T> {
         input: &LweSecretKey<T>,
         output: &NttGlweSecretKey<T>,
         parameters: &GgswParameters<T, BarrettModulus<T>>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         table: &Table,
         rng: &mut R,
         workspace: &mut NttGlweGadgetEncryptWorkspace<T>,
-    ) -> Result<Self, KeyGenerationError>
+    ) -> Self
     where
-        Table: MonomialNttTable<ValueT = T>,
+        Table: NttTable<ValueT = T>,
         R: rand::Rng + rand::CryptoRng,
     {
         workspace.resize(parameters.size());
-        Ok(match layout {
+        match layout {
             BlindRotationLayout::Classic => Self::Classic(NttGlweBootstrappingKey::generate_ntt(
                 input, output, parameters, table, rng, workspace,
             )),
-            BlindRotationLayout::Block(layout) => {
-                Self::Block(crate::block::generate_validated_with_layout(
-                    input, layout, output, parameters, table, rng, workspace,
-                )?)
-            }
-        })
+            BlindRotationLayout::Block(layout) => Self::Block(crate::block::generate_with_layout(
+                input, layout, output, parameters, table, rng, workspace,
+            )),
+        }
     }
 
     /// Validate the selected BR layout and input domain, independently of ring KS/CBS.
-    pub(crate) fn is_compatible<LM: RingContext<T>>(
+    pub(crate) fn is_compatible(
         &self,
-        parameters: &PbsParameters<T, LM>,
+        parameters: &PbsEvaluationParameters<T, BarrettModulus<T>>,
     ) -> bool {
+        let input_distribution = parameters.glwe_key_switching().output().secret_key_distr();
         let (dimension, input_modulus, size, basis, cipher_modulus) = match self {
             Self::Classic(key) => {
-                if key.input_distribution() != parameters.small_lwe().secret_key_distr() {
+                if key.input_distribution() != input_distribution {
                     return false;
                 }
                 (
@@ -146,7 +154,7 @@ impl<T: FheUint> BlindRotationKey<T> {
                 )
             }
             Self::Block(key) => {
-                if parameters.small_lwe().secret_key_distr()
+                if input_distribution
                     != (SecretKeyDistr::BlockBinary {
                         block_size: key.block_size(),
                         occupancy: key.occupancy(),
@@ -154,18 +162,17 @@ impl<T: FheUint> BlindRotationKey<T> {
                 {
                     return false;
                 }
-                let controls = key.controls();
                 (
-                    controls.input_dimension(),
-                    controls.input_modulus_value(),
-                    controls.size(),
-                    controls.basis(),
-                    controls.cipher_modulus(),
+                    key.input_dimension(),
+                    key.input_modulus_value(),
+                    key.size(),
+                    key.basis(),
+                    key.ring_modulus().explicit_value(),
                 )
             }
         };
-        dimension == (parameters.small_lwe().dimension())
-            && input_modulus == parameters.small_lwe().cipher_modulus_value()
+        dimension == parameters.small_lwe_dimension()
+            && input_modulus == parameters.small_modulus_value()
             && size == parameters.blind_rotation_params().size()
             && basis == parameters.blind_rotation_params().basis()
             && cipher_modulus == parameters.ring_modulus().explicit_value()
@@ -278,7 +285,7 @@ where
             client_key.glwe_secret_key(),
             self.context.table(),
         );
-        self.generate_blind_rotation_key_with_main(client_key, &transformed, layout, rng)
+        Ok(self.generate_blind_rotation_key_with_main(client_key, &transformed, layout, rng))
     }
 
     /// Generates ring KS material from the accumulator to the padded small secret.
@@ -314,12 +321,7 @@ where
     ) -> Result<(ClientKey<T>, ServerKey<T>), KeyGenerationError> {
         let layout = self.prepare_blind_rotation()?;
         let client_key = ClientKey::generate(self.context.parameters(), rng);
-        let transformed = NttGlweSecretKey::from_coeff_secret_key(
-            client_key.glwe_secret_key(),
-            self.context.table(),
-        );
-        let server_key =
-            self.generate_server_key_with_main(&client_key, transformed, layout, rng)?;
+        let server_key = self.generate_server_key(&client_key, layout, rng);
         Ok((client_key, server_key))
     }
 
@@ -336,11 +338,7 @@ where
     ) -> Result<ServerKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
         let layout = self.prepare_blind_rotation()?;
-        let transformed = NttGlweSecretKey::from_coeff_secret_key(
-            client_key.glwe_secret_key(),
-            self.context.table(),
-        );
-        self.generate_server_key_with_main(client_key, transformed, layout, rng)
+        Ok(self.generate_server_key(client_key, layout, rng))
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
@@ -349,9 +347,9 @@ where
         &mut self,
         client_key: &ClientKey<T>,
         main_glwe_secret_key: &NttGlweSecretKey<T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
+    ) -> BlindRotationKey<T> {
         let parameters = self.context.parameters();
         BlindRotationKey::generate_with_layout(
             client_key.small_lwe_secret_key(),
@@ -364,35 +362,37 @@ where
         )
     }
 
-    /// Consumes the accepted accumulator transform for BR, then releases it before
-    /// allocating KS rows. The caller established client compatibility by sampling or
-    /// validation and prepared this transform with the context's table.
-    fn generate_server_key_with_main<R>(
+    /// Transforms the compatible accumulator secret for BR, then releases the
+    /// transform before allocating KS rows.
+    fn generate_server_key<R>(
         &mut self,
         client_key: &ClientKey<T>,
-        main_glwe_secret_key: NttGlweSecretKey<T>,
-        layout: BlindRotationLayout,
+        layout: BlindRotationLayout<T>,
         rng: &mut R,
-    ) -> Result<ServerKey<T>, KeyGenerationError>
+    ) -> ServerKey<T>
     where
         R: rand::Rng + rand::CryptoRng,
     {
+        let main_glwe_secret_key = NttGlweSecretKey::from_coeff_secret_key(
+            client_key.glwe_secret_key(),
+            self.context.table(),
+        );
         let blind_rotation_key = self.generate_blind_rotation_key_with_main(
             client_key,
             &main_glwe_secret_key,
             layout,
             rng,
-        )?;
+        );
         drop(main_glwe_secret_key);
         let glwe_key_switching_key = self.generate_glwe_key_switching_key(
             self.context.parameters().glwe_key_switching(),
             client_key,
             rng,
         );
-        Ok(ServerKey {
+        ServerKey {
             blind_rotation_key,
             glwe_key_switching_key,
-        })
+        }
     }
 
     /// Generates after the setup bundle has passed compatibility checks.
@@ -407,14 +407,15 @@ where
     {
         let parameters = self.context.parameters();
         let padded_small_glwe_secret_key = client_key.padded_small_glwe_secret_key(parameters);
-        let padded_small_glwe_secret_key = NttGlweSecretKey::from_coeff_secret_key(
+        let padded_small_ntt = NttGlweSecretKey::from_coeff_secret_key(
             &padded_small_glwe_secret_key,
             self.context.table(),
         );
-        self.gadget.resize(key_switching.output_size());
+        drop(padded_small_glwe_secret_key);
+        // KS uses only the polynomial buffer, already sized to the common ring length.
         NttGlweKeySwitchingKey::generate(
             client_key.glwe_secret_key(),
-            &padded_small_glwe_secret_key,
+            &padded_small_ntt,
             key_switching,
             self.context.table(),
             rng,
@@ -423,12 +424,13 @@ where
     }
 
     /// Checks the selected public geometry before sampling secrets or key rows.
-    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout, KeyGenerationError> {
+    fn prepare_blind_rotation(&self) -> Result<BlindRotationLayout<T>, KeyGenerationError> {
         let parameters = self.context.parameters();
         BlindRotationLayout::try_new(
             parameters.small_lwe().dimension().get(),
             parameters.small_lwe().secret_key_distr(),
             parameters.blind_rotation_params(),
+            parameters.small_lwe().cipher_modulus_value(),
             parameters.blind_rotation_method(),
         )
     }

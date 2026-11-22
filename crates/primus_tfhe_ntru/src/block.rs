@@ -1,13 +1,121 @@
 //! Contiguous coefficient controls for direct block-binary NTRU blind rotation.
 
-use std::ops::Range;
+use std::{alloc::Layout, marker::PhantomData, ops::Range};
 
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
-use primus_ntru::{BlockOccupancy, NlevParameters};
+use primus_ntru::{BlockOccupancy, NlevParameters, SecretKeyDistr};
 use primus_reduce::RingContext;
 
-use crate::{BlockBootstrappingKeyError, NtruBlindRotationControls};
+use crate::{BlockBootstrappingKeyError, PbsParameters};
+
+/// Public geometry for a complete Block key, validated before key generation.
+/// The coefficient type determines the maximum addressable allocation.
+#[doc(hidden)]
+pub struct BlockNtruKeyLayout<T: FheUint> {
+    input_dimension: LweDimension,
+    block_size: usize,
+    occupancy: BlockOccupancy,
+    control_len: usize,
+    block_stride: usize,
+    coefficients: PhantomData<T>,
+}
+
+impl<T: FheUint> BlockNtruKeyLayout<T> {
+    /// Checks the complete control layout of the configured BlockBinary secret.
+    ///
+    /// # Errors
+    /// Rejects other secret distributions, incomplete blocks or unaddressable storage.
+    pub fn try_from_parameters<M: RingContext<T>, LM: RingContext<T>>(
+        parameters: &PbsParameters<T, M, LM>,
+    ) -> Result<Self, BlockBootstrappingKeyError> {
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy,
+        } = parameters.external_lwe().secret_key_distr()
+        else {
+            return Err(BlockBootstrappingKeyError::UnsupportedSecretDistribution);
+        };
+        Self::try_new(
+            parameters.external_lwe_dimension(),
+            block_size,
+            occupancy,
+            parameters.blind_rotation().nlev_len(),
+        )
+    }
+
+    /// Validates logical blocks and the full coefficient allocation before any writes.
+    fn try_new(
+        input_dimension: LweDimension,
+        block_size: usize,
+        occupancy: BlockOccupancy,
+        control_len: usize,
+    ) -> Result<Self, BlockBootstrappingKeyError> {
+        use BlockBootstrappingKeyError as Error;
+
+        let dimension = input_dimension.get();
+        if block_size == 0 || !dimension.is_multiple_of(block_size) {
+            return Err(Error::InvalidBlockGeometry {
+                dimension,
+                block_size,
+            });
+        }
+        // A valid block fits within the logical dimension, which leaves room for a dummy.
+        let controls_per_block = block_size + usize::from(occupancy == BlockOccupancy::AtMostOne);
+        let block_stride = controls_per_block
+            .checked_mul(control_len)
+            .ok_or(Error::StorageSizeOverflow)?;
+        let data_len = (dimension / block_size)
+            .checked_mul(block_stride)
+            .ok_or(Error::StorageSizeOverflow)?;
+        Layout::array::<T>(data_len).map_err(|_| Error::StorageSizeOverflow)?;
+        Ok(Self {
+            input_dimension,
+            block_size,
+            occupancy,
+            control_len,
+            block_stride,
+            coefficients: PhantomData,
+        })
+    }
+
+    /// Returns the number of logical coefficients per complete block.
+    #[must_use]
+    pub fn block_size(&self) -> usize {
+        self.block_size
+    }
+
+    /// Returns the declared occupancy mode that determines the control layout.
+    #[must_use]
+    pub fn occupancy(&self) -> BlockOccupancy {
+        self.occupancy
+    }
+
+    /// Allocates the validated payload and writes each complete block in key order.
+    /// The callback receives a contiguous logical range and its coefficient
+    /// storage, including the final dummy control for `AtMostOne`.
+    ///
+    /// # Correctness
+    /// The callback must fill every control with the material specified by
+    /// [`BlockNtruBootstrappingKey::try_new`]. The first range starts at zero.
+    #[must_use]
+    pub fn generate(
+        self,
+        mut write_block: impl FnMut(Range<usize>, &mut [T]),
+    ) -> BlockNtruBootstrappingKey<T> {
+        let mut data = vec![T::ZERO; self.data_len()];
+        for (block, coefficients) in data.chunks_exact_mut(self.block_stride).enumerate() {
+            let start = block * self.block_size;
+            write_block(start..start + self.block_size, coefficients);
+        }
+        BlockNtruBootstrappingKey { data, layout: self }
+    }
+
+    /// Coefficient count established when the layout was prepared.
+    fn data_len(&self) -> usize {
+        (self.input_dimension.get() / self.block_size) * self.block_stride
+    }
+}
 
 /// Coefficient controls for complete logical blocks.
 ///
@@ -18,9 +126,8 @@ use crate::{BlockBootstrappingKeyError, NtruBlindRotationControls};
 /// geometry, the declared occupancy mode and ciphertexts remain; sampled support
 /// and total weight are not retained.
 pub struct BlockNtruBootstrappingKey<T: FheUint> {
-    controls: NtruBlindRotationControls<T>,
-    block_size: usize,
-    occupancy: BlockOccupancy,
+    data: Vec<T>,
+    layout: BlockNtruKeyLayout<T>,
 }
 
 impl<T: FheUint> BlockNtruBootstrappingKey<T> {
@@ -46,81 +153,68 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
         occupancy: BlockOccupancy,
         parameters: &NlevParameters<T, M>,
     ) -> Result<Self, BlockBootstrappingKeyError> {
-        use BlockBootstrappingKeyError as Error;
-        let dimension = input_dimension.get();
-        if block_size == 0 || !dimension.is_multiple_of(block_size) {
-            return Err(Error::InvalidBlockGeometry {
-                dimension,
-                block_size,
-            });
-        }
-        let control_count = dimension
-            .checked_add(
-                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
-            )
-            .ok_or(Error::StorageSizeOverflow)?;
-        let controls =
-            NtruBlindRotationControls::try_new(data, input_dimension, control_count, parameters)
-                .map_err(|error| match error {
-                    crate::controls::BlindRotationControlsError::StorageSizeOverflow => {
-                        Error::StorageSizeOverflow
-                    }
-                    crate::controls::BlindRotationControlsError::StorageLengthMismatch {
-                        expected,
-                        actual,
-                    } => Error::StorageLengthMismatch { expected, actual },
-                })?;
-        Ok(Self {
-            controls,
+        let layout = BlockNtruKeyLayout::try_new(
+            input_dimension,
             block_size,
             occupancy,
-        })
+            parameters.nlev_len(),
+        )?;
+        let expected = layout.data_len();
+        if data.len() != expected {
+            return Err(BlockBootstrappingKeyError::StorageLengthMismatch {
+                expected,
+                actual: data.len(),
+            });
+        }
+        Ok(Self { data, layout })
     }
 
-    /// Borrows the coefficient controls and their common `N*L` layout.
+    /// Returns the logical external LWE dimension.
     #[must_use]
-    pub fn controls(&self) -> &NtruBlindRotationControls<T> {
-        &self.controls
+    #[inline]
+    pub fn input_dimension(&self) -> LweDimension {
+        self.layout.input_dimension
     }
 
     /// Returns the number of logical coefficients per complete block.
     #[must_use]
     pub fn block_size(&self) -> usize {
-        self.block_size
+        self.layout.block_size
     }
 
     /// Returns the declared occupancy mode that determines the control layout.
     #[must_use]
     pub fn occupancy(&self) -> BlockOccupancy {
-        self.occupancy
+        self.layout.occupancy
     }
 
-    /// Returns the public block count, including empty secret blocks.
+    /// Returns N*L coefficient values per NLEV or NGSW control.
     #[must_use]
-    pub fn block_count(&self) -> usize {
-        self.controls.input_dimension().get() / self.block_size
+    #[inline]
+    pub fn control_len(&self) -> usize {
+        self.layout.control_len
     }
 
-    /// Borrows a block's logical input range and contiguous coefficient controls.
-    /// Only `AtMostOne` has a final dummy control with no input position.
-    ///
-    /// # Panics
-    /// Panics if `block_index >= self.block_count()`.
+    /// Returns `[block][selector..., optional dummy][level][coefficient]` storage.
     #[must_use]
-    pub fn block_data(&self, block_index: usize) -> (Range<usize>, &[T]) {
-        assert!(
-            block_index < self.block_count(),
-            "block index out of bounds"
-        );
-        let start = block_index * self.block_size;
-        let controls_per_block =
-            self.block_size + usize::from(self.occupancy == BlockOccupancy::AtMostOne);
-        let control_start = block_index * controls_per_block;
-        let control_len = self.controls.control_len();
-        (
-            start..start + self.block_size,
-            &self.controls.as_slice()
-                [control_start * control_len..(control_start + controls_per_block) * control_len],
-        )
+    pub fn as_slice(&self) -> &[T] {
+        &self.data
+    }
+
+    /// Borrows each block in key order as its input range, bit controls and dummy.
+    /// The dummy slice is empty for `ExactlyOne`. The first block contains NLEV
+    /// controls and all following blocks contain NGSW controls.
+    #[inline]
+    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (Range<usize>, &[T], &[T])> + '_ {
+        let block_size = self.layout.block_size;
+        let selection_len = block_size * self.layout.control_len;
+        self.data
+            .chunks_exact(self.layout.block_stride)
+            .enumerate()
+            .map(move |(block, data)| {
+                let start = block * block_size;
+                let (selections, dummy) = data.split_at(selection_len);
+                (start..start + block_size, selections, dummy)
+            })
     }
 }

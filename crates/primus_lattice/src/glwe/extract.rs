@@ -2,7 +2,7 @@
 
 use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
-use primus_reduce::RingContext;
+use primus_reduce::ReduceNeg;
 
 use super::Glwe;
 use crate::lwe::Lwe;
@@ -26,7 +26,7 @@ where
     /// phase `b - sum(a_i * s_i)`.
     pub fn extract_lwe_to<M, B>(&self, output: &mut Lwe<B>, poly_length: usize, modulus: M)
     where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
         B: DataMut<Elem = T>,
     {
         self.extract_lwe_at_to(0, output, poly_length, modulus);
@@ -52,7 +52,7 @@ where
         poly_length: usize,
         modulus: M,
     ) where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
         B: DataMut<Elem = T>,
     {
         debug_assert!(index < poly_length, "GLWE extraction index is out of range");
@@ -86,7 +86,7 @@ where
     /// must be zero; a shorter output alone does not establish that condition.
     pub fn extract_compact_lwe_to<M, B>(&self, output: &mut Lwe<B>, poly_length: usize, modulus: M)
     where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
         B: DataMut<Elem = T>,
     {
         self.extract_compact_lwe_at_to(0, output, poly_length, modulus);
@@ -113,7 +113,7 @@ where
         poly_length: usize,
         modulus: M,
     ) where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
         B: DataMut<Elem = T>,
     {
         debug_assert!(index < poly_length, "GLWE extraction index is out of range");
@@ -141,7 +141,7 @@ impl<T: FheUint> Glwe<&[T]> {
         poly_length: usize,
         modulus: M,
     ) where
-        M: RingContext<T>,
+        M: Copy + ReduceNeg<T, Output = T>,
     {
         let (input_mask, input_body) = self.a_b(poly_length);
         let (output_mask, output_body) = output.a_b_mut();

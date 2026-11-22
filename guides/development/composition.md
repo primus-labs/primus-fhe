@@ -65,6 +65,8 @@ RNS GLWE binds raw encryption directly with `key.try_bind_raw(&sampling, &base, 
 
 For advanced TFHE composition, `ServerKey` carries BR/KS material; `CircuitBootstrapServerKey` combines it with the circuit key. Ordinary PBS owns its full return path, whereas CBS/one-hot produces ring or gadget ciphertexts and can use resources without ordinary return scratch. GLWE KS→BR still needs its input KS during CBS. See the [GLWE](../../crates/primus_tfhe_glwe/README.md) and [NTRU](../../crates/primus_tfhe_ntru/README.md) family workflows and [ciphertext domains](bootstrapping-contracts.md#ciphertext-domains-and-return).
 
+Bind ordinary PBS with `context.evaluator(&server_key)`. When assembling advanced operations, use the explicit material binders to check the context, key layouts and numerical representation before evaluation. Borrowed GLWE CBS calls accept ciphertext views in coefficient or backend-specific form according to the method. NTRU high-precision lookup can reuse the one-hot evaluator's BR resources for public lift and return ring results through a separate LWE return binding.
+
 Fourier GLWE evaluation-key generation borrows the coefficient secret through `FourierGlweEncryptor`. Reuse its exact native preparation for material under the same target; a KS target needs its own preparation. Only completed native rows (including gadget diagonals) are converted to ordinary or Split35 spectra. Conversion error remains part of the noise budget. The [GLWE encryption contract](../../crates/primus_glwe/README.md#encryption-and-decryption) covers imported secrets and replacement of old material; these requirements are independent of the trace precision setting.
 
 ## Reusing workspaces
@@ -75,6 +77,7 @@ Fourier GLWE evaluation-key generation borrows the coefficient secret through `F
 | `Context` | Prepared parameters and arithmetic/transform environment; `RingContext` / `FieldContext` remain capability traits |
 | `Resources` | Borrowed material/environment combined with matching owned buffers, as in `BootstrapResources` |
 | `Evaluator` / `Engine` | An operation using owned or borrowed resources, as in PBS evaluators and `FftEngine` |
+| `AccumulatorClient` | Client-side ring secret, codec and reusable scratch with the appropriate NTT table or Fourier engine; the external LWE modulus is handled by the LWE interfaces |
 
 Allocate scratch outside the repeated operation and obey each method's overwrite/accumulate contract. Do not clear buffers merely because they contain a previous result, or assume an accumulating operation initializes its output. Workspace shape alone does not bind the basis, modulus, secret or transform table. GLWE external-product `with_rebound` temporarily changes gadget depth with unchanged GLWE geometry, restoring the original layout on return or unwind; changing geometry uses the separate resizing API and may allocate. See [lattice workspaces](../../crates/primus_lattice/README.md#correctness-and-workspace-contracts).
 

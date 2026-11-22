@@ -4,16 +4,13 @@
 //! Arithmetic profiles: guides/development/tfhe-parameters.md (not security presets).
 
 use primus_ntt::U64NttTable as Table;
-use primus_tfhe_ntru_ntt::{Evaluator, NtruProjectionMethod, TfheContext, experimental};
+use primus_tfhe_ntru_ntt::{Evaluator, TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
 
 type Word = u64;
 
 fn main() {
-    let mut config = experimental::CLASSIC_CBS_U64;
-    // Select the NGSW-only algorithm before keygen; Separate is the generic default.
-    // Keep this preset's PairedTrace. Changing strategy requires a new noise budget.
-    config.projection = NtruProjectionMethod::PairedTrace;
+    let config = experimental::CLASSIC_CBS_U64;
     let context = TfheContext::<Word, Table, _>::try_from_cbs_config(config).unwrap();
     let poly_length = config.pbs.bsk_poly_length.get();
 

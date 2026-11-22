@@ -1,7 +1,6 @@
 use num_traits::{ConstOne, ConstZero};
 use primus_glwe::BlockOccupancy;
 use primus_integer::FheUint;
-use primus_lattice::{GlweDimension, GlweSize};
 use primus_reduce::RingContext;
 
 use crate::{GlweSecretKey, LweSecretKey, PbsOrder, PbsParameters, TfheKeyError};
@@ -123,20 +122,15 @@ impl<T: FheUint> ClientKey<T> {
         LM: RingContext<T>,
     {
         let lwe_secret_key = &self.small_lwe_secret_key;
-        let lwe_dimension = lwe_secret_key.dimension();
-        let poly_length = parameters.blind_rotation_params().poly_length().get();
-        let capacity = lwe_dimension
-            .checked_next_multiple_of(poly_length)
-            .expect("validated TFHE dimensions must fit in usize");
-
-        let mut key = vec![T::SignedInteger::ZERO; capacity];
+        let size = parameters.glwe_key_switching().output().glwe_size();
+        let mut key = vec![T::SignedInteger::ZERO; size.mask_len()];
         let distribution = lwe_secret_key.distr();
         assert!(
             distribution.is_binary() || distribution.is_ternary(),
             "TFHE small LWE secret keys must use a binary or ternary distribution"
         );
         let minus_one = parameters.small_lwe().cipher_modulus().minus_one();
-        key[..lwe_dimension]
+        key[..lwe_secret_key.dimension()]
             .iter_mut()
             .zip(lwe_secret_key.as_ref())
             .for_each(|(output, &coefficient)| {
@@ -151,14 +145,7 @@ impl<T: FheUint> ClientKey<T> {
                 };
             });
 
-        GlweSecretKey::new(
-            key,
-            GlweSize::new(
-                GlweDimension::new(capacity / poly_length),
-                parameters.blind_rotation_params().poly_length(),
-            ),
-            distribution,
-        )
+        GlweSecretKey::new(key, size, distribution)
     }
 
     /// Returns the PBS order that determines the external LWE key.

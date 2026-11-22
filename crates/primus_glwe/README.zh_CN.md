@@ -137,6 +137,8 @@ Fourier 建钥先生成 native 系数行，再做变换。噪声预算须包含 
 
 NTT scheme-switch 建钥使用相互匹配的系数及变换私钥，Fourier 建钥使用目标 encryptor。输出 gadget 缩放继承输入 GLev，密钥的分解基可与输出基不同。Trace 与 scheme switching 各自独立。Rank-one NTT 使用平方 `GLev(s²)`，更高 rank 和 Fourier 使用完整外积。见 [scheme switching](src/scheme_switch) 及其[噪声契约](../../guides/development/bootstrapping-contracts.md#ordinary-cbs-and-consumption)。
 
+执行 NTT scheme switching 时传入 `input.as_view()` 和 `output.as_mut_view()`。
+
 ## Trace、投影与展开
 
 `NttGlweTraceKey` 和 `FourierGlweTraceKey` 操作系数密文。下表中 `M` 是输入消息，目标消息省略求值噪声。
