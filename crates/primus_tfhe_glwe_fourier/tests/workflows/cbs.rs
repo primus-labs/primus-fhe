@@ -8,6 +8,7 @@ use primus_tfhe_glwe_fourier::{BlindRotationMethod, CbsInputEncoding, PbsOrder};
 use super::parameters::{config, two_domain_config};
 use super::pbs::PbsFixture;
 
+#[path = "cbs/selection.rs"]
 mod selection;
 
 use selection::{CbsCoverage, circuit_selection, circuit_selection_with_trace};

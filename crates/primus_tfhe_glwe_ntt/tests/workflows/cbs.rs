@@ -10,6 +10,7 @@ use primus_tfhe_glwe_ntt::{
 use super::parameters::{config, decomposition, two_domain_config};
 use super::pbs::PbsFixture;
 
+#[path = "cbs/selection.rs"]
 mod selection;
 
 use selection::{CbsCoverage, circuit_selection};

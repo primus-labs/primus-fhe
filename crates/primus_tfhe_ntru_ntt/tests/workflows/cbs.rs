@@ -24,7 +24,9 @@ use super::{
     pbs::many_lut_and_mvb,
 };
 
+#[path = "cbs/binding.rs"]
 mod binding;
+#[path = "cbs/one_hot.rs"]
 mod one_hot;
 
 use self::binding::{assert_msb_lookup_is_rejected, check_resources_and_return};
